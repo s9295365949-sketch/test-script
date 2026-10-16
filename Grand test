@@ -1,0 +1,17 @@
+getgenv().Nixus = {
+    autoskip = true,
+    SellAllTower = false,
+    AtWave = 40,
+    Modifiers = {},
+    AutoAbilities = true,
+    AutoRewards = true,
+    macroURL = "https://raw.githubusercontent.com/s9295365949-sketch/test-script/refs/heads/main/Farm%20crook%20boss%20mastery",
+    Webhook = "https://discord.com/api/webhooks/1482767776157532172/P4nBKVRn7qja4gATxG8tWRV6tbOW47-LMn5Hya1SFM-F0rpcuBVcVSvDXTJAkiCo6bwq",
+    replay = true,
+    Gamemode = "Special",
+    Map = "Pizza Party",
+    Difficulty = "Pizza Party",
+    Loadout = { "Trapper", "Electroshocker", "Commander", "Crook Boss" }
+    }
+
+loadstring(game:HttpGet("https://raw.githubusercontent.com/2xrW/returnhub-output/refs/heads/main/TDS"))() 
