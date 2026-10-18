@@ -6,30 +6,36 @@ local NEAR_DIAMETER    = 5
 local FAR_DIAMETER     = 5
 local DISTANCE_FOR_FAR = 20
 local TRANSPARENCY     = 0.7
-local PARRY_COOLDOWN   = 0.15
-local BURST_COUNT      = 3
-local BURST_INTERVAL   = 0.04
+local PARRY_COOLDOWN   = 0.18       -- чуть больше, чтобы не спамить
 local REARM_MULTIPLIER = 1.5
-local DAMP_LAMBDA      = 14       -- плавность (больше = резче)
+local DAMP_LAMBDA      = 14
 local PREDICT_FRAMES   = 2
 local MIN_AHEAD        = 0.06
 local MAX_AHEAD        = 0.25
 local EMERGENCY_MULT   = 1.2
-local DEBUG_MODE       = true     -- первое время печатает диагностику
+local DEBUG_MODE       = false      -- ВАЖНО: выключено, чтобы не логировать лишнего
 
 local COLOR_NEAR = Color3.fromRGB(255, 30, 30)
 local COLOR_MID  = Color3.fromRGB(255, 200, 0)
 local COLOR_FAR  = Color3.fromRGB(30, 255, 50)
 
 -- ==========================================
--- ===== СЕРВИСЫ ============================
+-- ===== СЕРВИСЫ (cloneref) =================
 -- ==========================================
-local Players             = game:GetService("Players")
-local RunService          = game:GetService("RunService")
-local VirtualInputManager = game:GetService("VirtualInputManager")
-local UserInputService    = game:GetService("UserInputService")
-local Workspace           = game:GetService("Workspace")
-local Stats               = game:GetService("Stats")
+-- cloneref создаёт «клон» сервиса. Античит, который сканирует ссылки на оригинальные
+-- сервисы в окружении скрипта, видит меньше прямых совпадений.
+local function svc(name)
+    local ok, s = pcall(function()
+        return cloneref(game:GetService(name))
+    end)
+    return ok and s or game:GetService(name)
+end
+
+local Players          = svc("Players")
+local RunService       = svc("RunService")
+local UserInputService = svc("UserInputService")
+local Workspace        = svc("Workspace")
+local Stats            = svc("Stats")
 
 local LocalPlayer = Players.LocalPlayer
 local Character, HumanoidRootPart
@@ -79,30 +85,20 @@ for i = 1, SEGMENTS do
 end
 
 -- ==========================================
--- ===== RAYCAST ============================
--- ==========================================
-local rayParams = RaycastParams.new()
-rayParams.FilterType = Enum.RaycastFilterType.Exclude
-rayParams.FilterDescendantsInstances = {Character, ringFolder}
-
--- ==========================================
--- ===== ДЕТЕКЦИЯ МЯЧА (3 способа) ==========
+-- ===== ДЕТЕКЦИЯ МЯЧА ======================
 -- ==========================================
 local cachedBall = nil
 
 local function findBall()
-    -- 1) атрибут realBall
     for _, o in ipairs(Workspace:GetChildren()) do
         if o:IsA("BasePart") and o:GetAttribute("realBall") then return o end
     end
-    -- 2) папка Balls
     local bf = Workspace:FindFirstChild("Balls")
     if bf then
         for _, o in ipairs(bf:GetChildren()) do
             if o:IsA("BasePart") then return o end
         end
     end
-    -- 3) имя содержит ball/orb/sphere
     for _, o in ipairs(Workspace:GetChildren()) do
         if o:IsA("BasePart") then
             local n = o.Name:lower()
@@ -115,7 +111,6 @@ local function findBall()
 end
 
 cachedBall = findBall()
-
 Workspace.ChildAdded:Connect(function(o)
     if o:IsA("BasePart") and not cachedBall then
         local n = o.Name:lower()
@@ -129,13 +124,13 @@ Workspace.ChildRemoved:Connect(function(o)
 end)
 
 -- ==========================================
--- ===== ДЕТЕКТ ЦЕЛИ (несколько имён) ========
+-- ===== ДЕТЕКТ ЦЕЛИ ========================
 -- ==========================================
 local TARGET_KEYS = {"target","Target","targetPlayer","TargetPlayer",
                      "player","Player","Targeted","targeted"}
 
 local function getTargetValue(ball)
-    if not ball then return nil end
+    if not ball then return nil, nil end
     for _, k in ipairs(TARGET_KEYS) do
         local v = ball:GetAttribute(k)
         if v ~= nil then return v, k end
@@ -159,84 +154,71 @@ local function isTargetingMe(ball)
 end
 
 -- ==========================================
--- ===== ВВОД (F + кнопка) ==================
--- ==========================================
-local function sendKeyF(state)
-    pcall(function()
-        VirtualInputManager:SendKeyEvent(state, PARRY_KEY, false, game)
-    end)
-end
-
-local BUTTON_KEYWORDS = {"parry","block","deflect","guard","ability"}
-local cachedButton, buttonLastScan = nil, 0
-
-local function findParryButton()
-    local pg = LocalPlayer:FindFirstChild("PlayerGui")
-    if not pg then return nil end
-    local vp = Workspace.CurrentCamera and Workspace.CurrentCamera.ViewportSize
-               or Vector2.new(1920, 1080)
-    local best, bestScore = nil, 0
-    for _, obj in ipairs(pg:GetDescendants()) do
-        if obj:IsA("GuiButton") and obj.Active and obj.Visible then
-            local n = obj.Name:lower()
-            local score = 0
-            for _, kw in ipairs(BUTTON_KEYWORDS) do
-                if n:find(kw, 1, true) then score = score + 10 break end
-            end
-            if score > 0 then
-                local ap = obj.AbsolutePosition
-                if ap.X > vp.X * 0.5 and ap.Y > vp.Y * 0.4 then score = score + 3 end
-            end
-            if score > bestScore then best, bestScore = obj, score end
-        end
-    end
-    return best
-end
-
-local function clickButton(btn)
-    if not btn or not btn.Parent then return end
-    local ap, sz = btn.AbsolutePosition, btn.AbsoluteSize
-    local x, y = ap.X + sz.X/2, ap.Y + sz.Y/2
-    pcall(function()
-        VirtualInputManager:SendMouseButtonEvent(x, y, 0, true,  game, 0)
-        task.wait(0.02)
-        VirtualInputManager:SendMouseButtonEvent(x, y, 0, false, game, 0)
-    end)
-    pcall(function()
-        UserInputService:SendMouseButtonEvent(x, y, 0, true,  game, 0)
-        task.wait(0.02)
-        UserInputService:SendMouseButtonEvent(x, y, 0, false, game, 0)
-    end)
-end
-
-local function getButton()
-    if cachedButton and cachedButton.Parent then return cachedButton end
-    local now = tick()
-    if now - buttonLastScan < 3 then return nil end
-    buttonLastScan = now
-    cachedButton = findParryButton()
-    if cachedButton and DEBUG_MODE then
-        print("[BB] Кнопка парирования:", cachedButton:GetFullName())
-    end
-    return cachedButton
-end
-
--- ==========================================
--- ===== ПАРИРОВАНИЕ ========================
+-- ===== ПАРИРОВАНИЕ (чистый ввод) ==========
 -- ==========================================
 local burstActive = false
+
+-- Рандомная задержка ±40% — чтобы не было «роботизированного» паттерна
+local function jitter(base)
+    return base * (0.6 + math.random() * 0.8)   -- 0.6x .. 1.4x
+end
+
+-- Пытаемся найти remote парирования (самый «чистый» способ)
+local parryRemote = nil
+local function findParryRemote()
+    -- Ищем в ReplicatedStorage / PlayerScripts события с подходящим именем.
+    -- Если найдёте точное имя в вашей версии — впишите его сюда.
+    local searchRoots = {game:GetService("ReplicatedStorage")}
+    for _, root in ipairs(searchRoots) do
+        for _, obj in ipairs(root:GetDescendants()) do
+            if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
+                local n = obj.Name:lower()
+                if n:find("parry") or n:find("block") or n:find("deflect") then
+                    return obj
+                end
+            end
+        end
+    end
+    return nil
+end
+parryRemote = findParryRemote()
+
+-- Отправка «нажатия» F без VirtualInputManager:
+-- 1) Если есть remote — дергаем его напрямую (чисто, как Dryx Hub)
+-- 2) Иначе — UserInputService:SendKeyEvent (менее палевно, чем VIM)
+local function sendParryOnce()
+    if parryRemote then
+        pcall(function()
+            if parryRemote:IsA("RemoteEvent") then
+                parryRemote:FireServer()
+            else
+                parryRemote:InvokeServer()
+            end
+        end)
+        return
+    end
+    -- Fallback: публичный UserInputService
+    pcall(function()
+        UserInputService:SendKeyEvent(true, PARRY_KEY, false, game)
+        task.wait(jitter(0.02))
+        UserInputService:SendKeyEvent(false, PARRY_KEY, false, game)
+    end)
+end
+
 local function fireParry()
     if burstActive then return end
     burstActive = true
     task.spawn(function()
-        for i = 1, BURST_COUNT do
-            local btn = getButton()
-            if btn then clickButton(btn) end
-            sendKeyF(true)
-            task.wait(BURST_INTERVAL * 0.4)
-            sendKeyF(false)
-            if i < BURST_COUNT then task.wait(BURST_INTERVAL * 0.6) end
+        -- 1 или 2 нажатия (случайно) — не фиксированный «бурст из 3»
+        local count = math.random(1, 2)
+        for i = 1, count do
+            sendParryOnce()
+            if i < count then
+                task.wait(jitter(0.05))
+            end
         end
+        -- Небольшая случайная пауза перед снятием блокировки
+        task.wait(jitter(0.03))
         burstActive = false
     end)
 end
@@ -254,17 +236,10 @@ local function damp(current, target, lambda, dt)
     return target + (current - target) * math.exp(-lambda * dt)
 end
 
-local function findGround(hrpPos)
-    local res = Workspace:Raycast(hrpPos + Vector3.new(0, 3, 0),
-                                   Vector3.new(0, -50, 0), rayParams)
-    if res then return Vector3.new(hrpPos.X, res.Position.Y + 0.1, hrpPos.Z) end
-    return Vector3.new(hrpPos.X, hrpPos.Y - 2.5, hrpPos.Z)
-end
-
 local lastRingPos, lastRadius, lastColor = Vector3.new(), -1, Color3.new()
 local function updateRing(center, radius, color)
-    local moved  = (center - lastRingPos).Magnitude > 0.01
-    local resized = math.abs(radius - lastRadius) > 0.01
+    local moved    = (center - lastRingPos).Magnitude > 0.01
+    local resized  = math.abs(radius - lastRadius) > 0.01
     local recolored = (color.R-lastColor.R)^2 + (color.G-lastColor.G)^2
                     + (color.B-lastColor.B)^2 > 0.0002
     if not (moved or resized or recolored) then return end
@@ -293,26 +268,7 @@ local lastParry     = 0
 local armed         = true
 local prevDist      = math.huge
 local lastFlash     = 0
-
-local debugClock = 0
-local function debugPrint(dt)
-    if not DEBUG_MODE then return end
-    debugClock = debugClock + dt
-    if debugClock < 3 then return end
-    debugClock = 0
-    print("─── [BB] debug ───")
-    print("HRP:", HumanoidRootPart and HumanoidRootPart.Position)
-    print("Ball:", cachedBall and cachedBall:GetFullName() or "nil")
-    if cachedBall then
-        local attrs = cachedBall:GetAttributes()
-        local list = {}
-        for k, v in pairs(attrs) do list[#list+1] = k .. "=" .. tostring(v) end
-        print("Attrs:", table.concat(list, ", "))
-        print("Pos:", cachedBall.Position,
-              "Vel:", cachedBall.AssemblyLinearVelocity.Magnitude)
-    end
-    print("Button:", cachedButton and cachedButton.Name or "nil")
-end
+local frameSkip     = 0      -- «джиттер» для визуала
 
 local function mainTick(dt)
     if not Character or not Character.Parent then
@@ -323,14 +279,12 @@ local function mainTick(dt)
     end
     if not HumanoidRootPart then return end
 
-    -- Периодический ре-скан мяча
     if not cachedBall or not cachedBall.Parent then
         cachedBall = findBall()
     end
 
     local hrpPos = HumanoidRootPart.Position
     local ball   = cachedBall
-
     local targetRadius = FAR_DIAMETER / 2
     local targetColor  = COLOR_FAR
     local doParry      = false
@@ -393,7 +347,7 @@ local function mainTick(dt)
         end
     end
 
-    -- Плавное сглаживание (frame-rate независимо)
+    -- Сглаживание
     currentRadius = damp(currentRadius, targetRadius, DAMP_LAMBDA, dt)
     currentColor  = currentColor:Lerp(targetColor,
                         math.clamp(DAMP_LAMBDA * dt, 0, 1))
@@ -401,17 +355,19 @@ local function mainTick(dt)
         currentColor = Color3.fromRGB(255, 255, 255)
     end
 
-    -- Кольцо следует за игроком КАЖДЫЙ кадр
-    local ringPos = findGround(hrpPos)
-    updateRing(ringPos, currentRadius, currentColor)
-
-    debugPrint(dt)
+    -- Визуал обновляем не строго каждый кадр, а с лёгким «джиттером»
+    frameSkip = frameSkip + 1
+    local updateVisual = (frameSkip % math.random(1, 2) == 0)
+    if updateVisual then
+        local ringPos = Vector3.new(hrpPos.X, hrpPos.Y, hrpPos.Z)
+        updateRing(ringPos, currentRadius, currentColor)
+    end
 end
 
 RunService.Heartbeat:Connect(function(dt)
     local ok, err = pcall(mainTick, dt)
-    if not ok then
-        warn("[BB] Ошибка в цикле:", err)
+    if not ok and DEBUG_MODE then
+        print("[BB] tick error:", err)
     end
 end)
 
@@ -421,14 +377,16 @@ end)
 LocalPlayer.CharacterAdded:Connect(function(newChar)
     Character = newChar
     HumanoidRootPart = newChar:WaitForChild("HumanoidRootPart", 10)
-    rayParams.FilterDescendantsInstances = {Character, ringFolder}
     armed       = true
     prevDist    = math.huge
     cachedBall  = nil
-    cachedButton = nil
-    buttonLastScan = 0
+    parryRemote = nil
+    task.wait(1)   -- даём игре прогрузить remote после респавна
+    parryRemote = findParryRemote()
 end)
 
-print(string.format("[Blade Ball] Запущено. Платформа: %s | Сегментов: %d | Debug: %s",
-    IS_MOBILE and "mobile" or "PC", SEGMENTS, tostring(DEBUG_MODE)))
-print("[Blade Ball] Если мяч не детектится — смотрите консоль каждые 3 сек.")
+if DEBUG_MODE then
+    print(string.format("[Blade Ball] clean mode | remote: %s | platform: %s",
+        parryRemote and parryRemote:GetFullName() or "none",
+        IS_MOBILE and "mobile" or "PC"))
+end
