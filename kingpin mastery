@@ -51,7 +51,6 @@ SetMercenaryUnit(1.592, 2.387, -11.447, "Unit 2", "Money Runner", 3503)
 upgrade(-1.196, 2.387, -12.749, 1400)  -- Kingpin Lvl 1
 upgrade(-1.196, 2.387, -12.749, 4000)  -- Kingpin Lvl 2
 upgrade(-1.196, 2.387, -12.749, 6000)  -- Kingpin Lvl 3
-upgrade(-1.196, 2.387, -12.749, 7250) -- Kingpin Lvl 4A (верхний путь)
 SetMercenaryUnit(-1.196, 2.387, -12.749, "Unit 1", "Lackey", 5423)
 SetMercenaryUnit(-1.196, 2.387, -12.749, "Unit 2", "Money Runner", 5423)
 upgrade(5.572, 2.402, -16.287, 8000)
