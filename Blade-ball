@@ -1,0 +1,419 @@
+-- === НАСТРОЙКИ ===
+local PARRY_KEY        = Enum.KeyCode.F
+local PARRY_METHOD     = "auto"  -- "auto" | "key" | "button"
+                                  -- auto: mobile→button, PC→key, fallback на второй путь
+local NEAR_DIAMETER    = 5
+local FAR_DIAMETER     = 5
+local DISTANCE_FOR_FAR = 20
+local TRANSPARENCY     = 0.7
+local PARRY_COOLDOWN   = 0.15
+local BURST_COUNT      = 3
+local BURST_INTERVAL   = 0.03
+local REARM_MULTIPLIER = 1.5
+local SMOOTHING        = 0.3
+local PREDICT_FRAMES   = 2
+local MIN_AHEAD        = 0.06
+local MAX_AHEAD        = 0.25
+local EMERGENCY_MULT   = 1.2
+local DEBUG_MODE       = false
+
+local COLOR_NEAR = Color3.fromRGB(255, 30, 30)
+local COLOR_MID  = Color3.fromRGB(255, 200, 0)
+local COLOR_FAR  = Color3.fromRGB(30, 255, 50)
+
+-- === СЕРВИСЫ ===
+local Players             = game:GetService("Players")
+local RunService          = game:GetService("RunService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local UserInputService    = game:GetService("UserInputService")
+local Workspace           = game:GetService("Workspace")
+local Stats               = game:GetService("Stats")
+
+local LocalPlayer      = Players.LocalPlayer
+local Character        = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
+
+-- === ПЛАТФОРМА ===
+local IS_MOBILE      = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+local SEGMENTS       = IS_MOBILE and 12 or 16
+local VISUAL_SKIP    = IS_MOBILE and 3 or 2
+local RAYCAST_EVERY  = IS_MOBILE and 4 or 2
+
+-- Разрешение реального метода
+local ACTIVE_METHOD = PARRY_METHOD
+if ACTIVE_METHOD == "auto" then
+    ACTIVE_METHOD = IS_MOBILE and "button" or "key"
+end
+
+-- === PING ===
+local pingCache = 0.05
+task.spawn(function()
+    while task.wait(1) do
+        local ok, p = pcall(function()
+            return Stats.Network.ServerStatsItem["Data Ping"]:GetValue() / 1000
+        end)
+        if ok and p and p > 0 and p < 1 then pingCache = p end
+    end
+end)
+
+-- === КОЛЬЦО ===
+local ringFolder = Instance.new("Folder")
+ringFolder.Name = "ParryRing"
+ringFolder.Parent = Workspace
+local segments = table.create(SEGMENTS)
+for i = 1, SEGMENTS do
+    local p = Instance.new("Part")
+    p.Name = "RingSeg"
+    p.Anchored = true; p.CanCollide = false; p.CanTouch = false
+    p.CanQuery = false; p.CastShadow = false
+    p.Material = Enum.Material.Neon
+    p.Color = COLOR_FAR; p.Transparency = TRANSPARENCY
+    p.Size = Vector3.new(0.1, 0.1, 0.2)
+    p.Parent = ringFolder
+    segments[i] = p
+end
+
+-- === RAYCAST ===
+local rayParams = RaycastParams.new()
+rayParams.FilterType = Enum.RaycastFilterType.Exclude
+rayParams.FilterDescendantsInstances = {Character, ringFolder}
+
+-- === МЯЧ (кэш) ===
+local cachedBall = nil
+local function rescanBall()
+    for _, o in ipairs(Workspace:GetChildren()) do
+        if o:IsA("BasePart") and o:GetAttribute("realBall") then return o end
+    end
+    for _, o in ipairs(Workspace:GetChildren()) do
+        if o:IsA("BasePart") and o.Name:lower():find("ball") then return o end
+    end
+end
+cachedBall = rescanBall()
+Workspace.ChildAdded:Connect(function(o)
+    if o:IsA("BasePart") and not cachedBall and
+       (o:GetAttribute("realBall") or o.Name:lower():find("ball")) then
+        cachedBall = o
+    end
+end)
+Workspace.ChildRemoved:Connect(function(o)
+    if o == cachedBall then cachedBall = nil end
+end)
+
+-- === НАДЁЖНЫЙ F ===
+local function log(...) if DEBUG_MODE then print("[BB]", ...) end end
+local function safeKeyEvent(state)
+    pcall(VirtualInputManager.SendKeyEvent, VirtualInputManager, state, PARRY_KEY, false, game)
+end
+
+-- =====================================================
+-- === НОВОЕ: ПОИСК И КЛИК КНОПКИ ПАРИРОВАНИЯ ==========
+-- =====================================================
+
+-- Список ключевых слов для распознавания кнопки
+local BUTTON_KEYWORDS = {"parry", "block", "deflect", "guard", "ability", "блок"}
+
+-- Проверка, что объект и все его родители видимы (не в скрытом фрейме)
+local function isActuallyVisible(obj)
+    local cur = obj
+    while cur and cur ~= LocalPlayer:FindFirstChild("PlayerGui") do
+        if cur:IsA("GuiObject") and not cur.Visible then return false end
+        cur = cur.Parent
+    end
+    return true
+end
+
+-- Поиск лучшей кнопки-кандидата
+local function findParryButton()
+    local pg = LocalPlayer:FindFirstChild("PlayerGui")
+    if not pg then return nil end
+
+    local vp = Workspace.CurrentCamera and Workspace.CurrentCamera.ViewportSize
+               or Vector2.new(1920, 1080)
+    local best, bestScore = nil, 0
+
+    for _, obj in ipairs(pg:GetDescendants()) do
+        if obj:IsA("GuiButton") and obj.Active and isActuallyVisible(obj) then
+            local n = obj.Name:lower()
+            local score = 0
+
+            -- Совпадение имени с ключевыми словами — главный сигнал
+            for _, kw in ipairs(BUTTON_KEYWORDS) do
+                if n:find(kw, 1, true) then score = score + 10 break end
+            end
+
+            -- Эвристика расположения: action-кнопки обычно в правой-нижней зоне
+            if score > 0 then
+                local ap = obj.AbsolutePosition
+                if ap.X > vp.X * 0.5 and ap.Y > vp.Y * 0.4 then
+                    score = score + 3
+                end
+                -- Небольшие круглые кнопки чаще, чем большие панели
+                local sz = obj.AbsoluteSize
+                if sz.X > 30 and sz.X < vp.X * 0.25 then
+                    score = score + 1
+                end
+            end
+
+            if score > bestScore then
+                best, bestScore = obj, score
+            end
+        end
+    end
+
+    if best then log("Found parry button:", best:GetFullName(), "score:", bestScore) end
+    return best
+end
+
+-- Клик по кнопке тремя способами (каскад, любой сработавший — успех)
+local function clickButton(button)
+    if not button or not button.Parent then return false end
+
+    local ap, sz = button.AbsolutePosition, button.AbsoluteSize
+    local x, y   = ap.X + sz.X / 2, ap.Y + sz.Y / 2
+
+    -- Способ 1: VirtualInputManager (мышь) — работает на большинстве исполнителей
+    pcall(function()
+        VirtualInputManager:SendMouseButtonEvent(x, y, 0, true,  game, 0)
+        task.wait(0.02)
+        VirtualInputManager:SendMouseButtonEvent(x, y, 0, false, game, 0)
+    end)
+
+    -- Способ 2: UserInputService (тач/мышь) — иногда срабатывает там, где VIM молчит
+    pcall(function()
+        UserInputService:SendMouseButtonEvent(x, y, 0, true,  game, 0)
+        task.wait(0.02)
+        UserInputService:SendMouseButtonEvent(x, y, 0, false, game, 0)
+    end)
+
+    -- Способ 3: executor-специфичные сигналы (если доступны)
+    if getconnections then
+        pcall(function()
+            for _, sig in ipairs({button.Activated, button.MouseButton1Click,
+                                  button.MouseButton1Down, button.TouchTap}) do
+                for _, conn in ipairs(getconnections(sig)) do
+                    if conn and conn.Fire then pcall(conn.Fire, conn) end
+                end
+            end
+        end)
+    end
+
+    return true
+end
+
+-- Кэш кнопки + периодический ре-скан
+local cachedButton      = nil
+local buttonLastScan    = 0
+local BUTTON_RESCAN_INT = 3   -- сек (не спамим дорогой GetDescendants)
+local buttonFindAttempts = 0
+
+local function getParryButton()
+    if cachedButton and cachedButton.Parent then return cachedButton end
+    local now = tick()
+    if now - buttonLastScan < BUTTON_RESCAN_INT then return nil end
+    buttonLastScan = now
+    buttonFindAttempts = buttonFindAttempts + 1
+    cachedButton = findParryButton()
+    if cachedButton then
+        print("[Blade Ball] Кнопка парирования найдена: " .. cachedButton:GetFullName())
+    elseif buttonFindAttempts <= 3 then
+        log("Кнопка парирования не найдена (попытка " .. buttonFindAttempts .. ")")
+    end
+    return cachedButton
+end
+
+-- =====================================================
+-- === ОСНОВНОЙ FIRE (каскадная логика) ================
+-- =====================================================
+local burstActive = false
+
+local function fireParry()
+    if burstActive then return end
+    burstActive = true
+
+    task.spawn(function()
+        for i = 1, BURST_COUNT do
+            local fired = false
+
+            if ACTIVE_METHOD == "button" or ACTIVE_METHOD == "auto" then
+                local btn = getParryButton()
+                if btn then
+                    clickButton(btn)
+                    fired = true
+                end
+            end
+
+            -- Fallback / основной путь для "key"
+            if not fired or ACTIVE_METHOD == "key" or ACTIVE_METHOD == "auto" then
+                safeKeyEvent(true)
+                task.wait(BURST_INTERVAL * 0.4)
+                safeKeyEvent(false)
+            end
+
+            if i < BURST_COUNT then task.wait(BURST_INTERVAL * 0.6) end
+        end
+        burstActive = false
+    end)
+end
+
+-- === ВИЗУАЛ КОЛЬЦА ===
+local function gradientColor(t)
+    t = math.clamp(t, 0, 1)
+    if t <= 0.5 then return COLOR_NEAR:Lerp(COLOR_MID, t * 2)
+    else              return COLOR_MID:Lerp(COLOR_FAR, (t - 0.5) * 2) end
+end
+
+local lastRingPos, lastRadius, lastColor = nil, -1, Color3.new()
+local function updateRingNow(center, radius, color)
+    if lastRingPos and (center - lastRingPos).Magnitude < 0.02
+       and math.abs(radius - lastRadius) < 0.02
+       and (color.R - lastColor.R)^2 + (color.G - lastColor.G)^2 + (color.B - lastColor.B)^2 < 0.0004 then
+        return
+    end
+    lastRingPos, lastRadius, lastColor = center, radius, color
+
+    local arcLen    = (2 * math.pi * radius) / SEGMENTS
+    local thickness = math.clamp(radius * 0.2, 0.08, 0.3)
+    for i = 1, SEGMENTS do
+        local angle = (i - 1) / SEGMENTS * math.pi * 2
+        local pos = center + Vector3.new(math.cos(angle) * radius, 0, math.sin(angle) * radius)
+        local tangent = Vector3.new(-math.sin(angle), 0, math.cos(angle))
+        local p = segments[i]
+        p.CFrame = CFrame.lookAt(pos, pos + tangent)
+        p.Size = Vector3.new(thickness, 0.1, arcLen * 1.15)
+        p.Color = color
+    end
+end
+
+local function findGround(hrpPos)
+    local res = Workspace:Raycast(hrpPos + Vector3.new(0, 3, 0),
+                                   Vector3.new(0, -50, 0), rayParams)
+    if res then return Vector3.new(hrpPos.X, res.Position.Y + 0.1, hrpPos.Z) end
+    return Vector3.new(hrpPos.X, hrpPos.Y - 2.5, hrpPos.Z)
+end
+
+-- === ГЛАВНЫЙ ЦИКЛ ===
+local MIN_RADIUS    = NEAR_DIAMETER / 2
+local currentRadius = FAR_DIAMETER / 2
+local currentColor  = COLOR_FAR
+local lastParry     = 0
+local armed         = true
+local prevDist      = math.huge
+local lastFlashTime = 0
+local frameCount    = 0
+local cachedRingPos = Vector3.new()
+
+RunService.RenderStepped:Connect(function()
+    local ok, err = pcall(function()
+        if not HumanoidRootPart or not HumanoidRootPart.Parent then return end
+        frameCount = frameCount + 1
+
+        local hrpPos = HumanoidRootPart.Position
+        local ball   = cachedBall
+        if ball and not ball.Parent then
+            cachedBall = rescanBall(); ball = cachedBall
+        end
+
+        local targetRadius, targetColor, doParry, targeting = FAR_DIAMETER / 2, COLOR_FAR, false, false
+
+        if ball then
+            local t = ball:GetAttribute("target")
+            targeting = (t == LocalPlayer.Name) or (t == LocalPlayer.UserId)
+                       or (ball:GetAttribute("targetPlayer") == LocalPlayer)
+                       or (Character:FindFirstChild("Highlight") ~= nil)
+
+            local dist = (hrpPos - ball.Position).Magnitude
+            if not targeting and dist < MIN_RADIUS * EMERGENCY_MULT then
+                targeting = true
+            end
+
+            if targeting then
+                local u = math.clamp(dist / DISTANCE_FOR_FAR, 0, 1)
+                targetRadius = (NEAR_DIAMETER + (FAR_DIAMETER - NEAR_DIAMETER) * u) / 2
+                targetColor  = gradientColor(u)
+
+                if dist > MIN_RADIUS * REARM_MULTIPLIER then armed = true end
+
+                if armed then
+                    if dist <= MIN_RADIUS then doParry = true end
+                    if not doParry and prevDist > MIN_RADIUS and dist <= MIN_RADIUS then
+                        doParry = true
+                    end
+                    if not doParry then
+                        local bv = ball.AssemblyLinearVelocity
+                        if bv.Magnitude < 0.5 then bv = ball.Velocity end
+                        if bv.Magnitude > 1 then
+                            local dir = (hrpPos - ball.Position).Unit
+                            local approach = bv:Dot(dir)
+                            if approach > 0 then
+                                local horizon = math.clamp(pingCache + PREDICT_FRAMES/60,
+                                                            MIN_AHEAD, MAX_AHEAD)
+                                if (dist - MIN_RADIUS) / approach <= horizon then
+                                    doParry = true
+                                end
+                            end
+                        end
+                    end
+                end
+                prevDist = dist
+            else
+                armed = true
+                prevDist = math.huge
+            end
+        else
+            armed = true
+            prevDist = math.huge
+        end
+
+        if doParry then
+            local now = tick()
+            if now - lastParry >= PARRY_COOLDOWN then
+                fireParry()
+                lastParry = now
+                lastFlashTime = now
+                armed = false
+            end
+        end
+
+        currentRadius = currentRadius + (targetRadius - currentRadius) * SMOOTHING
+        currentColor  = currentColor:Lerp(targetColor, SMOOTHING)
+        if tick() - lastFlashTime < 0.12 then
+            currentColor = Color3.fromRGB(255, 255, 255)
+        end
+
+        if frameCount % VISUAL_SKIP == 0 then
+            if frameCount % RAYCAST_EVERY == 0 or cachedRingPos.Magnitude == 0 then
+                cachedRingPos = findGround(hrpPos)
+            end
+            updateRingNow(cachedRingPos, currentRadius, currentColor)
+        end
+    end)
+    if not ok and DEBUG_MODE then warn("[BB]", err) end
+end)
+
+-- === РЕСПАВН ===
+LocalPlayer.CharacterAdded:Connect(function(newChar)
+    Character = newChar
+    HumanoidRootPart = newChar:WaitForChild("HumanoidRootPart")
+    rayParams.FilterDescendantsInstances = {Character, ringFolder}
+    armed = true
+    prevDist = math.huge
+    cachedRingPos = Vector3.new()
+    cachedButton = nil
+    buttonLastScan = 0
+end)
+
+print(string.format("[Blade Ball] Метод парирования: %s (платформа: %s)",
+    ACTIVE_METHOD:upper(), IS_MOBILE and "mobile" or "PC"))
+
+-- Первичная попытка найти кнопку сразу, чтобы понять режим работы
+if ACTIVE_METHOD == "button" or ACTIVE_METHOD == "auto" then
+    task.spawn(function()
+        task.wait(1.5)   -- даём UI прогрузиться
+        local b = getParryButton()
+        if b then
+            print("[Blade Ball] Кнопка парирования найдена — работа через клик.")
+        else
+            print("[Blade Ball] Кнопка не найдена — переключение на F-fallback.")
+        end
+    end)
+end
