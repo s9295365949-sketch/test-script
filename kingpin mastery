@@ -34,7 +34,6 @@ upgrade(5.572, 2.402, -16.287, 300)
 upgrade(1.275, 2.387, -14.650, 1400)   -- Kingpin Lvl 1
 upgrade(1.275, 2.387, -14.650, 4000)   -- Kingpin Lvl 2
 upgrade(1.275, 2.387, -14.650, 6000)   -- Kingpin Lvl 3
-upgrade(1.275, 2.387, -14.650, 7250)  -- Kingpin Lvl 4A (верхний путь)
 SetMercenaryUnit(1.275, 2.387, -14.650, "Unit 1", "Lackey", 1027)
 SetMercenaryUnit(1.275, 2.387, -14.650, "Unit 2", "Money Runner", 1105)
 upgrade(9.802, 2.937, -15.440, 2450)
@@ -45,7 +44,6 @@ place(1.592, 1.037, -11.447, "EvolvedKingpin", 3600)
 upgrade(1.592, 2.387, -11.447, 1400)   -- Kingpin Lvl 1
 upgrade(1.592, 2.387, -11.447, 4000)   -- Kingpin Lvl 2
 upgrade(1.592, 2.387, -11.447, 6000)   -- Kingpin Lvl 3
-upgrade(1.592, 2.387, -11.447, 7250)  -- Kingpin Lvl 4A (верхний путь)
 CommanderAbility(9.802, 2.937, -15.440, 3403)
 place(-1.196, 1.037, -12.749, "EvolvedKingpin", 3600)
 SetMercenaryUnit(1.592, 2.387, -11.447, "Unit 1", "Lackey", 3503)
@@ -62,7 +60,6 @@ place(-1.654, 1.037, -15.869, "EvolvedKingpin", 3600)
 upgrade(-1.654, 2.387, -15.869, 1400)  -- Kingpin Lvl 1
 upgrade(-1.654, 2.387, -15.869, 4000)  -- Kingpin Lvl 2
 upgrade(-1.654, 2.387, -15.869, 6000)  -- Kingpin Lvl 3
-upgrade(-1.654, 2.387, -15.869, 7250)  -- Kingpin Lvl 4A (верхний путь)
 sell(12.727, 2.387, -16.293)
 sell(12.371, 2.387, -19.298)
 sell(9.362, 2.387, -18.455)
