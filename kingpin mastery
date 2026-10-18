@@ -34,9 +34,9 @@ upgrade(5.572, 2.402, -16.287, 300)
 upgrade(1.275, 2.387, -14.650, 1400)   -- Kingpin Lvl 1
 upgrade(1.275, 2.387, -14.650, 4000)   -- Kingpin Lvl 2
 upgrade(1.275, 2.387, -14.650, 6000)   -- Kingpin Lvl 3
-upgrade(1.275, 2.387, -14.650, 7250)  -- Kingpin Lvl 4A (нижний путь)
+upgrade(1.275, 2.387, -14.650, 7250)  -- Kingpin Lvl 4A (верхний путь)
 SetMercenaryUnit(1.275, 2.387, -14.650, "Unit 1", "Lackey", 1027)
-SetMercenaryUnit(1.275, 2.387, -14.650, "Unit 2", "Lackey", 1105)
+SetMercenaryUnit(1.275, 2.387, -14.650, "Unit 2", "Money Runner", 1105)
 upgrade(9.802, 2.937, -15.440, 2450)
 upgrade(5.572, 2.402, -16.287, 1250)
 upgrade(5.572, 2.402, -16.287, 3000)
@@ -45,17 +45,17 @@ place(1.592, 1.037, -11.447, "EvolvedKingpin", 3600)
 upgrade(1.592, 2.387, -11.447, 1400)   -- Kingpin Lvl 1
 upgrade(1.592, 2.387, -11.447, 4000)   -- Kingpin Lvl 2
 upgrade(1.592, 2.387, -11.447, 6000)   -- Kingpin Lvl 3
-upgrade(1.592, 2.387, -11.447, 7250)  -- Kingpin Lvl 4A (нижний путь)
+upgrade(1.592, 2.387, -11.447, 7250)  -- Kingpin Lvl 4A (верхний путь)
 CommanderAbility(9.802, 2.937, -15.440, 3403)
 place(-1.196, 1.037, -12.749, "EvolvedKingpin", 3600)
 SetMercenaryUnit(1.592, 2.387, -11.447, "Unit 1", "Lackey", 3503)
-SetMercenaryUnit(1.592, 2.387, -11.447, "Unit 2", "Lackey", 3503)
+SetMercenaryUnit(1.592, 2.387, -11.447, "Unit 2", "Money Runner", 3503)
 upgrade(-1.196, 2.387, -12.749, 1400)  -- Kingpin Lvl 1
 upgrade(-1.196, 2.387, -12.749, 4000)  -- Kingpin Lvl 2
 upgrade(-1.196, 2.387, -12.749, 6000)  -- Kingpin Lvl 3
-upgrade(-1.196, 2.387, -12.749, 7250) -- Kingpin Lvl 4A (нижний путь)
+upgrade(-1.196, 2.387, -12.749, 7250) -- Kingpin Lvl 4A (верхний путь)
 SetMercenaryUnit(-1.196, 2.387, -12.749, "Unit 1", "Lackey", 5423)
-SetMercenaryUnit(-1.196, 2.387, -12.749, "Unit 2", "Lackey", 5423)
+SetMercenaryUnit(-1.196, 2.387, -12.749, "Unit 2", "Money Runner", 5423)
 upgrade(5.572, 2.402, -16.287, 8000)
 upgrade(5.572, 2.402, -16.287, 20000)
 place(-1.654, 1.037, -15.869, "EvolvedKingpin", 3600)
