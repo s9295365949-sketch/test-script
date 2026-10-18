@@ -1,64 +1,67 @@
 --[[
-    ╔══════════════════════════════════════════════════════════════╗
-    ║  BLADE BALL — STABLE PARRY SPHERE                            ║
-    ║                                                              ║
-    ║  • Сфера: сжимается при приближении, пульсирует, качается    ║
-    ║  • Прозрачность: 60% (близко) → 70% (далеко)                 ║
-    ║  • Позиция: пояс (−0.5 от HRP)                               ║
-    ║  • Парирование: радиус = 30 studs (×15 от минимума сферы)    ║
-    ║  • Фикс «залипания» при пинге / отлёте мяча                  ║
-    ║  • Чистый ввод: RemoteEvent → UserInputService → KeyCode.F   ║
-    ║  • Защита от детекта: cloneref, jitter, без getconnections   ║
-    ╚══════════════════════════════════════════════════════════════╝
+    ╔═══════════════════════════════════════════════════════════════════════╗
+    ║                                                                       ║
+    ║   ██████╗  █████╗ ██████╗ ██████╗ ██╗   ██╗    ██████╗ ██████╗       ║
+    ║   ██╔══██╗██╔══██╗██╔══██╗██╔══██╗╚██╗ ██╔╝    ██╔══██╗██╔══██╗      ║
+    ║   ██████╔╝███████║██████╔╝██████╔╝ ╚████╔╝     ██████╔╝██████╔╝      ║
+    ║   ██╔═══╝ ██╔══██║██╔══██╗██╔══██╗  ╚██╔╝      ██╔══██╗██╔══██╗      ║
+    ║   ██║     ██║  ██║██║  ██║██║  ██║   ██║       ██████╔╝██████╔╝      ║
+    ║   ╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝       ╚═════╝ ╚═════╝       ║
+    ║                                                                       ║
+    ║   BLADE BALL — ULTIMATE PARRY SPHERE                                   ║
+    ║   • Динамическая сфера (растёт/сжимается, держит дистанцию)           ║
+    ║   • Авто-парирование на F (радиус 30 studs)                           ║
+    ║   • Умный детект угроз и защита от залипания                          ║
+    ║   • Чистый ввод (Remote / UIS / F) и оптимизация под мобилки          ║
+    ║                                                                       ║
+    ╚═══════════════════════════════════════════════════════════════════════╝
 ]]
 
 -- ============================================================
--- 1. НАСТРОЙКИ
+-- 1. НАСТРОЙКИ (КРУТИЛКИ)
 -- ============================================================
 local CFG = {
     -- ─── Визуал сферы ──────────────────────────────────────
-    NEAR_DIAMETER       = 4,
-    FAR_DIAMETER        = 10,
-    DISTANCE_FOR_FAR    = 20,
-    NEAR_TRANSPARENCY   = 0.60,
-    FAR_TRANSPARENCY    = 0.70,
-    Y_OFFSET            = -0.5,
+    FAR_DIAMETER        = 30,        -- Максимальный диаметр сферы (30 = радиус 15)
+    DISTANCE_FOR_FAR    = 20,        -- Дистанция, на которой сфера достигает макс. прозрачности
+    BALL_GAP_STUDS      = 10,        -- Отступ от мяча до края сферы (радиус = dist + 10)
+    NEAR_TRANSPARENCY   = 0.60,      -- Прозрачность в близи (60%)
+    FAR_TRANSPARENCY    = 0.70,      -- Прозрачность в далеке (70%)
+    Y_OFFSET            = -0.5,      -- Высота сферы (-0.5 = пояс)
 
     -- ─── Парирование ───────────────────────────────────────
-    PARRY_TRIGGER_MULT  = 15,        -- ×15 от MIN_RADIUS = 30 studs
-    PARRY_COOLDOWN      = 0.15,
-    REARM_MULTIPLIER    = 1.5,
-    EMERGENCY_MULT      = 0.5,
+    PARRY_TRIGGER_MULT  = 15,        -- Радиус срабатывания (4/2 * 15 = 30 studs)
+    PARRY_COOLDOWN      = 0.15,      -- Кулдаун между парированиями
+    REARM_MULTIPLIER    = 1.5,       -- Для перевзвода (мяч должен отлететь)
+    EMERGENCY_MULT      = 0.5,       -- Аварийный детект (без target-атрибута)
     PARRY_KEY           = Enum.KeyCode.F,
 
-    -- ─── Предиктивка ───────────────────────────────────────
+    -- ─── Предиктивка и стабильность ────────────────────────
     PREDICT_FRAMES      = 2,
     MIN_AHEAD           = 0.06,
     MAX_AHEAD           = 0.25,
-
-    -- ─── Стабильность ──────────────────────────────────────
-    DAMP_LAMBDA         = 14,        -- сглаживание размера/цвета
-    FREEZE_TIMEOUT      = 0.35,      -- мяч «завис» если не двигается столько сек
-    APPROACH_MIN        = -2,        -- скорость сближения < этого = «улетает»
+    DAMP_LAMBDA         = 14,
+    FREEZE_TIMEOUT      = 0.35,      -- Через сколько сек мяч считается «зависшим»
+    APPROACH_MIN        = -2,        -- Если скорость сближения меньше — мяч улетает
 
     -- ─── Движение сферы ────────────────────────────────────
-    PULSE_SPEED         = 2.2,
-    PULSE_SIZE_AMPL     = 0.06,
-    PULSE_ALPHA_AMPL    = 0.04,
-    BOB_SPEED           = 1.8,
-    BOB_AMPLITUDE       = 0.15,
-    BRIGHTNESS_PULSE    = 0.10,
+    PULSE_SPEED         = 2.2,       -- Скорость пульсации (дыхания)
+    PULSE_SIZE_AMPL     = 0.06,      -- Амплитуда размера (±6%)
+    PULSE_ALPHA_AMPL    = 0.04,      -- Амплитуда прозрачности
+    BOB_SPEED           = 1.8,       -- Скорость покачивания
+    BOB_AMPLITUDE       = 0.15,      -- Амплитуда покачивания
+    BRIGHTNESS_PULSE    = 0.10,      -- Пульсация яркости цвета
 
-    -- ─── Цвета ─────────────────────────────────────────────
-    COLOR_NEAR = Color3.fromRGB(255, 30, 30),
-    COLOR_MID  = Color3.fromRGB(255, 200, 0),
-    COLOR_FAR  = Color3.fromRGB(30, 255, 50),
+    -- ─── Цвета градиента ───────────────────────────────────
+    COLOR_NEAR = Color3.fromRGB(255, 30, 30),    -- Красный (опасность)
+    COLOR_MID  = Color3.fromRGB(255, 200, 0),    -- Желтый (средняя дистанция)
+    COLOR_FAR  = Color3.fromRGB(30, 255, 50),    -- Зеленый (безопасно)
 
-    DEBUG = false,
+    DEBUG = false,                   -- true = вывод логов в консоль
 }
 
 -- ============================================================
--- 2. СЕРВИСЫ (cloneref)
+-- 2. СЕРВИСЫ И БАЗОВЫЕ ПЕРЕМЕННЫЕ
 -- ============================================================
 local function svc(name)
     local ok, s = pcall(function() return cloneref(game:GetService(name)) end)
@@ -76,8 +79,7 @@ local LocalPlayer = Players.LocalPlayer
 local Character   = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 local HRP         = Character:WaitForChild("HumanoidRootPart", 10)
 
-local MIN_RADIUS   = CFG.NEAR_DIAMETER / 2
-local PARRY_RADIUS = MIN_RADIUS * CFG.PARRY_TRIGGER_MULT
+local PARRY_RADIUS = (4 / 2) * CFG.PARRY_TRIGGER_MULT -- = 30 studs
 
 -- ============================================================
 -- 3. УТИЛИТЫ
@@ -94,7 +96,7 @@ local function gradientColor(t)
 end
 
 -- ============================================================
--- 4. ПИНГ
+-- 4. ПИНГ (кэшируется раз в секунду)
 -- ============================================================
 local pingCache = 0.05
 task.spawn(function()
@@ -107,7 +109,7 @@ task.spawn(function()
 end)
 
 -- ============================================================
--- 5. СФЕРА
+-- 5. СОЗДАНИЕ СФЕРЫ
 -- ============================================================
 local sphere = Instance.new("Part")
 sphere.Name         = "ParrySphere"
@@ -124,7 +126,7 @@ sphere.Size         = Vector3.new(CFG.FAR_DIAMETER, CFG.FAR_DIAMETER, CFG.FAR_DI
 sphere.Parent       = Workspace
 
 -- ============================================================
--- 6. ДЕТЕКЦИЯ МЯЧА
+-- 6. ДЕТЕКЦИЯ МЯЧА (Защита от ложных срабатываний)
 -- ============================================================
 local cachedBall = nil
 
@@ -141,7 +143,7 @@ local function findBall()
     for _, o in ipairs(Workspace:GetChildren()) do
         if o:IsA("BasePart") then
             local n = o.Name:lower()
-            if n:find("ball") or n:find("orb") or n:find("sphere") then return o end
+            if n:find("ball") then return o end -- Убрали orb/sphere
         end
     end
 end
@@ -151,7 +153,7 @@ cachedBall = findBall()
 Workspace.ChildAdded:Connect(function(o)
     if o:IsA("BasePart") and not cachedBall then
         local n = o.Name:lower()
-        if o:GetAttribute("realBall") or n:find("ball") or n:find("orb") then
+        if o:GetAttribute("realBall") or n:find("ball") then
             cachedBall = o
         end
     end
@@ -172,9 +174,7 @@ local function isTargetingMe(ball)
     if not ball then return false end
     for _, k in ipairs(TARGET_KEYS) do
         local v = ball:GetAttribute(k)
-        if v and (v == LocalPlayer.Name
-                  or v == LocalPlayer.UserId
-                  or tostring(v) == LocalPlayer.Name) then
+        if v and (v == LocalPlayer.Name or v == LocalPlayer.UserId or tostring(v) == LocalPlayer.Name) then
             return true
         end
     end
@@ -182,7 +182,7 @@ local function isTargetingMe(ball)
 end
 
 -- ============================================================
--- 8. ПАРИРОВАНИЕ
+-- 8. ПАРИРОВАНИЕ (Чистый ввод)
 -- ============================================================
 local parryRemote = nil
 local function findParryRemote()
@@ -231,7 +231,7 @@ local function fireParry()
 end
 
 -- ============================================================
--- 9. ВИЗУАЛ
+-- 9. ВИЗУАЛЬНОЕ ПРИМЕНЕНИЕ
 -- ============================================================
 local lastState = {
     pos = Vector3.new(), size = -1, alpha = -1, color = Color3.new(),
@@ -241,13 +241,11 @@ local function applySphere(center, diameter, transparency, color)
     local moved     = (center - lastState.pos).Magnitude > 0.005
     local resized   = math.abs(diameter - lastState.size) > 0.005
     local transed   = math.abs(transparency - lastState.alpha) > 0.003
-    local recolored = (color.R - lastState.color.R)^2
-                    + (color.G - lastState.color.G)^2
-                    + (color.B - lastState.color.B)^2 > 0.0001
+    local recolored = (color.R - lastState.color.R)^2 + (color.G - lastState.color.G)^2 + (color.B - lastState.color.B)^2 > 0.0001
+    
     if not (moved or resized or transed or recolored) then return end
 
-    lastState.pos, lastState.size, lastState.alpha, lastState.color =
-        center, diameter, transparency, color
+    lastState.pos, lastState.size, lastState.alpha, lastState.color = center, diameter, transparency, color
 
     sphere.CFrame       = CFrame.new(center)
     sphere.Size         = Vector3.new(diameter, diameter, diameter)
@@ -267,25 +265,27 @@ local state = {
     armed        = true,
     prevDist     = math.huge,
     phase        = 0,
-    frozenTime   = 0,       -- сколько секунд мяч не двигается
-    lastBallPos  = nil,     -- предыдущая позиция мяча
+    frozenTime   = 0,
+    lastBallPos  = nil,
 }
 
 -- ============================================================
--- 11. ГЛАВНЫЙ ЦИКЛ
+-- 11. ГЛАВНЫЙ ЦИКЛ (Logic)
 -- ============================================================
 local function mainTick(dt)
-    if not Character or not Character.Parent then
-        Character = LocalPlayer.Character
-    end
-    if not HRP or not HRP.Parent then
-        HRP = Character and Character:FindFirstChild("HumanoidRootPart")
-    end
+    -- Ре-валидация персонажа
+    if not Character or not Character.Parent then Character = LocalPlayer.Character end
+    if not HRP or not HRP.Parent then HRP = Character and Character:FindFirstChild("HumanoidRootPart") end
     if not HRP then return end
 
-    if not cachedBall or not cachedBall.Parent then
-        cachedBall = findBall()
+    -- Проверка на смерть / Spectate
+    local humanoid = Character:FindFirstChildOfClass("Humanoid")
+    if not humanoid or humanoid.Health <= 0 then
+        sphere.Transparency = 1
+        return
     end
+
+    if not cachedBall or not cachedBall.Parent then cachedBall = findBall() end
 
     local hrpPos = HRP.Position
     local ball   = cachedBall
@@ -299,91 +299,76 @@ local function mainTick(dt)
         local targeting = isTargetingMe(ball)
         local dist      = (hrpPos - ball.Position).Magnitude
 
-        -- Аварийный детект: мяч рядом, но target не подтверждён
-        if not targeting and dist < PARRY_RADIUS * CFG.EMERGENCY_MULT then
-            targeting = true
-        end
-
-        -- Скорость сближения мяча с нами
+        -- Скорость и направление мяча
         local bv = ball.AssemblyLinearVelocity
         if bv.Magnitude < 0.5 then bv = ball.Velocity end
+        local speed    = bv.Magnitude
         local approach = 0
-        if bv.Magnitude > 0.5 then
+        if speed > 0.5 then
             local dir = (hrpPos - ball.Position).Unit
-            approach = bv:Dot(dir)     -- >0 = в нас, <0 = улетает
+            approach = bv:Dot(dir)
         end
 
-        -- Детект «зависания» мяча (лаг сервера)
-        if state.lastBallPos
-           and (ball.Position - state.lastBallPos).Magnitude < 0.15 then
-            state.frozenTime = state.frozenTime + dt
-        else
-            state.frozenTime  = 0
-            state.lastBallPos = ball.Position
+        -- Аварийный детект (только если мяч реально летит)
+        if not targeting and dist < PARRY_RADIUS * CFG.EMERGENCY_MULT then
+            if speed > 15 then targeting = true end
         end
-        local frozen = state.frozenTime > CFG.FREEZE_TIMEOUT
 
-        -- Три условия, при которых сфера расширяется даже при target=me
-        local movingAway   = approach < CFG.APPROACH_MIN         -- мяч летит ОТ нас
-        local distanceGrew = dist > state.prevDist + 0.8         -- дистанция растёт
-        local frozenThreat = frozen and dist > PARRY_RADIUS * 0.5
+        -- Проверка: мяч — реальная угроза? (нацелен + движется)
+        local isThreat = targeting and (speed > 2 or approach > 0)
 
-        -- Визуальная цель: только если мяч реально несёт угрозу
-        local visualTargeting = targeting
-                                and not (movingAway or distanceGrew or frozenThreat)
+        if isThreat then
+            -- Детект зависания
+            if state.lastBallPos and (ball.Position - state.lastBallPos).Magnitude < 0.15 then
+                state.frozenTime = state.frozenTime + dt
+            else
+                state.frozenTime  = 0
+                state.lastBallPos = ball.Position
+            end
+            local frozen = state.frozenTime > CFG.FREEZE_TIMEOUT
 
-        if targeting then
+            local movingAway   = approach < CFG.APPROACH_MIN
+            local distanceGrew = dist > state.prevDist + 0.8
+            local frozenThreat = frozen and dist > PARRY_RADIUS * 0.5
+
+            local visualTargeting = not (movingAway or distanceGrew or frozenThreat)
+
             if visualTargeting then
+                -- ЛОГИКА: сфера в 10 стабсах от мяча
+                local maxRadius    = CFG.FAR_DIAMETER / 2
+                local targetRadius = math.min(maxRadius, dist + CFG.BALL_GAP_STUDS)
+                tgtDiameter = targetRadius * 2
+
                 local u = clamp01(dist / CFG.DISTANCE_FOR_FAR)
-                tgtDiameter     = CFG.NEAR_DIAMETER + (CFG.FAR_DIAMETER - CFG.NEAR_DIAMETER) * u
-                tgtTransparency = CFG.NEAR_TRANSPARENCY
-                                + (CFG.FAR_TRANSPARENCY - CFG.NEAR_TRANSPARENCY) * u
+                tgtTransparency = CFG.NEAR_TRANSPARENCY + (CFG.FAR_TRANSPARENCY - CFG.NEAR_TRANSPARENCY) * u
                 tgtColor        = gradientColor(u)
             else
-                -- Мяч улетает / завис → принудительно расширяем сферу
                 tgtDiameter     = CFG.FAR_DIAMETER
                 tgtTransparency = CFG.FAR_TRANSPARENCY
                 tgtColor        = CFG.COLOR_FAR
             end
 
-            -- Перевзвод парирования
-            if dist > PARRY_RADIUS * CFG.REARM_MULTIPLIER then
-                state.armed = true
-            end
+            if dist > PARRY_RADIUS * CFG.REARM_MULTIPLIER then state.armed = true end
 
-            -- Логика срабатывания
             if state.armed then
-                -- (1) Мяч уже внутри зоны
-                if dist <= PARRY_RADIUS then
-                    doParry = true
-                end
-                -- (2) Пересечение границы между кадрами
-                if not doParry
-                   and state.prevDist > PARRY_RADIUS
-                   and dist <= PARRY_RADIUS then
-                    doParry = true
-                end
-                -- (3) Предиктивка (только если мяч реально в нас)
+                if dist <= PARRY_RADIUS then doParry = true end
+                if not doParry and state.prevDist > PARRY_RADIUS and dist <= PARRY_RADIUS then doParry = true end
                 if not doParry and approach > 0 then
-                    local horizon = math.clamp(
-                        pingCache + CFG.PREDICT_FRAMES / 60,
-                        CFG.MIN_AHEAD, CFG.MAX_AHEAD)
-                    if (dist - PARRY_RADIUS) / approach <= horizon then
-                        doParry = true
-                    end
+                    local horizon = math.clamp(pingCache + CFG.PREDICT_FRAMES / 60, CFG.MIN_AHEAD, CFG.MAX_AHEAD)
+                    if (dist - PARRY_RADIUS) / approach <= horizon then doParry = true end
                 end
             end
             state.prevDist = dist
         else
-            state.armed      = true
-            state.prevDist   = math.huge
-            state.frozenTime = 0
+            state.armed       = true
+            state.prevDist    = math.huge
+            state.frozenTime  = 0
             state.lastBallPos = nil
         end
     else
-        state.armed      = true
-        state.prevDist   = math.huge
-        state.frozenTime = 0
+        state.armed       = true
+        state.prevDist    = math.huge
+        state.frozenTime  = 0
         state.lastBallPos = nil
     end
 
@@ -398,19 +383,18 @@ local function mainTick(dt)
         end
     end
 
-    -- Сглаживание базовых параметров
+    -- Сглаживание
     state.diameter     = damp(state.diameter,     tgtDiameter,     CFG.DAMP_LAMBDA, dt)
     state.transparency = damp(state.transparency, tgtTransparency, CFG.DAMP_LAMBDA, dt)
     state.color        = state.color:Lerp(tgtColor, clamp01(CFG.DAMP_LAMBDA * dt))
 
-    -- ─── Движение сферы ────────────────────────────────────
+    -- Анимация (пульсация и покачивание)
     state.phase = state.phase + dt * CFG.PULSE_SPEED
     local pulse = math.sin(state.phase)
 
     local finalDiameter = state.diameter * (1 + pulse * CFG.PULSE_SIZE_AMPL)
-    local finalTrans    = math.clamp(
-        state.transparency + pulse * CFG.PULSE_ALPHA_AMPL, 0, 0.95)
-
+    local finalTrans    = math.clamp(state.transparency + pulse * CFG.PULSE_ALPHA_AMPL, 0, 0.95)
+    
     local brightMul = 1 + pulse * CFG.BRIGHTNESS_PULSE
     local finalColor = Color3.new(
         math.clamp(state.color.R * brightMul, 0, 1),
@@ -422,8 +406,7 @@ local function mainTick(dt)
         finalColor = Color3.fromRGB(255, 255, 255)
     end
 
-    local bob = math.sin(state.phase * (CFG.BOB_SPEED / CFG.PULSE_SPEED))
-              * CFG.BOB_AMPLITUDE
+    local bob = math.sin(state.phase * (CFG.BOB_SPEED / CFG.PULSE_SPEED)) * CFG.BOB_AMPLITUDE
 
     local center = Vector3.new(
         hrpPos.X,
@@ -432,9 +415,7 @@ local function mainTick(dt)
     )
 
     applySphere(center, finalDiameter, finalTrans, finalColor)
-
-    log(string.format("d=%.2f a=%.2f frozen=%s",
-        finalDiameter, finalTrans, tostring(state.frozenTime > CFG.FREEZE_TIMEOUT)))
+    sphere.Transparency = finalTrans -- восстанавливаем, если были мертвы
 end
 
 RunService.Heartbeat:Connect(function(dt)
@@ -443,7 +424,7 @@ RunService.Heartbeat:Connect(function(dt)
 end)
 
 -- ============================================================
--- 12. РЕСПАВН
+-- 12. РЕСПАВН И СТАРТ
 -- ============================================================
 LocalPlayer.CharacterAdded:Connect(function(newChar)
     Character = newChar
@@ -463,13 +444,7 @@ LocalPlayer.CharacterAdded:Connect(function(newChar)
     parryRemote = findParryRemote()
 end)
 
--- ============================================================
--- 13. СТАРТ
--- ============================================================
-local platform = (UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled)
-                 and "mobile" or "PC"
-
+local platform = (UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled) and "mobile" or "PC"
 print(string.format(
-    "[Blade Ball] Готово | платформа: %s | радиус парирования: %.1f studs | remote: %s",
-    platform, PARRY_RADIUS,
-    parryRemote and parryRemote:GetFullName() or "none (используется F)"))
+    "[Blade Ball] Готово | Платформа: %s | Радиус парирования: %.1f | Ввод: %s",
+    platform, PARRY_RADIUS, parryRemote and "Remote" or "UserInputService"))
