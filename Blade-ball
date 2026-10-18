@@ -1,33 +1,61 @@
--- ==========================================
--- ===== НАСТРОЙКИ ==========================
--- ==========================================
-local PARRY_KEY        = Enum.KeyCode.F
-local NEAR_DIAMETER    = 5
-local FAR_DIAMETER     = 5
-local DISTANCE_FOR_FAR = 20
-local TRANSPARENCY     = 0.7
-local PARRY_COOLDOWN   = 0.18       -- чуть больше, чтобы не спамить
-local REARM_MULTIPLIER = 1.5
-local DAMP_LAMBDA      = 14
-local PREDICT_FRAMES   = 2
-local MIN_AHEAD        = 0.06
-local MAX_AHEAD        = 0.25
-local EMERGENCY_MULT   = 1.2
-local DEBUG_MODE       = false      -- ВАЖНО: выключено, чтобы не логировать лишнего
+--[[
+    ╔═══════════════════════════════════════════════════════════╗
+    ║  BLADE BALL — CLEAN PARRY SPHERE                          ║
+    ║  • Динамическая сфера: сжимается / бледнеет с приближением ║
+    ║  • Пульсация + покачивание для «живого» эффекта           ║
+    ║  • Мгновенное парирование (радиус ×6 от визуала)          ║
+    ║  • Чистый ввод: remote → UserInputService → F             ║
+    ╚═══════════════════════════════════════════════════════════╝
+]]
 
-local COLOR_NEAR = Color3.fromRGB(255, 30, 30)
-local COLOR_MID  = Color3.fromRGB(255, 200, 0)
-local COLOR_FAR  = Color3.fromRGB(30, 255, 50)
+-- ============================================================
+-- 1. НАСТРОЙКИ
+-- ============================================================
+local CFG = {
+    -- Визуал сферы
+    NEAR_DIAMETER       = 4,        -- диаметр когда мяч рядом
+    FAR_DIAMETER        = 10,       -- диаметр когда мяч далеко
+    DISTANCE_FOR_FAR    = 20,       -- дистанция максимума сферы
+    NEAR_TRANSPARENCY   = 0.60,     -- 60% в близи (плотная)
+    FAR_TRANSPARENCY    = 0.70,     -- 70% в далеке (прозрачная)
+    Y_OFFSET            = -0.5,     -- 0 = торс, -0.5 = пояс
 
--- ==========================================
--- ===== СЕРВИСЫ (cloneref) =================
--- ==========================================
--- cloneref создаёт «клон» сервиса. Античит, который сканирует ссылки на оригинальные
--- сервисы в окружении скрипта, видит меньше прямых совпадений.
+    -- Парирование
+    PARRY_TRIGGER_MULT  = 6,        -- радиус срабатывания = NEAR_R * это
+    PARRY_COOLDOWN      = 0.18,
+    REARM_MULTIPLIER    = 1.5,
+    EMERGENCY_MULT      = 0.5,
+    PARRY_KEY           = Enum.KeyCode.F,
+
+    -- Предиктивка
+    PREDICT_FRAMES      = 2,
+    MIN_AHEAD           = 0.06,
+    MAX_AHEAD           = 0.25,
+
+    -- Сглаживание
+    DAMP_LAMBDA         = 14,
+
+    -- Движение сферы
+    PULSE_SPEED         = 2.2,      -- скорость пульсации (рад/сек)
+    PULSE_SIZE_AMPL     = 0.06,     -- ±6% к диаметру
+    PULSE_ALPHA_AMPL     = 0.04,    -- ±0.04 к прозрачности
+    BOB_SPEED           = 1.8,      -- скорость покачивания
+    BOB_AMPLITUDE       = 0.15,     -- ±0.15 studs
+    BRIGHTNESS_PULSE    = 0.10,     -- лёгкая пульсация яркости цвета
+
+    -- Цвета
+    COLOR_NEAR = Color3.fromRGB(255, 30, 30),
+    COLOR_MID  = Color3.fromRGB(255, 200, 0),
+    COLOR_FAR  = Color3.fromRGB(30, 255, 50),
+
+    DEBUG = false,
+}
+
+-- ============================================================
+-- 2. СЕРВИСЫ (через cloneref — чище для античита)
+-- ============================================================
 local function svc(name)
-    local ok, s = pcall(function()
-        return cloneref(game:GetService(name))
-    end)
+    local ok, s = pcall(function() return cloneref(game:GetService(name)) end)
     return ok and s or game:GetService(name)
 end
 
@@ -36,20 +64,34 @@ local RunService       = svc("RunService")
 local UserInputService = svc("UserInputService")
 local Workspace        = svc("Workspace")
 local Stats            = svc("Stats")
+local ReplicatedStorage = svc("ReplicatedStorage")
 
 local LocalPlayer = Players.LocalPlayer
-local Character, HumanoidRootPart
-do
-    Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
-    HumanoidRootPart = Character:WaitForChild("HumanoidRootPart", 10)
+local Character   = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local HRP         = Character:WaitForChild("HumanoidRootPart", 10)
+
+local PARRY_RADIUS   = (CFG.NEAR_DIAMETER / 2) * CFG.PARRY_TRIGGER_MULT
+local MIN_RADIUS     = CFG.NEAR_DIAMETER / 2
+
+-- ============================================================
+-- 3. УТИЛИТЫ
+-- ============================================================
+local function log(...) if CFG.DEBUG then print("[BB]", ...) end end
+local function jitter(base) return base * (0.6 + math.random() * 0.8) end
+local function damp(cur, tgt, lambda, dt)
+    return tgt + (cur - tgt) * math.exp(-lambda * dt)
+end
+local function clamp01(x) return math.clamp(x, 0, 1) end
+
+local function gradientColor(t)
+    t = clamp01(t)
+    if t <= 0.5 then return CFG.COLOR_NEAR:Lerp(CFG.COLOR_MID, t * 2)
+    else              return CFG.COLOR_MID:Lerp(CFG.COLOR_FAR, (t - 0.5) * 2) end
 end
 
-local IS_MOBILE     = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
-local SEGMENTS      = IS_MOBILE and 18 or 24
-
--- ==========================================
--- ===== PING ===============================
--- ==========================================
+-- ============================================================
+-- 4. ПИНГ
+-- ============================================================
 local pingCache = 0.05
 task.spawn(function()
     while task.wait(1) do
@@ -60,33 +102,26 @@ task.spawn(function()
     end
 end)
 
--- ==========================================
--- ===== КОЛЬЦО =============================
--- ==========================================
-local ringFolder = Instance.new("Folder")
-ringFolder.Name = "ParryRing"
-ringFolder.Parent = Workspace
+-- ============================================================
+-- 5. СФЕРА
+-- ============================================================
+local sphere = Instance.new("Part")
+sphere.Name         = "ParrySphere"
+sphere.Shape        = Enum.PartType.Ball
+sphere.Anchored     = true
+sphere.CanCollide   = false
+sphere.CanTouch     = false
+sphere.CanQuery     = false
+sphere.CastShadow   = false
+sphere.Material     = Enum.Material.ForceField
+sphere.Color        = CFG.COLOR_FAR
+sphere.Transparency = CFG.FAR_TRANSPARENCY
+sphere.Size         = Vector3.new(CFG.FAR_DIAMETER, CFG.FAR_DIAMETER, CFG.FAR_DIAMETER)
+sphere.Parent       = Workspace
 
-local segments = table.create(SEGMENTS)
-for i = 1, SEGMENTS do
-    local p = Instance.new("Part")
-    p.Name          = "RingSeg"
-    p.Anchored      = true
-    p.CanCollide    = false
-    p.CanTouch      = false
-    p.CanQuery      = false
-    p.CastShadow    = false
-    p.Material      = Enum.Material.Neon
-    p.Color         = COLOR_FAR
-    p.Transparency  = TRANSPARENCY
-    p.Size          = Vector3.new(0.1, 0.1, 0.2)
-    p.Parent        = ringFolder
-    segments[i]     = p
-end
-
--- ==========================================
--- ===== ДЕТЕКЦИЯ МЯЧА ======================
--- ==========================================
+-- ============================================================
+-- 6. ДЕТЕКЦИЯ МЯЧА
+-- ============================================================
 local cachedBall = nil
 
 local function findBall()
@@ -102,15 +137,13 @@ local function findBall()
     for _, o in ipairs(Workspace:GetChildren()) do
         if o:IsA("BasePart") then
             local n = o.Name:lower()
-            if n:find("ball") or n:find("orb") or n:find("sphere") then
-                return o
-            end
+            if n:find("ball") or n:find("orb") or n:find("sphere") then return o end
         end
     end
-    return nil
 end
 
 cachedBall = findBall()
+
 Workspace.ChildAdded:Connect(function(o)
     if o:IsA("BasePart") and not cachedBall then
         local n = o.Name:lower()
@@ -123,54 +156,34 @@ Workspace.ChildRemoved:Connect(function(o)
     if o == cachedBall then cachedBall = nil end
 end)
 
--- ==========================================
--- ===== ДЕТЕКТ ЦЕЛИ ========================
--- ==========================================
-local TARGET_KEYS = {"target","Target","targetPlayer","TargetPlayer",
-                     "player","Player","Targeted","targeted"}
-
-local function getTargetValue(ball)
-    if not ball then return nil, nil end
-    for _, k in ipairs(TARGET_KEYS) do
-        local v = ball:GetAttribute(k)
-        if v ~= nil then return v, k end
-    end
-    return nil, nil
-end
+-- ============================================================
+-- 7. ДЕТЕКТ ЦЕЛИ
+-- ============================================================
+local TARGET_KEYS = {
+    "target", "Target", "targetPlayer", "TargetPlayer",
+    "player", "Player", "Targeted", "targeted",
+}
 
 local function isTargetingMe(ball)
-    if not ball then return false, nil end
-    local v, key = getTargetValue(ball)
-    if v then
-        if v == LocalPlayer.Name or v == LocalPlayer.UserId
-           or tostring(v) == LocalPlayer.Name then
-            return true, key
+    if not ball then return false end
+    for _, k in ipairs(TARGET_KEYS) do
+        local v = ball:GetAttribute(k)
+        if v and (v == LocalPlayer.Name
+                  or v == LocalPlayer.UserId
+                  or tostring(v) == LocalPlayer.Name) then
+            return true
         end
     end
-    if Character and Character:FindFirstChild("Highlight") then
-        return true, "Highlight"
-    end
-    return false, key
+    return Character and Character:FindFirstChild("Highlight") ~= nil
 end
 
--- ==========================================
--- ===== ПАРИРОВАНИЕ (чистый ввод) ==========
--- ==========================================
-local burstActive = false
-
--- Рандомная задержка ±40% — чтобы не было «роботизированного» паттерна
-local function jitter(base)
-    return base * (0.6 + math.random() * 0.8)   -- 0.6x .. 1.4x
-end
-
--- Пытаемся найти remote парирования (самый «чистый» способ)
+-- ============================================================
+-- 8. ПАРИРОВАНИЕ (чистый ввод)
+-- ============================================================
 local parryRemote = nil
 local function findParryRemote()
-    -- Ищем в ReplicatedStorage / PlayerScripts события с подходящим именем.
-    -- Если найдёте точное имя в вашей версии — впишите его сюда.
-    local searchRoots = {game:GetService("ReplicatedStorage")}
-    for _, root in ipairs(searchRoots) do
-        for _, obj in ipairs(root:GetDescendants()) do
+    local ok, found = pcall(function()
+        for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
             if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
                 local n = obj.Name:lower()
                 if n:find("parry") or n:find("block") or n:find("deflect") then
@@ -178,14 +191,11 @@ local function findParryRemote()
                 end
             end
         end
-    end
-    return nil
+    end)
+    return ok and found or nil
 end
 parryRemote = findParryRemote()
 
--- Отправка «нажатия» F без VirtualInputManager:
--- 1) Если есть remote — дергаем его напрямую (чисто, как Dryx Hub)
--- 2) Иначе — UserInputService:SendKeyEvent (менее палевно, чем VIM)
 local function sendParryOnce()
     if parryRemote then
         pcall(function()
@@ -197,196 +207,229 @@ local function sendParryOnce()
         end)
         return
     end
-    -- Fallback: публичный UserInputService
     pcall(function()
-        UserInputService:SendKeyEvent(true, PARRY_KEY, false, game)
+        UserInputService:SendKeyEvent(true,  CFG.PARRY_KEY, false, game)
         task.wait(jitter(0.02))
-        UserInputService:SendKeyEvent(false, PARRY_KEY, false, game)
+        UserInputService:SendKeyEvent(false, CFG.PARRY_KEY, false, game)
     end)
 end
 
+local burstActive = false
 local function fireParry()
     if burstActive then return end
     burstActive = true
     task.spawn(function()
-        -- 1 или 2 нажатия (случайно) — не фиксированный «бурст из 3»
         local count = math.random(1, 2)
         for i = 1, count do
             sendParryOnce()
-            if i < count then
-                task.wait(jitter(0.05))
-            end
+            if i < count then task.wait(jitter(0.05)) end
         end
-        -- Небольшая случайная пауза перед снятием блокировки
         task.wait(jitter(0.03))
         burstActive = false
     end)
 end
 
--- ==========================================
--- ===== ВИЗУАЛ =============================
--- ==========================================
-local function gradientColor(t)
-    t = math.clamp(t, 0, 1)
-    if t <= 0.5 then return COLOR_NEAR:Lerp(COLOR_MID, t*2)
-    else              return COLOR_MID:Lerp(COLOR_FAR, (t-0.5)*2) end
+-- ============================================================
+-- 9. ВИЗУАЛ СФЕРЫ
+-- ============================================================
+local lastState = {
+    pos    = Vector3.new(),
+    size   = -1,
+    alpha  = -1,
+    color  = Color3.new(),
+}
+
+local function applySphere(center, diameter, transparency, color)
+    local moved     = (center - lastState.pos).Magnitude > 0.005
+    local resized   = math.abs(diameter - lastState.size) > 0.005
+    local transed   = math.abs(transparency - lastState.alpha) > 0.003
+    local recolored = (color.R - lastState.color.R)^2
+                    + (color.G - lastState.color.G)^2
+                    + (color.B - lastState.color.B)^2 > 0.0001
+    if not (moved or resized or transed or recolored) then return end
+
+    lastState.pos, lastState.size, lastState.alpha, lastState.color =
+        center, diameter, transparency, color
+
+    sphere.CFrame       = CFrame.new(center)
+    sphere.Size         = Vector3.new(diameter, diameter, diameter)
+    sphere.Transparency = transparency
+    sphere.Color        = color
 end
 
-local function damp(current, target, lambda, dt)
-    return target + (current - target) * math.exp(-lambda * dt)
-end
-
-local lastRingPos, lastRadius, lastColor = Vector3.new(), -1, Color3.new()
-local function updateRing(center, radius, color)
-    local moved    = (center - lastRingPos).Magnitude > 0.01
-    local resized  = math.abs(radius - lastRadius) > 0.01
-    local recolored = (color.R-lastColor.R)^2 + (color.G-lastColor.G)^2
-                    + (color.B-lastColor.B)^2 > 0.0002
-    if not (moved or resized or recolored) then return end
-    lastRingPos, lastRadius, lastColor = center, radius, color
-
-    local arcLen    = (2 * math.pi * radius) / SEGMENTS
-    local thickness = math.clamp(radius * 0.22, 0.08, 0.35)
-    for i = 1, SEGMENTS do
-        local angle = (i - 1) / SEGMENTS * math.pi * 2
-        local pos = center + Vector3.new(math.cos(angle)*radius, 0, math.sin(angle)*radius)
-        local tan = Vector3.new(-math.sin(angle), 0, math.cos(angle))
-        local p = segments[i]
-        p.CFrame = CFrame.lookAt(pos, pos + tan)
-        p.Size   = Vector3.new(thickness, 0.1, arcLen * 1.2)
-        p.Color  = color
-    end
-end
-
--- ==========================================
--- ===== ГЛАВНЫЙ ЦИКЛ =======================
--- ==========================================
-local MIN_RADIUS    = NEAR_DIAMETER / 2
-local currentRadius = FAR_DIAMETER / 2
-local currentColor  = COLOR_FAR
-local lastParry     = 0
-local armed         = true
-local prevDist      = math.huge
-local lastFlash     = 0
-local frameSkip     = 0      -- «джиттер» для визуала
+-- ============================================================
+-- 10. ГЛАВНЫЙ ЦИКЛ
+-- ============================================================
+local state = {
+    diameter     = CFG.FAR_DIAMETER,
+    transparency = CFG.FAR_TRANSPARENCY,
+    color        = CFG.COLOR_FAR,
+    lastParry    = 0,
+    lastFlash    = 0,
+    armed        = true,
+    prevDist     = math.huge,
+    phase        = 0,
+}
 
 local function mainTick(dt)
+    -- Ре-валидация персонажа
     if not Character or not Character.Parent then
         Character = LocalPlayer.Character
     end
-    if not HumanoidRootPart or not HumanoidRootPart.Parent then
-        HumanoidRootPart = Character and Character:FindFirstChild("HumanoidRootPart")
+    if not HRP or not HRP.Parent then
+        HRP = Character and Character:FindFirstChild("HumanoidRootPart")
     end
-    if not HumanoidRootPart then return end
+    if not HRP then return end
 
     if not cachedBall or not cachedBall.Parent then
         cachedBall = findBall()
     end
 
-    local hrpPos = HumanoidRootPart.Position
+    local hrpPos = HRP.Position
     local ball   = cachedBall
-    local targetRadius = FAR_DIAMETER / 2
-    local targetColor  = COLOR_FAR
-    local doParry      = false
+
+    -- Значения по умолчанию (нет угрозы)
+    local tgtDiameter     = CFG.FAR_DIAMETER
+    local tgtTransparency = CFG.FAR_TRANSPARENCY
+    local tgtColor        = CFG.COLOR_FAR
+    local doParry         = false
 
     if ball then
         local targeting = isTargetingMe(ball)
-        local dist = (hrpPos - ball.Position).Magnitude
+        local dist      = (hrpPos - ball.Position).Magnitude
 
-        if not targeting and dist < MIN_RADIUS * EMERGENCY_MULT then
+        -- Аварийный детект: мяч рядом, но target-атрибут не подтвердил
+        if not targeting and dist < PARRY_RADIUS * CFG.EMERGENCY_MULT then
             targeting = true
         end
 
         if targeting then
-            local u = math.clamp(dist / DISTANCE_FOR_FAR, 0, 1)
-            targetRadius = (NEAR_DIAMETER + (FAR_DIAMETER - NEAR_DIAMETER) * u) / 2
-            targetColor  = gradientColor(u)
+            local u = clamp01(dist / CFG.DISTANCE_FOR_FAR)
 
-            if dist > MIN_RADIUS * REARM_MULTIPLIER then armed = true end
+            tgtDiameter     = CFG.NEAR_DIAMETER + (CFG.FAR_DIAMETER - CFG.NEAR_DIAMETER) * u
+            tgtTransparency = CFG.NEAR_TRANSPARENCY
+                            + (CFG.FAR_TRANSPARENCY - CFG.NEAR_TRANSPARENCY) * u
+            tgtColor        = gradientColor(u)
 
-            if armed then
-                if dist <= MIN_RADIUS then
+            -- Перевзвод
+            if dist > PARRY_RADIUS * CFG.REARM_MULTIPLIER then
+                state.armed = true
+            end
+
+            if state.armed then
+                if dist <= PARRY_RADIUS then
                     doParry = true
                 end
-                if not doParry and prevDist > MIN_RADIUS and dist <= MIN_RADIUS then
+                if not doParry and state.prevDist > PARRY_RADIUS and dist <= PARRY_RADIUS then
                     doParry = true
                 end
                 if not doParry then
                     local bv = ball.AssemblyLinearVelocity
                     if bv.Magnitude < 0.5 then bv = ball.Velocity end
                     if bv.Magnitude > 1 then
-                        local dir = (hrpPos - ball.Position).Unit
+                        local dir      = (hrpPos - ball.Position).Unit
                         local approach = bv:Dot(dir)
                         if approach > 0 then
-                            local horizon = math.clamp(pingCache + PREDICT_FRAMES/60,
-                                                       MIN_AHEAD, MAX_AHEAD)
-                            if (dist - MIN_RADIUS) / approach <= horizon then
+                            local horizon = math.clamp(pingCache + CFG.PREDICT_FRAMES / 60,
+                                                        CFG.MIN_AHEAD, CFG.MAX_AHEAD)
+                            if (dist - PARRY_RADIUS) / approach <= horizon then
                                 doParry = true
                             end
                         end
                     end
                 end
             end
-            prevDist = dist
+            state.prevDist = dist
         else
-            armed = true
-            prevDist = math.huge
+            state.armed    = true
+            state.prevDist = math.huge
         end
     else
-        armed = true
-        prevDist = math.huge
+        state.armed    = true
+        state.prevDist = math.huge
     end
 
+    -- Триггер парирования
     if doParry then
         local now = tick()
-        if now - lastParry >= PARRY_COOLDOWN then
+        if now - state.lastParry >= CFG.PARRY_COOLDOWN then
             fireParry()
-            lastParry = now
-            lastFlash = now
-            armed = false
+            state.lastParry = now
+            state.lastFlash = now
+            state.armed     = false
         end
     end
 
-    -- Сглаживание
-    currentRadius = damp(currentRadius, targetRadius, DAMP_LAMBDA, dt)
-    currentColor  = currentColor:Lerp(targetColor,
-                        math.clamp(DAMP_LAMBDA * dt, 0, 1))
-    if tick() - lastFlash < 0.12 then
-        currentColor = Color3.fromRGB(255, 255, 255)
+    -- Сглаживание базовых параметров
+    state.diameter     = damp(state.diameter,     tgtDiameter,     CFG.DAMP_LAMBDA, dt)
+    state.transparency = damp(state.transparency, tgtTransparency, CFG.DAMP_LAMBDA, dt)
+    state.color        = state.color:Lerp(tgtColor, clamp01(CFG.DAMP_LAMBDA * dt))
+
+    -- ─── ДВИЖЕНИЕ СФЕРЫ ────────────────────────────────
+    state.phase = state.phase + dt * CFG.PULSE_SPEED
+    local pulse  = math.sin(state.phase)
+    local pulse2 = math.sin(state.phase * 0.7)        -- покачивание медленнее
+
+    local finalDiameter = state.diameter * (1 + pulse * CFG.PULSE_SIZE_AMPL)
+    local finalTrans    = math.clamp(
+        state.transparency + pulse * CFG.PULSE_ALPHA_AMPL, 0, 0.95)
+
+    -- Лёгкая пульсация яркости (умножаем RGB, не трогая hue)
+    local brightMul = 1 + pulse * CFG.BRIGHTNESS_PULSE
+    local finalColor = Color3.new(
+        math.clamp(state.color.R * brightMul, 0, 1),
+        math.clamp(state.color.G * brightMul, 0, 1),
+        math.clamp(state.color.B * brightMul, 0, 1)
+    )
+
+    -- Белая вспышка при парировании перекрывает всё
+    if tick() - state.lastFlash < 0.12 then
+        finalColor = Color3.fromRGB(255, 255, 255)
     end
 
-    -- Визуал обновляем не строго каждый кадр, а с лёгким «джиттером»
-    frameSkip = frameSkip + 1
-    local updateVisual = (frameSkip % math.random(1, 2) == 0)
-    if updateVisual then
-        local ringPos = Vector3.new(hrpPos.X, hrpPos.Y, hrpPos.Z)
-        updateRing(ringPos, currentRadius, currentColor)
-    end
+    -- Покачивание по Y
+    local bob = math.sin(state.phase * (CFG.BOB_SPEED / CFG.PULSE_SPEED))
+              * CFG.BOB_AMPLITUDE
+
+    local center = Vector3.new(
+        hrpPos.X,
+        hrpPos.Y + CFG.Y_OFFSET + bob,
+        hrpPos.Z
+    )
+
+    applySphere(center, finalDiameter, finalTrans, finalColor)
+
+    log(string.format("d=%.2f a=%.2f dist=%s", finalDiameter, finalTrans,
+        ball and string.format("%.1f", (hrpPos - ball.Position).Magnitude) or "-"))
 end
 
 RunService.Heartbeat:Connect(function(dt)
     local ok, err = pcall(mainTick, dt)
-    if not ok and DEBUG_MODE then
-        print("[BB] tick error:", err)
-    end
+    if not ok and CFG.DEBUG then warn("[BB] tick:", err) end
 end)
 
--- ==========================================
--- ===== РЕСПАВН ============================
--- ==========================================
+-- ============================================================
+-- 11. РЕСПАВН
+-- ============================================================
 LocalPlayer.CharacterAdded:Connect(function(newChar)
     Character = newChar
-    HumanoidRootPart = newChar:WaitForChild("HumanoidRootPart", 10)
-    armed       = true
-    prevDist    = math.huge
-    cachedBall  = nil
-    parryRemote = nil
-    task.wait(1)   -- даём игре прогрузить remote после респавна
+    HRP       = newChar:WaitForChild("HumanoidRootPart", 10)
+    state.armed    = true
+    state.prevDist = math.huge
+    cachedBall     = nil
+    parryRemote    = nil
+    task.wait(1)
     parryRemote = findParryRemote()
 end)
 
-if DEBUG_MODE then
-    print(string.format("[Blade Ball] clean mode | remote: %s | platform: %s",
+-- ============================================================
+-- 12. СТАРТ
+-- ============================================================
+if CFG.DEBUG then
+    local platform = (UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled)
+                     and "mobile" or "PC"
+    print(string.format(
+        "[Blade Ball] sphere mode | remote: %s | platform: %s | parry_radius: %.1f",
         parryRemote and parryRemote:GetFullName() or "none",
-        IS_MOBILE and "mobile" or "PC"))
+        platform, PARRY_RADIUS))
 end
