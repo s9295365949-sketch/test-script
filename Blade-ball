@@ -1,28 +1,29 @@
 --[[
     ╔═══════════════════════════════════════════════════════════════════════╗
-    ║   BLADE BALL — MOBILE MENU EDITION                                    ║
+    ║   BLADE BALL — ULTRA RADIUS EDITION (FIXED MENU)                      ║
+    ║   • Увеличенный радиус парирования (до 50 стабсов)                    ║
     ║   • Полноценное GUI-меню (слайдеры, темы, тумблеры)                   ║
-    ║   • Работает на ПК и Телефоне (тап пальцем)                           ║
-    ║   • Настройки применяются в реальном времени                          ║
     ╚═══════════════════════════════════════════════════════════════════════╝
 ]]
 
+print("⏳ [BB] Запуск скрипта...")
+
 -- ============================================================
--- 1. ЖИВЫЕ НАСТРОЙКИ (меняются из меню)
+-- 1. НАСТРОЙКИ (УВЕЛИЧЕНЫ)
 -- ============================================================
 local CFG = {
-    MIN_PARRY_DIAMETER  = 30,
-    MAX_PARRY_DIAMETER  = 45,
-    MAX_RADIUS          = 30,
-    PARRY_COOLDOWN      = 0.20,
+    MIN_PARRY_DIAMETER  = 60,        -- Радиус 30 стабсов
+    MAX_PARRY_DIAMETER  = 100,       -- Радиус 50 стабсов
+    MAX_RADIUS          = 60,        -- Максимальный размер сферы
+    PARRY_COOLDOWN      = 0.15,      -- Уменьшили, чтобы успевать
     PARRY_ENABLED       = true,
     SPHERE_VISIBLE      = true,
     THEME               = "Dark",
     
-    MIN_SPEED_THRESH    = 50,
+    MIN_SPEED_THRESH    = 30,        -- Снизили порог скорости мяча
     MAX_SPEED_THRESH    = 200,
-    HUMAN_DELAY_MIN     = 0.04,
-    HUMAN_DELAY_MAX     = 0.12,
+    HUMAN_DELAY_MIN     = 0.01,      -- Быстрая реакция
+    HUMAN_DELAY_MAX     = 0.04,
     PREDICT_FRAMES      = 2,
     MIN_AHEAD           = 0.06,
     MAX_AHEAD           = 0.25,
@@ -47,7 +48,7 @@ local THEMES = {
 }
 
 -- ============================================================
--- 2. СЕРВИСЫ (без cloneref)
+-- 2. СЕРВИСЫ
 -- ============================================================
 local Players           = game:GetService("Players")
 local RunService        = game:GetService("RunService")
@@ -68,7 +69,7 @@ task.spawn(function()
     for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
         if obj:IsA("RemoteEvent") then
             local n = obj.Name:lower()
-            if n:find("parry") or n:find("block") or n:find("deflect") then
+            if n:find("parry") or n:find("block") or n:find("deflect") or n:find("swing") then
                 parryRemote = obj; break
             end
         end
@@ -117,6 +118,10 @@ local function findBall()
     if bf then for _, o in ipairs(bf:GetChildren()) do if o:IsA("BasePart") then return o end end end
     for _, o in ipairs(Workspace:GetChildren()) do
         if o:IsA("BasePart") and o:GetAttribute("realBall") then return o end
+    end
+    -- Если папки нет, ищем по имени
+    for _, o in ipairs(Workspace:GetChildren()) do
+        if o:IsA("BasePart") and o.Name:lower() == "ball" then return o end
     end
 end
 cachedBall = findBall()
@@ -203,11 +208,20 @@ RunService.Heartbeat:Connect(function(dt)
         local currentParryDiameter = CFG.MIN_PARRY_DIAMETER + (CFG.MAX_PARRY_DIAMETER - CFG.MIN_PARRY_DIAMETER) * speedFactor
         local currentParryRadius = currentParryDiameter / 2
 
+        -- УПРОЩЕННЫЙ ДЕТЕКТ ЦЕЛИ
         local targeting = false
         local tVal = ball:GetAttribute("target")
-        if tVal and (tVal == LocalPlayer.Name or tostring(tVal) == LocalPlayer.Name) then targeting = true
-        elseif Character:FindFirstChild("Highlight") then targeting = true
-        elseif speed > 5 and approach > 10 and dist < 40 then targeting = true end
+        
+        -- 1. Если игра говорит, что мяч наш - 100% парируем
+        if tVal and (tVal == LocalPlayer.Name or tostring(tVal) == LocalPlayer.Name) then 
+            targeting = true
+        -- 2. Если есть подсветка
+        elseif Character:FindFirstChild("Highlight") then 
+            targeting = true
+        -- 3. Если мяч просто летит в нашу сторону
+        elseif speed > 5 and approach > 5 and dist < 80 then 
+            targeting = true 
+        end
 
         if targeting then
             local targetRadius = math.clamp(dist, currentParryRadius, CFG.MAX_RADIUS)
@@ -251,323 +265,348 @@ RunService.Heartbeat:Connect(function(dt)
 end)
 
 -- ============================================================
--- 8. GUI МЕНЮ
+-- 8. GUI МЕНЮ (БЕЗ ОШИБОК)
 -- ============================================================
-local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "BBAuraMenu"
-screenGui.ResetOnSpawn = false
-screenGui.IgnoreGuiInset = true
-screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+task.spawn(function()
+    local success, err = pcall(function()
+        local playerGui = LocalPlayer:WaitForChild("PlayerGui")
+        
+        local screenGui = Instance.new("ScreenGui")
+        screenGui.Name = "BBAuraMenu"
+        screenGui.ResetOnSpawn = false
+        screenGui.IgnoreGuiInset = true
+        screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+        screenGui.DisplayOrder = 9999
+        screenGui.Parent = playerGui
 
--- Кнопка открытия
-local openBtn = Instance.new("TextButton")
-openBtn.Size = UDim2.new(0, 50, 0, 50)
-openBtn.Position = UDim2.new(1, -70, 0, 80)
-openBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
-openBtn.Text = "⚙️"
-openBtn.TextSize = 24
-openBtn.Font = Enum.Font.GothamBold
-openBtn.TextColor3 = Color3.new(1,1,1)
-openBtn.BorderSizePixel = 0
-openBtn.Parent = screenGui
-Instance.new("UICorner", openBtn).CornerRadius = UDim.new(1, 0)
+        -- Кнопка MENU
+        local openBtn = Instance.new("TextButton")
+        openBtn.Size = UDim2.new(0, 60, 0, 60)
+        openBtn.Position = UDim2.new(1, -80, 0, 100)
+        openBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+        openBtn.Text = "MENU"
+        openBtn.TextSize = 14
+        openBtn.Font = Enum.Font.GothamBold
+        openBtn.TextColor3 = Color3.new(1,1,1)
+        openBtn.BorderSizePixel = 0
+        openBtn.ZIndex = 10
+        openBtn.Parent = screenGui
+        Instance.new("UICorner", openBtn).CornerRadius = UDim.new(1, 0)
 
--- Основное окно
-local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 300, 0, 480)
-mainFrame.Position = UDim2.new(0, 20, 0, 100)
-mainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
-mainFrame.BorderSizePixel = 0
-mainFrame.Visible = false
-mainFrame.Active = true
-mainFrame.Parent = screenGui
-Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 10)
+        local mainFrame = Instance.new("Frame")
+        mainFrame.Size = UDim2.new(0, 300, 0, 480)
+        mainFrame.Position = UDim2.new(0, 20, 0, 100)
+        mainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+        mainFrame.BorderSizePixel = 0
+        mainFrame.Visible = false
+        mainFrame.Active = true
+        mainFrame.ZIndex = 5
+        mainFrame.Parent = screenGui
+        Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 10)
 
--- Заголовок
-local header = Instance.new("Frame")
-header.Size = UDim2.new(1, 0, 0, 40)
-header.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
-header.BorderSizePixel = 0
-header.Parent = mainFrame
-Instance.new("UICorner", header).CornerRadius = UDim.new(0, 10)
+        local header = Instance.new("Frame")
+        header.Size = UDim2.new(1, 0, 0, 40)
+        header.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+        header.BorderSizePixel = 0
+        header.ZIndex = 6
+        header.Parent = mainFrame
+        Instance.new("UICorner", header).CornerRadius = UDim.new(0, 10)
 
-local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, -40, 1, 0)
-title.Position = UDim2.new(0, 10, 0, 0)
-title.BackgroundTransparency = 1
-title.Text = "⚔️ Blade Ball — Menu"
-title.TextColor3 = Color3.fromRGB(220, 220, 220)
-title.TextXAlignment = Enum.TextXAlignment.Left
-title.Font = Enum.Font.GothamBold
-title.TextSize = 16
-title.Parent = header
+        local title = Instance.new("TextLabel")
+        title.Size = UDim2.new(1, -40, 1, 0)
+        title.Position = UDim2.new(0, 10, 0, 0)
+        title.BackgroundTransparency = 1
+        title.Text = "Blade Ball — Menu"
+        title.TextColor3 = Color3.fromRGB(220, 220, 220)
+        title.TextXAlignment = Enum.TextXAlignment.Left
+        title.Font = Enum.Font.GothamBold
+        title.TextSize = 16
+        title.ZIndex = 7
+        title.Parent = header
 
--- Кнопка закрытия
-local closeBtn = Instance.new("TextButton")
-closeBtn.Size = UDim2.new(0, 30, 0, 30)
-closeBtn.Position = UDim2.new(1, -35, 0, 5)
-closeBtn.BackgroundColor3 = Color3.fromRGB(200, 60, 60)
-closeBtn.Text = "✕"
-closeBtn.TextColor3 = Color3.new(1,1,1)
-closeBtn.Font = Enum.Font.GothamBold
-closeBtn.TextSize = 16
-closeBtn.BorderSizePixel = 0
-closeBtn.Parent = header
-Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0, 6)
+        local closeBtn = Instance.new("TextButton")
+        closeBtn.Size = UDim2.new(0, 30, 0, 30)
+        closeBtn.Position = UDim2.new(1, -35, 0, 5)
+        closeBtn.BackgroundColor3 = Color3.fromRGB(200, 60, 60)
+        closeBtn.Text = "X"
+        closeBtn.TextColor3 = Color3.new(1,1,1)
+        closeBtn.Font = Enum.Font.GothamBold
+        closeBtn.TextSize = 16
+        closeBtn.BorderSizePixel = 0
+        closeBtn.ZIndex = 8
+        closeBtn.Parent = header
+        Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0, 6)
 
--- Скролл контейнер
-local scroll = Instance.new("ScrollingFrame")
-scroll.Size = UDim2.new(1, -10, 1, -90)
-scroll.Position = UDim2.new(0, 5, 0, 45)
-scroll.BackgroundTransparency = 1
-scroll.ScrollBarThickness = 4
-scroll.ScrollBarImageColor3 = Color3.fromRGB(100, 150, 255)
-scroll.CanvasSize = UDim2.new(0, 0, 0, 600)
-scroll.Parent = mainFrame
+        local scroll = Instance.new("ScrollingFrame")
+        scroll.Size = UDim2.new(1, -10, 1, -90)
+        scroll.Position = UDim2.new(0, 5, 0, 45)
+        scroll.BackgroundTransparency = 1
+        scroll.ScrollBarThickness = 4
+        scroll.ScrollBarImageColor3 = Color3.fromRGB(100, 150, 255)
+        scroll.CanvasSize = UDim2.new(0, 0, 0, 600)
+        scroll.ZIndex = 6
+        scroll.Parent = mainFrame
 
--- Функции-помощники для UI
-local yOffset = 0
-local elements = {}
+        local yOffset = 0
+        local elements = {}
 
-local function addLabel(text)
-    local l = Instance.new("TextLabel")
-    l.Size = UDim2.new(1, -10, 0, 20)
-    l.Position = UDim2.new(0, 5, 0, yOffset)
-    l.BackgroundTransparency = 1
-    l.Text = text
-    l.TextColor3 = Color3.fromRGB(220, 220, 220)
-    l.TextXAlignment = Enum.TextXAlignment.Left
-    l.Font = Enum.Font.GothamBold
-    l.TextSize = 13
-    l.Parent = scroll
-    yOffset = yOffset + 22
-    table.insert(elements, {el=l, prop="TextColor3", colorKey="text"})
-end
-
-local function addSlider(labelText, min, max, current, callback)
-    local cont = Instance.new("Frame")
-    cont.Size = UDim2.new(1, -10, 0, 45)
-    cont.Position = UDim2.new(0, 5, 0, yOffset)
-    cont.BackgroundTransparency = 1
-    cont.Parent = scroll
-    yOffset = yOffset + 48
-
-    local lbl = Instance.new("TextLabel")
-    lbl.Size = UDim2.new(1, 0, 0, 18)
-    lbl.BackgroundTransparency = 1
-    lbl.Text = labelText .. ": " .. current
-    lbl.TextColor3 = Color3.fromRGB(220, 220, 220)
-    lbl.TextXAlignment = Enum.TextXAlignment.Left
-    lbl.Font = Enum.Font.Gotham
-    lbl.TextSize = 13
-    lbl.Parent = cont
-    table.insert(elements, {el=lbl, prop="TextColor3", colorKey="text"})
-
-    local bar = Instance.new("Frame")
-    bar.Size = UDim2.new(1, -20, 0, 6)
-    bar.Position = UDim2.new(0, 5, 0, 30)
-    bar.BackgroundColor3 = Color3.fromRGB(60, 60, 75)
-    bar.BorderSizePixel = 0
-    bar.Parent = cont
-    Instance.new("UICorner", bar).CornerRadius = UDim.new(1, 0)
-    table.insert(elements, {el=bar, prop="BackgroundColor3", colorKey="off"})
-
-    local fill = Instance.new("Frame")
-    fill.Size = UDim2.new((current - min) / (max - min), 0, 1, 0)
-    fill.BackgroundColor3 = Color3.fromRGB(100, 150, 255)
-    fill.BorderSizePixel = 0
-    fill.Parent = bar
-    Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
-    table.insert(elements, {el=fill, prop="BackgroundColor3", colorKey="accent"})
-
-    -- Для удобного тапа на мобилке сделаем невидимую кнопку поверх
-    local hit = Instance.new("TextButton")
-    hit.Size = UDim2.new(1, 20, 0, 30)
-    hit.Position = UDim2.new(0, -10, 0, 15)
-    hit.BackgroundTransparency = 1
-    hit.Text = ""
-    hit.Parent = cont
-
-    local dragging = false
-    local function updateFromX(x)
-        local relX = math.clamp((x - bar.AbsolutePosition.X) / bar.AbsoluteSize.X, 0, 1)
-        local value = math.floor(min + (max - min) * relX)
-        fill.Size = UDim2.new(relX, 0, 1, 0)
-        lbl.Text = labelText .. ": " .. value
-        callback(value)
-    end
-
-    hit.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1
-           or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = true
-            updateFromX(input.Position.X)
+        local function addLabel(text)
+            local l = Instance.new("TextLabel")
+            l.Size = UDim2.new(1, -10, 0, 20)
+            l.Position = UDim2.new(0, 5, 0, yOffset)
+            l.BackgroundTransparency = 1
+            l.Text = text
+            l.TextColor3 = Color3.fromRGB(220, 220, 220)
+            l.TextXAlignment = Enum.TextXAlignment.Left
+            l.Font = Enum.Font.GothamBold
+            l.TextSize = 13
+            l.ZIndex = 7
+            l.Parent = scroll
+            yOffset = yOffset + 22
+            table.insert(elements, {el=l, prop="TextColor3", colorKey="text"})
         end
-    end)
-    hit.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1
-           or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = false
-        end
-    end)
-    UserInputService.InputChanged:Connect(function(input)
-        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement
-                         or input.UserInputType == Enum.UserInputType.Touch) then
-            updateFromX(input.Position.X)
-        end
-    end)
-end
 
-local function addToggle(labelText, current, callback)
-    local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(1, -10, 0, 35)
-    btn.Position = UDim2.new(0, 5, 0, yOffset)
-    btn.BackgroundColor3 = current and Color3.fromRGB(60, 180, 100) or Color3.fromRGB(180, 60, 60)
-    btn.Text = labelText .. ": " .. (current and "ВКЛ" or "ВЫКЛ")
-    btn.TextColor3 = Color3.new(1,1,1)
-    btn.Font = Enum.Font.GothamBold
-    btn.TextSize = 13
-    btn.BorderSizePixel = 0
-    btn.Parent = scroll
-    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
-    yOffset = yOffset + 42
+        local function addSlider(labelText, min, max, current, callback)
+            local cont = Instance.new("Frame")
+            cont.Size = UDim2.new(1, -10, 0, 45)
+            cont.Position = UDim2.new(0, 5, 0, yOffset)
+            cont.BackgroundTransparency = 1
+            cont.ZIndex = 7
+            cont.Parent = scroll
+            yOffset = yOffset + 48
 
-    local state = current
-    btn.MouseButton1Click:Connect(function()
-        state = not state
-        btn.Text = labelText .. ": " .. (state and "ВКЛ" or "ВЫКЛ")
-        btn.BackgroundColor3 = state and Color3.fromRGB(60, 180, 100) or Color3.fromRGB(180, 60, 60)
-        callback(state)
-    end)
-end
+            local lbl = Instance.new("TextLabel")
+            lbl.Size = UDim2.new(1, 0, 0, 18)
+            lbl.BackgroundTransparency = 1
+            lbl.Text = labelText .. ": " .. current
+            lbl.TextColor3 = Color3.fromRGB(220, 220, 220)
+            lbl.TextXAlignment = Enum.TextXAlignment.Left
+            lbl.Font = Enum.Font.Gotham
+            lbl.TextSize = 13
+            lbl.ZIndex = 8
+            lbl.Parent = cont
+            table.insert(elements, {el=lbl, prop="TextColor3", colorKey="text"})
 
-local function addThemeSelector()
-    addLabel("🎨 Тема")
-    local themes = {"Dark", "Light", "Matrix", "Cyber"}
-    local cont = Instance.new("Frame")
-    cont.Size = UDim2.new(1, -10, 0, 35)
-    cont.Position = UDim2.new(0, 5, 0, yOffset)
-    cont.BackgroundTransparency = 1
-    cont.Parent = scroll
-    yOffset = yOffset + 42
+            local bar = Instance.new("Frame")
+            bar.Size = UDim2.new(1, -20, 0, 6)
+            bar.Position = UDim2.new(0, 5, 0, 30)
+            bar.BackgroundColor3 = Color3.fromRGB(60, 60, 75)
+            bar.BorderSizePixel = 0
+            bar.ZIndex = 8
+            bar.Parent = cont
+            Instance.new("UICorner", bar).CornerRadius = UDim.new(1, 0)
+            table.insert(elements, {el=bar, prop="BackgroundColor3", colorKey="off"})
 
-    local btns = {}
-    for i, themeName in ipairs(themes) do
-        local b = Instance.new("TextButton")
-        b.Size = UDim2.new(0.24, -4, 1, 0)
-        b.Position = UDim2.new((i-1) * 0.25, 0, 0, 0)
-        b.BackgroundColor3 = (CFG.THEME == themeName) and Color3.fromRGB(100, 150, 255) or Color3.fromRGB(60, 60, 75)
-        b.Text = themeName
-        b.TextColor3 = Color3.new(1,1,1)
-        b.Font = Enum.Font.GothamBold
-        b.TextSize = 11
-        b.BorderSizePixel = 0
-        b.Parent = cont
-        Instance.new("UICorner", b).CornerRadius = UDim.new(0, 5)
-        table.insert(btns, {btn = b, name = themeName})
-    end
+            local fill = Instance.new("Frame")
+            fill.Size = UDim2.new((current - min) / (max - min), 0, 1, 0)
+            fill.BackgroundColor3 = Color3.fromRGB(100, 150, 255)
+            fill.BorderSizePixel = 0
+            fill.ZIndex = 9
+            fill.Parent = bar
+            Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
+            table.insert(elements, {el=fill, prop="BackgroundColor3", colorKey="accent"})
 
-    for _, data in ipairs(btns) do
-        data.btn.MouseButton1Click:Connect(function()
-            CFG.THEME = data.name
-            for _, d in ipairs(btns) do
-                d.btn.BackgroundColor3 = (d.name == data.name) and Color3.fromRGB(100, 150, 255) or Color3.fromRGB(60, 60, 75)
+            local hit = Instance.new("TextButton")
+            hit.Size = UDim2.new(1, 20, 0, 30)
+            hit.Position = UDim2.new(0, -10, 0, 15)
+            hit.BackgroundTransparency = 1
+            hit.Text = ""
+            hit.ZIndex = 10
+            hit.Parent = cont
+
+            local dragging = false
+            local function updateFromX(x)
+                local relX = math.clamp((x - bar.AbsolutePosition.X) / bar.AbsoluteSize.X, 0, 1)
+                local value = math.floor(min + (max - min) * relX)
+                fill.Size = UDim2.new(relX, 0, 1, 0)
+                lbl.Text = labelText .. ": " .. value
+                callback(value)
             end
+
+            hit.InputBegan:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1
+                   or input.UserInputType == Enum.UserInputType.Touch then
+                    dragging = true
+                    updateFromX(input.Position.X)
+                end
+            end)
+            hit.InputEnded:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1
+                   or input.UserInputType == Enum.UserInputType.Touch then
+                    dragging = false
+                end
+            end)
+            UserInputService.InputChanged:Connect(function(input)
+                if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement
+                                 or input.UserInputType == Enum.UserInputType.Touch) then
+                    updateFromX(input.Position.X)
+                end
+            end)
+        end
+
+        local function addToggle(labelText, current, callback)
+            local btn = Instance.new("TextButton")
+            btn.Size = UDim2.new(1, -10, 0, 35)
+            btn.Position = UDim2.new(0, 5, 0, yOffset)
+            btn.BackgroundColor3 = current and Color3.fromRGB(60, 180, 100) or Color3.fromRGB(180, 60, 60)
+            btn.Text = labelText .. ": " .. (current and "ВКЛ" or "ВЫКЛ")
+            btn.TextColor3 = Color3.new(1,1,1)
+            btn.Font = Enum.Font.GothamBold
+            btn.TextSize = 13
+            btn.BorderSizePixel = 0
+            btn.ZIndex = 8
+            btn.Parent = scroll
+            Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+            yOffset = yOffset + 42
+
+            local state = current
+            btn.MouseButton1Click:Connect(function()
+                state = not state
+                btn.Text = labelText .. ": " .. (state and "ВКЛ" or "ВЫКЛ")
+                btn.BackgroundColor3 = state and Color3.fromRGB(60, 180, 100) or Color3.fromRGB(180, 60, 60)
+                callback(state)
+            end)
+        end
+
+        local function addThemeSelector()
+            addLabel("Тема")
+            local themes = {"Dark", "Light", "Matrix", "Cyber"}
+            local cont = Instance.new("Frame")
+            cont.Size = UDim2.new(1, -10, 0, 35)
+            cont.Position = UDim2.new(0, 5, 0, yOffset)
+            cont.BackgroundTransparency = 1
+            cont.ZIndex = 7
+            cont.Parent = scroll
+            yOffset = yOffset + 42
+
+            local btns = {}
+            for i, themeName in ipairs(themes) do
+                local b = Instance.new("TextButton")
+                b.Size = UDim2.new(0.24, -4, 1, 0)
+                b.Position = UDim2.new((i-1) * 0.25, 0, 0, 0)
+                b.BackgroundColor3 = (CFG.THEME == themeName) and Color3.fromRGB(100, 150, 255) or Color3.fromRGB(60, 60, 75)
+                b.Text = themeName
+                b.TextColor3 = Color3.new(1,1,1)
+                b.Font = Enum.Font.GothamBold
+                b.TextSize = 11
+                b.BorderSizePixel = 0
+                b.ZIndex = 8
+                b.Parent = cont
+                Instance.new("UICorner", b).CornerRadius = UDim.new(0, 5)
+                table.insert(btns, {btn = b, name = themeName})
+            end
+
+            for _, data in ipairs(btns) do
+                data.btn.MouseButton1Click:Connect(function()
+                    CFG.THEME = data.name
+                    for _, d in ipairs(btns) do
+                        d.btn.BackgroundColor3 = (d.name == data.name) and Color3.fromRGB(100, 150, 255) or Color3.fromRGB(60, 60, 75)
+                    end
+                    applyTheme()
+                end)
+            end
+        end
+
+        local function applyTheme()
+            local t = THEMES[CFG.THEME] or THEMES.Dark
+            mainFrame.BackgroundColor3 = t.bg
+            header.BackgroundColor3 = t.header
+            title.TextColor3 = t.text
+            for _, item in ipairs(elements) do
+                if item.el and item.el.Parent then
+                    item.el[item.prop] = t[item.colorKey]
+                end
+            end
+        end
+
+        -- Строим меню
+        addLabel("ПАРИРОВАНИЕ")
+        addSlider("Мин. радиус (x2)", 20, 100, CFG.MIN_PARRY_DIAMETER, function(v) CFG.MIN_PARRY_DIAMETER = v end)
+        addSlider("Макс. радиус (x2)", 50, 200, CFG.MAX_PARRY_DIAMETER, function(v) CFG.MAX_PARRY_DIAMETER = v end)
+        addSlider("Кулдаун (мс)", 50, 500, math.floor(CFG.PARRY_COOLDOWN * 1000), function(v) CFG.PARRY_COOLDOWN = v / 1000 end)
+        addToggle("Авто-парирование", CFG.PARRY_ENABLED, function(v) CFG.PARRY_ENABLED = v end)
+
+        yOffset = yOffset + 5
+        addLabel("СФЕРА")
+        addSlider("Макс. размер", 20, 120, CFG.MAX_RADIUS, function(v) CFG.MAX_RADIUS = v end)
+        addToggle("Показывать сферу", CFG.SPHERE_VISIBLE, function(v) CFG.SPHERE_VISIBLE = v end)
+
+        yOffset = yOffset + 5
+        addThemeSelector()
+
+        yOffset = yOffset + 5
+        addLabel("СТАТУС")
+        local statusLbl = Instance.new("TextLabel")
+        statusLbl.Size = UDim2.new(1, -10, 0, 50)
+        statusLbl.Position = UDim2.new(0, 5, 0, yOffset)
+        statusLbl.BackgroundTransparency = 1
+        statusLbl.Text = ""
+        statusLbl.TextColor3 = Color3.fromRGB(150, 255, 150)
+        statusLbl.TextXAlignment = Enum.TextXAlignment.Left
+        statusLbl.TextYAlignment = Enum.TextYAlignment.Top
+        statusLbl.Font = Enum.Font.Code
+        statusLbl.TextSize = 11
+        statusLbl.ZIndex = 7
+        statusLbl.Parent = scroll
+        table.insert(elements, {el=statusLbl, prop="TextColor3", colorKey="text"})
+        yOffset = yOffset + 55
+
+        scroll.CanvasSize = UDim2.new(0, 0, 0, yOffset + 10)
+
+        task.spawn(function()
+            while task.wait(1) do
+                if statusLbl and statusLbl.Parent then
+                    statusLbl.Text = string.format(
+                        "Remote: %s\nButton: %s\nBall: %s",
+                        parryRemote and "OK" or "NO",
+                        cachedButton and "OK" or "WAIT",
+                        cachedBall and "OK" or "NO"
+                    )
+                end
+            end
+        end)
+
+        openBtn.MouseButton1Click:Connect(function()
+            mainFrame.Visible = not mainFrame.Visible
             applyTheme()
         end)
-    end
-end
+        closeBtn.MouseButton1Click:Connect(function()
+            mainFrame.Visible = false
+        end)
 
-local function applyTheme()
-    local t = THEMES[CFG.THEME] or THEMES.Dark
-    mainFrame.BackgroundColor3 = t.bg
-    header.BackgroundColor3 = t.header
-    title.TextColor3 = t.text
-    for _, item in ipairs(elements) do
-        item.el[item.prop] = t[item.colorKey]
-    end
-end
+        local dragStart, startPos, dragging = nil, nil, false
+        header.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1
+               or input.UserInputType == Enum.UserInputType.Touch then
+                dragging = true
+                dragStart = input.Position
+                startPos = mainFrame.Position
+            end
+        end)
+        UserInputService.InputEnded:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1
+               or input.UserInputType == Enum.UserInputType.Touch then
+                dragging = false
+            end
+        end)
+        UserInputService.InputChanged:Connect(function(input)
+            if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement
+                             or input.UserInputType == Enum.UserInputType.Touch) then
+                local delta = input.Position - dragStart
+                mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X,
+                                               startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+            end
+        end)
 
--- Строим меню
-addLabel("⚔️ ПАРИРОВАНИЕ")
-addSlider("Мин. радиус парирования (×2)", 10, 60, CFG.MIN_PARRY_DIAMETER, function(v) CFG.MIN_PARRY_DIAMETER = v end)
-addSlider("Макс. радиус парирования (×2)", 20, 100, CFG.MAX_PARRY_DIAMETER, function(v) CFG.MAX_PARRY_DIAMETER = v end)
-addSlider("Кулдаун (мс)", 50, 500, math.floor(CFG.PARRY_COOLDOWN * 1000), function(v) CFG.PARRY_COOLDOWN = v / 1000 end)
-addToggle("Авто-парирование", CFG.PARRY_ENABLED, function(v) CFG.PARRY_ENABLED = v end)
+        applyTheme()
+        print("✅ [Blade Ball] Меню успешно создано!")
+    end)
 
-yOffset = yOffset + 5
-addLabel("🌐 СФЕРА")
-addSlider("Макс. размер сферы", 10, 60, CFG.MAX_RADIUS, function(v) CFG.MAX_RADIUS = v end)
-addToggle("Показывать сферу", CFG.SPHERE_VISIBLE, function(v) CFG.SPHERE_VISIBLE = v end)
-
-yOffset = yOffset + 5
-addThemeSelector()
-
-yOffset = yOffset + 5
-addLabel("ℹ️ СТАТУС")
-local statusLbl = Instance.new("TextLabel")
-statusLbl.Size = UDim2.new(1, -10, 0, 50)
-statusLbl.Position = UDim2.new(0, 5, 0, yOffset)
-statusLbl.BackgroundTransparency = 1
-statusLbl.Text = ""
-statusLbl.TextColor3 = Color3.fromRGB(150, 255, 150)
-statusLbl.TextXAlignment = Enum.TextXAlignment.Left
-statusLbl.TextYAlignment = Enum.TextYAlignment.Top
-statusLbl.Font = Enum.Font.Code
-statusLbl.TextSize = 11
-statusLbl.Parent = scroll
-table.insert(elements, {el=statusLbl, prop="TextColor3", colorKey="text"})
-yOffset = yOffset + 55
-
-scroll.CanvasSize = UDim2.new(0, 0, 0, yOffset + 10)
-
-task.spawn(function()
-    while task.wait(1) do
-        statusLbl.Text = string.format(
-            "Remote: %s\nButton: %s\nBall: %s",
-            parryRemote and "✅ Найден" or "❌ Не найден",
-            cachedButton and "✅ Найден" or "⏳ Ожидание",
-            cachedBall and "✅" or "❌"
-        )
+    if not success then
+        print("❌ [Blade Ball] Ошибка GUI: " .. tostring(err))
     end
 end)
 
--- Открытие/закрытие
-openBtn.MouseButton1Click:Connect(function()
-    mainFrame.Visible = not mainFrame.Visible
-    applyTheme()
-end)
-closeBtn.MouseButton1Click:Connect(function()
-    mainFrame.Visible = false
-end)
-
--- Перетаскивание (работает на телефоне и ПК)
-local dragStart, startPos, dragging = nil, nil, false
-header.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1
-       or input.UserInputType == Enum.UserInputType.Touch then
-        dragging = true
-        dragStart = input.Position
-        startPos = mainFrame.Position
-    end
-end)
-UserInputService.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1
-       or input.UserInputType == Enum.UserInputType.Touch then
-        dragging = false
-    end
-end)
-UserInputService.InputChanged:Connect(function(input)
-    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement
-                     or input.UserInputType == Enum.UserInputType.Touch) then
-        local delta = input.Position - dragStart
-        mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X,
-                                       startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-    end
-end)
-
--- Респавн
 LocalPlayer.CharacterAdded:Connect(function(newChar)
     Character = newChar
     HRP = newChar:WaitForChild("HumanoidRootPart", 15)
@@ -575,5 +614,4 @@ LocalPlayer.CharacterAdded:Connect(function(newChar)
     cachedButton = nil
 end)
 
-applyTheme()
-print("✅ [Blade Ball] Меню загружено! Нажми ⚙️ справа вверху.")
+print("✅ [Blade Ball] Скрипт загружен. Радиус парирования: 30-50.")
