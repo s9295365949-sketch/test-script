@@ -1,9 +1,9 @@
 --[[
     ╔═══════════════════════════════════════════════════════════════════════╗
-    ║   BLADE BALL — SPHERE COLLISION TRIGGER (GENIUS IDEA)                 ║
+    ║   BLADE BALL — LIGHT SPEED DEFENSE                                    ║
+    ║   • Ловит мячи на скорости света (триггер по времени)                 ║
     ║   • Сфера вокруг тебя + сфера вокруг мяча                             ║
-    ║   • Парирование срабатывает при КАСАНИИ сфер                           ║
-    ║   • Сфера в Workspace (3D), безопасный метод (CAS + Remote)           ║
+    ║   • Срабатывание при касании сфер + запас 0.25 сек                    ║
     ╚═══════════════════════════════════════════════════════════════════════╝
 ]]
 
@@ -26,7 +26,8 @@ if Workspace:FindFirstChild("BallEffect") then Workspace.BallEffect:Destroy() en
 local CFG = {
     PARRY_RADIUS        = 25,        -- Радиус ТВОЕЙ сферы
     BALL_RADIUS         = 3,         -- Радиус сферы МЯЧА
-    BUFFER_DIST         = 5,         -- Отступ (запас на пинг и анимацию в стабсах)
+    BUFFER_DIST         = 20,        -- Отступ (сильно увеличен)
+    TIME_BUFFER         = 0.25,      -- Срабатывание за 0.25 сек до удара (защита от скорости света)
     
     PARRY_COOLDOWN      = 0.25,      
     PARRY_ENABLED       = true,
@@ -42,7 +43,6 @@ task.spawn(function()
     for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
         if obj:IsA("RemoteEvent") and (obj.Name:lower():find("parry") or obj.Name:lower():find("attempt") or obj.Name:lower():find("block")) then
             parryRemote = obj
-            print("✅ Найден Remote: " .. obj.Name)
             break
         end
     end
@@ -245,6 +245,7 @@ RunService.Heartbeat:Connect(function(dt)
         
         local dbg_ball = "NO"
         local dbg_dist = 0
+        local dbg_time = 999
         local dbg_status = "Safe"
         local targetDiameter = CFG.PARRY_RADIUS * 2
         local targetColor = CFG.COLOR_OUTSIDE
@@ -256,7 +257,7 @@ RunService.Heartbeat:Connect(function(dt)
             dbg_dist = dist
 
             -- Перезаряжаем скрипт
-            if dist > (CFG.PARRY_RADIUS + CFG.BALL_RADIUS) * 2 then
+            if dist > (CFG.PARRY_RADIUS + CFG.BALL_RADIUS + CFG.BUFFER_DIST) * 1.5 then
                 isArmed = true
             end
 
@@ -286,21 +287,25 @@ RunService.Heartbeat:Connect(function(dt)
             
             if tVal and (tVal == LocalPlayer.Name or tostring(tVal) == LocalPlayer.Name) then 
                 isTargetingMe = true 
-            elseif approachSpeed > 1 or (speed > 1 and dist < 50) then
+            elseif approachSpeed > 1 or (speed > 1 and dist < 80) then
                 isTargetingMe = true 
             end
 
             if isTargetingMe then
+                -- Считаем время до удара
+                if approachSpeed > 1 then
+                    dbg_time = dist / approachSpeed
+                end
+
                 dbg_status = "Incoming!"
                 
-                -- ОБНОВЛЯЕМ ВИЗУАЛ (Сфера сжимается, если мяч близко)
-                local targetRadius = math.clamp(dist, CFG.PARRY_RADIUS, CFG.PARRY_RADIUS + 10)
+                local targetRadius = math.clamp(dist, CFG.PARRY_RADIUS, CFG.PARRY_RADIUS + 15)
                 targetDiameter = targetRadius * 2
                 
-                -- ГЛАВНАЯ МАТЕМАТИКА: Радиус игрока + Радиус мяча + Буфер на пинг
                 local collisionDist = CFG.PARRY_RADIUS + CFG.BALL_RADIUS + CFG.BUFFER_DIST
                 
-                if dist <= collisionDist then
+                -- ТРИГГЕР: либо сферы соприкоснулись, либо мяч летит быстрее 0.25 сек
+                if dist <= collisionDist or dbg_time <= CFG.TIME_BUFFER then
                     executeParry()
                     if not isArmed then
                         dbg_status = "PARRY!"
@@ -309,17 +314,14 @@ RunService.Heartbeat:Connect(function(dt)
                 end
             end
             prevPos = bp
-            
-            -- Двигаем сферу мяча
             ballSphere.CFrame = CFrame.new(bp)
         else
             isArmed = true
         end
 
-        debugText.Text = string.format("Ball: %s\nDist: %.1f\nArmed: %s\nStatus: %s\nMethod: %s", 
-            dbg_ball, dbg_dist, tostring(isArmed), dbg_status, lastAction)
+        debugText.Text = string.format("Ball: %s\nDist: %.1f\nTime: %s\nArmed: %s\nStatus: %s\nMethod: %s", 
+            dbg_ball, dbg_dist, (dbg_time > 900 and "N/A" or string.format("%.2fs", dbg_time)), tostring(isArmed), dbg_status, lastAction)
 
-        -- Визуал
         if CFG.SPHERE_VISIBLE then
             currentDiameter = currentDiameter + (targetDiameter - currentDiameter) * math.exp(-14 * dt)
             currentColor = currentColor:Lerp(targetColor, math.clamp(14 * dt, 0, 1))
