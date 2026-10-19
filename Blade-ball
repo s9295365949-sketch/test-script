@@ -1,9 +1,8 @@
 --[[
     ╔═══════════════════════════════════════════════════════════════════════╗
-    ║   BLADE BALL — SPEED-ADAPTIVE SPHERE (BAC BYPASS)                     ║
-    ║   • 3D Сфера в Workspace (как ты просил)                              ║
-    ║   • Парирование через RemoteEvent + человеческая задержка             ║
-    ║   • Безопасный визуал (без теней, с рандомным именем)                 ║
+    ║   BLADE BALL — ULTRA PARRY ZONE (BAC BYPASS)                          ║
+    ║   • Огромная зона парирования (срабатывает издалека)                  ║
+    ║   • Парирование через RemoteEvent + быстрая реакция                   ║
     ╚═══════════════════════════════════════════════════════════════════════╝
 ]]
 
@@ -11,25 +10,25 @@
 -- 1. НАСТРОЙКИ
 -- ============================================================
 local CFG = {
-    -- ─── Парирование ───────────────────────────────────────
-    MIN_PARRY_DIAMETER  = 30,        -- Мин. диаметр (радиус 15)
-    MAX_PARRY_DIAMETER  = 50,        -- Макс. диаметр (радиус 25)
+    -- ─── Парирование (УВЕЛИЧЕНО ДЛЯ БЛИЖНЕГО БОЯ) ──────────
+    MIN_PARRY_DIAMETER  = 50,        -- Мин. диаметр (радиус 25) при медленном мяче
+    MAX_PARRY_DIAMETER  = 75,        -- Макс. диаметр (радиус 37.5) при быстром мяче
     MIN_SPEED_THRESH    = 50,        
     MAX_SPEED_THRESH    = 200,       
     PARRY_COOLDOWN      = 0.2,       
 
     -- ─── Визуал сферы ──────────────────────────────────────
-    MAX_RADIUS          = 30,        -- Максимальный радиус сферы (диаметр 60)
+    MAX_RADIUS          = 40,        -- Максимальный радиус сферы (диаметр 80)
     NEAR_TRANSPARENCY   = 0.60,      
-    FAR_TRANSPARENCY    = 0.80,      -- Сделал чуть прозрачнее, чтобы не бросалась в глаза
+    FAR_TRANSPARENCY    = 0.80,      
     Y_OFFSET            = -0.5,      
 
     -- ─── Человеческая реакция (АНТИ-БАН) ───────────────────
-    HUMAN_DELAY_MIN     = 0.04,      -- Задержка перед нажатием (сек)
-    HUMAN_DELAY_MAX     = 0.12,      
-    PREDICT_FRAMES      = 2,
-    MIN_AHEAD           = 0.06,
-    MAX_AHEAD           = 0.25,
+    HUMAN_DELAY_MIN     = 0.01,      -- Уменьшили задержку, чтобы успевать кликать
+    HUMAN_DELAY_MAX     = 0.05,      
+    PREDICT_FRAMES      = 3,         -- Увеличили предсказание для быстрых мячей
+    MIN_AHEAD           = 0.10,
+    MAX_AHEAD           = 0.30,
     
     -- ─── Сглаживание ───────────────────────────────────────
     DAMP_LAMBDA         = 14,
@@ -79,10 +78,10 @@ task.spawn(function()
 end)
 
 -- ============================================================
--- 4. СФЕРА (ЗАМАСКИРОВАНА ПОД ЭФФЕКТ)
+-- 4. СФЕРА
 -- ============================================================
 local sphere = Instance.new("Part")
-sphere.Name         = "AuraVisual"   -- Безобидное имя, чтобы BAC не искал "ParrySphere"
+sphere.Name         = "AuraVisual"   
 sphere.Shape        = Enum.PartType.Ball
 sphere.Anchored     = true
 sphere.CanCollide   = false
@@ -135,7 +134,7 @@ Workspace.ChildRemoved:Connect(function(o)
 end)
 
 -- ============================================================
--- 6. ПОИСК REMOTE ДЛЯ ПАРИРОВАНИЯ (Без VIM)
+-- 6. ПОИСК REMOTE ДЛЯ ПАРИРОВАНИЯ
 -- ============================================================
 local parryRemote = nil
 local function findParryRemote()
@@ -154,7 +153,7 @@ end
 parryRemote = findParryRemote()
 
 -- ============================================================
--- 7. ПАРИРОВАНИЕ С ЧЕЛОВЕЧЕСКОЙ ЗАДЕРЖКОЙ
+-- 7. ПАРИРОВАНИЕ С БЫСТРОЙ РЕАКЦИЕЙ
 -- ============================================================
 local lastParry = 0
 local burstActive = false
@@ -164,24 +163,21 @@ local function fireParry()
     burstActive = true
     
     task.spawn(function()
-        -- Имитация реакции человека (задержка перед нажатием)
         local delay = CFG.HUMAN_DELAY_MIN + math.random() * (CFG.HUMAN_DELAY_MAX - CFG.HUMAN_DELAY_MIN)
         task.wait(delay)
         
         if parryRemote then
-            -- Отправляем чистый пакет (сервер думает, что это игра)
             pcall(function() parryRemote:FireServer() end)
         else
-            -- Если remote не найден (рискованно), жмем F через UserInputService
             pcall(function()
                 local vim = game:GetService("VirtualInputManager")
                 vim:SendKeyEvent(true, Enum.KeyCode.F, false, game)
-                task.wait(0.05)
+                task.wait(0.02)
                 vim:SendKeyEvent(false, Enum.KeyCode.F, false, game)
             end)
         end
         
-        task.wait(0.1)
+        task.wait(0.05)
         burstActive = false
     end)
 end
@@ -252,12 +248,10 @@ local function mainTick(dt)
             approach = bv:Dot((hrpPos - ball.Position).Unit)
         end
 
-        -- Динамический радиус парирования
         local speedFactor = clamp01((speed - CFG.MIN_SPEED_THRESH) / (CFG.MAX_SPEED_THRESH - CFG.MIN_SPEED_THRESH))
         local currentParryDiameter = CFG.MIN_PARRY_DIAMETER + (CFG.MAX_PARRY_DIAMETER - CFG.MIN_PARRY_DIAMETER) * speedFactor
         local currentParryRadius = currentParryDiameter / 2
 
-        -- Детект цели
         local targeting = false
         local isOther = false
 
@@ -277,7 +271,7 @@ local function mainTick(dt)
             if hl and hl.Enabled then targeting = true end
         end
 
-        if not targeting and not isOther and speed > 5 and approach > 10 and dist < 40 then
+        if not targeting and not isOther and speed > 5 and approach > 10 and dist < 50 then
             targeting = true
         end
 
@@ -304,7 +298,6 @@ local function mainTick(dt)
         end
     end
 
-    -- Триггер парирования
     if doParry then
         local now = tick()
         if now - lastParry >= CFG.PARRY_COOLDOWN then
@@ -314,12 +307,10 @@ local function mainTick(dt)
         end
     end
 
-    -- Сглаживание
     state.diameter     = damp(state.diameter,     tgtDiameter,     CFG.DAMP_LAMBDA, dt)
     state.transparency = damp(state.transparency, tgtTransparency, CFG.DAMP_LAMBDA, dt)
     state.color        = state.color:Lerp(tgtColor, clamp01(CFG.DAMP_LAMBDA * dt))
 
-    -- Анимация
     state.phase = state.phase + dt * CFG.PULSE_SPEED
     local pulse = math.sin(state.phase)
 
@@ -358,4 +349,4 @@ LocalPlayer.CharacterAdded:Connect(function(newChar)
     parryRemote = findParryRemote()
 end)
 
-print("[Blade Ball] Сфера возвращена в Workspace. Анти-бан: Remote + задержка.")
+print("[Blade Ball] Зона парирования УВЕЛИЧЕНА (до 37.5 стабсов).")
