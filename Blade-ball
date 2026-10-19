@@ -8,28 +8,24 @@
     ║   ██║     ██║  ██║██║  ██║██║  ██║   ██║       ██║     ██║  ██║██║  ██║    ║
     ║   ╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝       ╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝    ║
     ║                                                                           ║
-    ║   [ ULTIMATE EDITION ]                                                    ║
-    ║   • Modern UI (Tabs, Toggles, Smooth Animations)                          ║
-    ║   • 3-Tier Dynamic Zone System                                            ║
-    ║   • Strict Target Detection (Ignore others)                               ║
-    ║   • Anti-Lag Optimization & Click Sounds                                  ║
-    ║                                                                           ║
+    ║   [ PREMIUM EDITION v5.0 | THEME MANAGER ]                                ║
     ╚═══════════════════════════════════════════════════════════════════════════╝
 ]]
 
 -- ============================================================
--- [ CONFIGURATION ]
+-- [ КОНФИГУРАЦИЯ ]
 -- ============================================================
 local CONFIG = {
     ZONE = {
-        MIN_SPEED  = 50,   MIN_DIST  = 20,   -- Медленный
-        MID_SPEED  = 125,  MID_DIST  = 45,   -- Средний
-        MAX_SPEED  = 200,  MAX_DIST  = 80,   -- Быстрый
+        MIN_SPEED  = 50,   MIN_DIST  = 20,   
+        MID_SPEED  = 125,  MID_DIST  = 45,   
+        MAX_SPEED  = 200,  MAX_DIST  = 80,   
     },
     
     VISUALS = {
-        SAFE_COLOR   = Color3.fromRGB(0, 255, 100),    -- Зеленый (Safe)
-        DANGER_COLOR = Color3.fromRGB(255, 30, 30),    -- Красный (Danger)
+        OUTER_SAFE   = Color3.fromRGB(0, 255, 50),     -- Ярко-зеленый купол
+        INNER_SAFE   = Color3.fromRGB(0, 255, 200),    -- Бирюзовое ядро
+        DANGER_COLOR = Color3.fromRGB(255, 30, 30),    -- Красный (опасность)
         Y_OFFSET     = -0.5,
         PULSE_SPEED  = 3,
     },
@@ -40,16 +36,18 @@ local CONFIG = {
     }
 }
 
--- Темы оформления
+-- Расширенный список тем
 local THEMES = {
-    Dark   = { BG = Color3.fromRGB(18, 20, 26), ACCENT = Color3.fromRGB(0, 200, 255), TEXT = Color3.fromRGB(200, 200, 200), OFF = Color3.fromRGB(40, 44, 52) },
-    Cyber  = { BG = Color3.fromRGB(25, 10, 30), ACCENT = Color3.fromRGB(255, 0, 200), TEXT = Color3.fromRGB(255, 200, 255), OFF = Color3.fromRGB(60, 20, 70) },
-    Nature = { BG = Color3.fromRGB(15, 25, 15), ACCENT = Color3.fromRGB(50, 255, 100), TEXT = Color3.fromRGB(200, 255, 200), OFF = Color3.fromRGB(30, 50, 30) },
+    ["Dark Metal"]    = { BG = Color3.fromRGB(18, 20, 26), HEADER = Color3.fromRGB(28, 30, 38), ACCENT = Color3.fromRGB(180, 180, 190), TEXT = Color3.fromRGB(220, 220, 220), OFF = Color3.fromRGB(40, 44, 52) },
+    ["Light Emerald"] = { BG = Color3.fromRGB(240, 245, 240), HEADER = Color3.fromRGB(220, 235, 220), ACCENT = Color3.fromRGB(0, 180, 100), TEXT = Color3.fromRGB(20, 40, 20), OFF = Color3.fromRGB(200, 215, 200) },
+    ["Cyber Neon"]    = { BG = Color3.fromRGB(20, 5, 25), HEADER = Color3.fromRGB(35, 10, 45), ACCENT = Color3.fromRGB(255, 0, 200), TEXT = Color3.fromRGB(255, 200, 255), OFF = Color3.fromRGB(60, 20, 70) },
+    ["Crimson Void"]  = { BG = Color3.fromRGB(25, 5, 5), HEADER = Color3.fromRGB(45, 10, 10), ACCENT = Color3.fromRGB(255, 60, 60), TEXT = Color3.fromRGB(255, 200, 200), OFF = Color3.fromRGB(70, 15, 15) }
 }
-local CurrentTheme = THEMES.Dark
+local CurrentThemeName = "Dark Metal"
+local CurrentTheme = THEMES[CurrentThemeName]
 
 -- ============================================================
--- [ SERVICES & STATE ]
+-- [ СЕРВИСЫ И ПЕРЕМЕННЫЕ ]
 -- ============================================================
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -61,7 +59,6 @@ local VirtualInputManager = game:GetService("VirtualInputManager")
 local LP = Players.LocalPlayer
 local PGui = LP:WaitForChild("PlayerGui")
 
--- Очистка
 for _, v in ipairs(PGui:GetChildren()) do
     if v.Name:match("^BB_") then v:Destroy() end
 end
@@ -79,7 +76,7 @@ local STATE = {
 }
 
 -- ============================================================
--- [ VISUALS (3D SPHERES) ]
+-- [ 3D СФЕРА (Купол + Ядро) ]
 -- ============================================================
 local OuterSphere = Instance.new("Part")
 OuterSphere.Name = "AuraVisual"
@@ -89,7 +86,7 @@ OuterSphere.CanCollide = false
 OuterSphere.CanQuery = false
 OuterSphere.CastShadow = false
 OuterSphere.Material = Enum.Material.ForceField
-OuterSphere.Color = CONFIG.VISUALS.SAFE_COLOR
+OuterSphere.Color = CONFIG.VISUALS.OUTER_SAFE
 OuterSphere.Transparency = 0.7
 OuterSphere.Size = Vector3.new(40, 40, 40)
 OuterSphere.Parent = Workspace
@@ -101,88 +98,93 @@ InnerSphere.CanCollide = false
 InnerSphere.CanQuery = false
 InnerSphere.CastShadow = false
 InnerSphere.Material = Enum.Material.Neon
-InnerSphere.Color = CONFIG.VISUALS.SAFE_COLOR
-InnerSphere.Transparency = 0.9
+InnerSphere.Color = CONFIG.VISUALS.INNER_SAFE
+InnerSphere.Transparency = 0.8
 InnerSphere.Size = Vector3.new(10, 10, 10)
 InnerSphere.Parent = OuterSphere
 
 -- ============================================================
--- [ UI FRAMEWORK ]
+-- [ ИНТЕРФЕЙС (UI) ]
 -- ============================================================
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "BB_UI"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.IgnoreGuiInset = true
+ScreenGui.DisplayOrder = 999
 ScreenGui.Parent = PGui
 
--- Click Sound
 local ClickSound = Instance.new("Sound")
 ClickSound.SoundId = CONFIG.SYSTEM.CLICK_SOUND
-ClickSound.Volume = 0.3
+ClickSound.Volume = 0.4
 ClickSound.Parent = ScreenGui
 local function PlayClick() pcall(function() ClickSound:Play() end) end
 
--- Toggle Button (Floating)
 local ToggleBtn = Instance.new("TextButton")
 ToggleBtn.Size = UDim2.new(0, 45, 0, 45)
 ToggleBtn.Position = UDim2.new(1, -60, 0.5, -22)
 ToggleBtn.BackgroundColor3 = CurrentTheme.BG
-ToggleBtn.Text = "⚙"
-ToggleBtn.TextSize = 22
+ToggleBtn.Text = "BB"
+ToggleBtn.TextSize = 16
 ToggleBtn.TextColor3 = CurrentTheme.ACCENT
-ToggleBtn.Font = Enum.Font.GothamBold
+ToggleBtn.Font = Enum.Font.GothamBlack
 ToggleBtn.Parent = ScreenGui
 Instance.new("UICorner", ToggleBtn).CornerRadius = UDim.new(1, 0)
 local BtnStroke = Instance.new("UIStroke", ToggleBtn)
 BtnStroke.Color = CurrentTheme.ACCENT
-BtnStroke.Thickness = 1.5
+BtnStroke.Thickness = 2
 
--- Main Window
+-- Главное окно
 local Window = Instance.new("Frame")
-Window.Size = UDim2.new(0, 260, 0, 320)
-Window.Position = UDim2.new(0.5, -130, 0.5, -160)
+Window.Size = UDim2.new(0, 280, 0, 450)
+Window.Position = UDim2.new(0.5, -140, 0.5, -225)
 Window.BackgroundColor3 = CurrentTheme.BG
 Window.Visible = false
 Window.Parent = ScreenGui
-Instance.new("UICorner", Window).CornerRadius = UDim.new(0, 10)
+Instance.new("UICorner", Window).CornerRadius = UDim.new(0, 12)
 local WinStroke = Instance.new("UIStroke", Window)
 WinStroke.Color = CurrentTheme.ACCENT
 WinStroke.Thickness = 1
 WinStroke.Transparency = 0.5
 
--- Top Bar (Header)
+-- Шапка
 local Header = Instance.new("Frame")
-Header.Size = UDim2.new(1, 0, 0, 35)
-Header.BackgroundColor3 = Color3.fromRGB(10, 10, 15)
-Header.BackgroundTransparency = 0.5
+Header.Size = UDim2.new(1, 0, 0, 100)
+Header.BackgroundColor3 = CurrentTheme.HEADER
 Header.Parent = Window
-Instance.new("UICorner", Header).CornerRadius = UDim.new(0, 10)
+Instance.new("UICorner", Header).CornerRadius = UDim.new(0, 12)
+
+local HeaderMask = Instance.new("Frame")
+HeaderMask.Size = UDim2.new(1, 0, 0, 15)
+HeaderMask.Position = UDim2.new(0, 0, 1, -15)
+HeaderMask.BackgroundColor3 = CurrentTheme.HEADER
+HeaderMask.BorderSizePixel = 0
+HeaderMask.Parent = Header
 
 local Title = Instance.new("TextLabel")
-Title.Size = UDim2.new(1, -10, 1, 0)
-Title.Position = UDim2.new(0, 10, 0, 0)
+Title.Size = UDim2.new(1, -10, 1, -10)
+Title.Position = UDim2.new(0, 5, 0, 5)
 Title.BackgroundTransparency = 1
-Title.Text = "BLADE BALL | ULTIMATE"
+Title.Text = "██████╗  █████╗ ██████╗ ██████╗ ██╗   ██╗\n██╔══██╗██╔══██╗██╔══██╗██╔══██╗╚██╗ ██╔╝\n██████╔╝███████║██████╔╝██████╔╝ ╚████╔╝ \n██╔═══╝ ██╔══██║██╔══██╗██╔══██╗  ╚██╔╝  \n██║     ██║  ██║██║  ██║██║  ██║   ██║   \n╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝   "
 Title.TextColor3 = CurrentTheme.ACCENT
-Title.Font = Enum.Font.GothamBold
-Title.TextSize = 12
-Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.Font = Enum.Font.Code
+Title.TextSize = 9
+Title.TextXAlignment = Enum.TextXAlignment.Center
 Title.Parent = Header
 
 local CloseBtn = Instance.new("TextButton")
-CloseBtn.Size = UDim2.new(0, 35, 1, 0)
-CloseBtn.Position = UDim2.new(1, -35, 0, 0)
-CloseBtn.BackgroundTransparency = 1
+CloseBtn.Size = UDim2.new(0, 30, 0, 30)
+CloseBtn.Position = UDim2.new(1, -35, 0, 5)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
 CloseBtn.Text = "✕"
-CloseBtn.TextColor3 = Color3.fromRGB(255, 80, 80)
+CloseBtn.TextColor3 = Color3.new(1,1,1)
 CloseBtn.Font = Enum.Font.GothamBold
 CloseBtn.TextSize = 14
 CloseBtn.Parent = Header
+Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(0, 6)
 
--- Tab Container
 local TabContainer = Instance.new("Frame")
-TabContainer.Size = UDim2.new(1, -20, 0, 30)
-TabContainer.Position = UDim2.new(0, 10, 0, 45)
+TabContainer.Size = UDim2.new(1, -20, 0, 35)
+TabContainer.Position = UDim2.new(0, 10, 0, 110)
 TabContainer.BackgroundTransparency = 1
 TabContainer.Parent = Window
 
@@ -191,19 +193,84 @@ TabLayout.FillDirection = Enum.FillDirection.Horizontal
 TabLayout.Padding = UDim.new(0, 5)
 TabLayout.Parent = TabContainer
 
--- Pages Container
 local Pages = Instance.new("Frame")
-Pages.Size = UDim2.new(1, -20, 1, -85)
-Pages.Position = UDim2.new(0, 10, 0, 75)
+Pages.Size = UDim2.new(1, -20, 1, -160)
+Pages.Position = UDim2.new(0, 10, 0, 150)
 Pages.BackgroundTransparency = 1
 Pages.Parent = Window
 
 -- ============================================================
--- [ UI COMPONENTS & LOGIC ]
+-- [ ПАНЕЛЬ ТЕМ (ВЫЕЗЖАЕТ СЛЕВА) ]
 -- ============================================================
+local ThemePanel = Instance.new("Frame")
+ThemePanel.Size = UDim2.new(0, 150, 0, 280)
+ThemePanel.Position = UDim2.new(0, -160, 0, 80) -- Слева от окна
+ThemePanel.BackgroundColor3 = CurrentTheme.BG
+ThemePanel.Visible = false
+ThemePanel.Parent = Window
+Instance.new("UICorner", ThemePanel).CornerRadius = UDim.new(0, 10)
+local PanelStroke = Instance.new("UIStroke", ThemePanel)
+PanelStroke.Color = CurrentTheme.ACCENT
+PanelStroke.Thickness = 1
+PanelStroke.Transparency = 0.5
 
--- Перетаскивание окна
-local dragging, dragInput, dragStart, startPos = false, nil, nil, nil
+local ThemeList = Instance.new("UIListLayout")
+ThemeList.Padding = UDim.new(0, 8)
+ThemeList.HorizontalAlignment = Enum.HorizontalAlignment.Center
+ThemeList.SortOrder = Enum.SortOrder.LayoutOrder
+ThemeList.Parent = ThemePanel
+
+local ThemePad = Instance.new("UIPadding")
+ThemePad.PaddingTop = UDim.new(0, 10)
+ThemePad.Parent = ThemePanel
+
+-- Функция создания кнопки темы с превью
+local function CreateThemeButton(themeName, themeData)
+    local Btn = Instance.new("TextButton")
+    Btn.Size = UDim2.new(1, -20, 0, 40)
+    Btn.BackgroundColor3 = themeData.BG
+    Btn.Text = ""
+    Btn.Parent = ThemePanel
+    Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 6)
+    
+    -- Квадратик-превью
+    local Preview = Instance.new("Frame")
+    Preview.Size = UDim2.new(0, 24, 0, 24)
+    Preview.Position = UDim2.new(0, 8, 0.5, -12)
+    Preview.BackgroundColor3 = themeData.ACCENT
+    Preview.Parent = Btn
+    Instance.new("UICorner", Preview).CornerRadius = UDim.new(0, 4)
+    
+    -- Текст названия
+    local Label = Instance.new("TextLabel")
+    Label.Size = UDim2.new(1, -40, 1, 0)
+    Label.Position = UDim2.new(0, 36, 0, 0)
+    Label.BackgroundTransparency = 1
+    Label.Text = themeName
+    Label.TextColor3 = themeData.TEXT
+    Label.Font = Enum.Font.GothamBold
+    Label.TextSize = 11
+    Label.TextXAlignment = Enum.TextXAlignment.Left
+    Label.Parent = Btn
+    
+    Btn.Activated:Connect(function()
+        PlayClick()
+        CurrentThemeName = themeName
+        CurrentTheme = themeData
+        ApplyTheme()
+        ThemePanel.Visible = false -- Скрываем после выбора
+    end)
+end
+
+-- Генерация кнопок тем
+for name, data in pairs(THEMES) do
+    CreateThemeButton(name, data)
+end
+
+-- ============================================================
+-- [ ЛОГИКА UI ]
+-- ============================================================
+local dragging, dragStart, startPos = false, nil, nil
 Header.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
         dragging = true
@@ -221,20 +288,18 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
--- Открытие/Закрытие
 ToggleBtn.Activated:Connect(function()
     PlayClick()
     Window.Visible = not Window.Visible
+    ThemePanel.Visible = false
     if Window.Visible then
-        Window.Size = UDim2.new(0, 260, 0, 0)
-        TweenService:Create(Window, TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Size = UDim2.new(0, 260, 0, 320)}):Play()
+        Window.Size = UDim2.new(0, 280, 0, 0)
+        TweenService:Create(Window, TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Size = UDim2.new(0, 280, 0, 450)}):Play()
     end
 end)
-CloseBtn.Activated:Connect(function() PlayClick(); Window.Visible = false end)
+CloseBtn.Activated:Connect(function() PlayClick(); Window.Visible = false; ThemePanel.Visible = false end)
 
--- Система Вкладок
-local PagesList = {}
-local TabsList = {}
+local PagesList, TabsList = {}, {}
 
 local function CreateTab(name, icon)
     local Page = Instance.new("Frame")
@@ -249,12 +314,12 @@ local function CreateTab(name, icon)
     Layout.Parent = Page
     
     local TabBtn = Instance.new("TextButton")
-    TabBtn.Size = UDim2.new(0, 70, 1, 0)
+    TabBtn.Size = UDim2.new(0.5, -3, 1, 0)
     TabBtn.BackgroundColor3 = CurrentTheme.OFF
-    TabBtn.Text = icon
+    TabBtn.Text = icon .. " " .. name
     TabBtn.TextColor3 = CurrentTheme.TEXT
     TabBtn.Font = Enum.Font.GothamBold
-    TabBtn.TextSize = 12
+    TabBtn.TextSize = 11
     TabBtn.Parent = TabContainer
     Instance.new("UICorner", TabBtn).CornerRadius = UDim.new(0, 6)
     
@@ -268,16 +333,50 @@ local function CreateTab(name, icon)
             TweenService:Create(t.Btn, TweenInfo.new(0.2), {BackgroundColor3 = CurrentTheme.OFF, TextColor3 = CurrentTheme.TEXT}):Play()
         end
         Page.Visible = true
-        TweenService:Create(TabBtn, TweenInfo.new(0.2), {BackgroundColor3 = CurrentTheme.ACCENT, TextColor3 = Color3.new(0,0,0)}):Play()
+        TweenService:Create(TabBtn, TweenInfo.new(0.2), {BackgroundColor3 = CurrentTheme.ACCENT, TextColor3 = CurrentTheme.BG}):Play()
     end)
     
     return Page
 end
 
--- Кастомный Toggle Switch (Красивый ползунок)
+local function CreateAsciiButton(parent, asciiText, initialState, callback)
+    local Container = Instance.new("Frame")
+    Container.Size = UDim2.new(1, 0, 0, 85)
+    Container.BackgroundTransparency = 1
+    Container.Parent = parent
+    
+    local Btn = Instance.new("TextButton")
+    Btn.Size = UDim2.new(1, 0, 1, 0)
+    Btn.BackgroundColor3 = initialState and CurrentTheme.ACCENT or CurrentTheme.OFF
+    Btn.Text = asciiText
+    Btn.TextColor3 = initialState and CurrentTheme.BG or CurrentTheme.TEXT
+    Btn.Font = Enum.Font.Code
+    Btn.TextSize = 8
+    Btn.Parent = Container
+    Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 8)
+    
+    local isClicking = false
+    Btn.Activated:Connect(function()
+        if isClicking then return end
+        isClicking = true
+        PlayClick()
+        
+        initialState = not initialState
+        callback(initialState)
+        
+        TweenService:Create(Btn, TweenInfo.new(0.2), {
+            BackgroundColor3 = initialState and CurrentTheme.ACCENT or CurrentTheme.OFF,
+            TextColor3 = initialState and CurrentTheme.BG or CurrentTheme.TEXT
+        }):Play()
+        
+        task.wait(0.2)
+        isClicking = false
+    end)
+end
+
 local function CreateSwitch(parent, text, initialState, callback)
     local Container = Instance.new("Frame")
-    Container.Size = UDim2.new(1, 0, 0, 30)
+    Container.Size = UDim2.new(1, 0, 0, 35)
     Container.BackgroundTransparency = 1
     Container.Parent = parent
     
@@ -286,10 +385,11 @@ local function CreateSwitch(parent, text, initialState, callback)
     Label.BackgroundTransparency = 1
     Label.Text = text
     Label.TextColor3 = CurrentTheme.TEXT
-    Label.Font = Enum.Font.Gotham
+    Label.Font = Enum.Font.GothamMedium
     Label.TextSize = 13
     Label.TextXAlignment = Enum.TextXAlignment.Left
     Label.Parent = Container
+    table.insert(UI_Elements, {btn = Label, type = "label"}) -- Сохраняем для смены темы
     
     local SwitchBg = Instance.new("Frame")
     SwitchBg.Size = UDim2.new(0, 36, 0, 20)
@@ -332,10 +432,9 @@ local function CreateSwitch(parent, text, initialState, callback)
     end)
 end
 
--- Кастомная кнопка
 local function CreateButton(parent, text, callback)
     local Btn = Instance.new("TextButton")
-    Btn.Size = UDim2.new(1, 0, 0, 30)
+    Btn.Size = UDim2.new(1, 0, 0, 35)
     Btn.BackgroundColor3 = CurrentTheme.OFF
     Btn.Text = text
     Btn.TextColor3 = CurrentTheme.TEXT
@@ -346,61 +445,119 @@ local function CreateButton(parent, text, callback)
     
     Btn.Activated:Connect(function()
         PlayClick()
-        callback()
+        callback(Btn)
     end)
+    
+    return Btn
 end
 
 -- ============================================================
--- [ BUILD PAGES ]
+-- [ СБОРКА СТРАНИЦ ]
 -- ============================================================
+local UI_Elements = {} -- Таблица для обновления цветов
 
--- Page 1: Main
 local MainPage = CreateTab("Main", "🎯")
-CreateSwitch(MainPage, "Auto Parry", STATE.Enabled, function(v) STATE.Enabled = v end)
+local ParryAscii = [[
+██████╗  █████╗ ██████╗ ██████╗ ██╗   ██╗
+██╔══██╗██╔══██╗██╔══██╗██╔══██╗╚██╗ ██╔╝
+██████╔╝███████║██████╔╝██████╔╝ ╚████╔╝ 
+██╔═══╝ ██╔══██║██╔══██╗██╔══██╗  ╚██╔╝  
+██║     ██║  ██║██║  ██║██║  ██║   ██║   
+╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝   
+]]
+CreateAsciiButton(MainPage, ParryAscii, STATE.Enabled, function(v) STATE.Enabled = v end)
 CreateSwitch(MainPage, "3D Sphere", STATE.ShowVisuals, function(v) 
     STATE.ShowVisuals = v
     OuterSphere.Transparency = v and 0.7 or 1
-    InnerSphere.Transparency = v and 0.9 or 1
+    InnerSphere.Transparency = v and 0.8 or 1
 end)
 
--- Page 2: Visuals
-local VisPage = CreateTab("Visuals", "🎨")
-CreateSwitch(VisPage, "Anti-Lag (FPS Boost)", STATE.AntiLag, function(v) STATE.AntiLag = v end)
-CreateButton(VisPage, "Change Theme", function()
-    if CurrentTheme == THEMES.Dark then
-        CurrentTheme = THEMES.Cyber
-    elseif CurrentTheme == THEMES.Cyber then
-        CurrentTheme = THEMES.Nature
-    else
-        CurrentTheme = THEMES.Dark
-    end
-    -- (В реальном проекте здесь был бы вызов функции обновления всех цветов UI)
-    -- Для простоты мы просто перезагрузим цвета основных элементов
+local VisPage = CreateTab("Visual", "🎨")
+CreateSwitch(VisPage, "Anti-Lag (Boost)", STATE.AntiLag, function(v) STATE.AntiLag = v end)
+local ThemeBtn = CreateButton(VisPage, "Change Theme", function()
+    ThemePanel.Visible = not ThemePanel.Visible
+end)
+table.insert(UI_Elements, {btn = ThemeBtn, type = "button"})
+
+-- ============================================================
+-- [ ПРИМЕНЕНИЕ ТЕМЫ ]
+-- ============================================================
+function ApplyTheme()
     Window.BackgroundColor3 = CurrentTheme.BG
-    Header.BackgroundColor3 = CurrentTheme.BG
+    Header.BackgroundColor3 = CurrentTheme.HEADER
+    HeaderMask.BackgroundColor3 = CurrentTheme.HEADER
     WinStroke.Color = CurrentTheme.ACCENT
     Title.TextColor3 = CurrentTheme.ACCENT
     BtnStroke.Color = CurrentTheme.ACCENT
     ToggleBtn.TextColor3 = CurrentTheme.ACCENT
+    ThemePanel.BackgroundColor3 = CurrentTheme.BG
+    PanelStroke.Color = CurrentTheme.ACCENT
+    
     for _, t in ipairs(TabsList) do
         if t.Page.Visible then
             t.Btn.BackgroundColor3 = CurrentTheme.ACCENT
-            t.Btn.TextColor3 = Color3.new(0,0,0)
+            t.Btn.TextColor3 = CurrentTheme.BG
         else
             t.Btn.BackgroundColor3 = CurrentTheme.OFF
             t.Btn.TextColor3 = CurrentTheme.TEXT
         end
     end
-end)
+    
+    for _, el in ipairs(UI_Elements) do
+        if el.type == "label" then
+            el.btn.TextColor3 = CurrentTheme.TEXT
+        elseif el.type == "button" then
+            el.btn.BackgroundColor3 = CurrentTheme.OFF
+            el.btn.TextColor3 = CurrentTheme.TEXT
+        end
+    end
+    
+    -- Обновляем отладчик
+    if DebugFrame and DebugStroke then
+        DebugFrame.BackgroundColor3 = CurrentTheme.BG
+        DebugStroke.Color = CurrentTheme.ACCENT
+    end
+end
 
--- Активируем первую вкладку по умолчанию
 TabsList[1].Page.Visible = true
 TabsList[1].Btn.BackgroundColor3 = CurrentTheme.ACCENT
-TabsList[1].Btn.TextColor3 = Color3.new(0,0,0)
-
+TabsList[1].Btn.TextColor3 = CurrentTheme.BG
 
 -- ============================================================
--- [ CORE LOGIC & MAIN LOOP ]
+-- [ ПАНЕЛЬ ОТЛАДКИ ]
+-- ============================================================
+local DebugGui = Instance.new("ScreenGui")
+DebugGui.Name = "BB_Debug"
+DebugGui.ResetOnSpawn = false
+DebugGui.DisplayOrder = 998
+DebugGui.Parent = PGui
+
+local DebugFrame = Instance.new("Frame")
+DebugFrame.Size = UDim2.new(0, 200, 0, 100)
+DebugFrame.Position = UDim2.new(0, 10, 0, 60)
+DebugFrame.BackgroundColor3 = CurrentTheme.BG
+DebugFrame.BackgroundTransparency = 0.3
+DebugFrame.Parent = DebugGui
+Instance.new("UICorner", DebugFrame).CornerRadius = UDim.new(0, 8)
+local DebugStroke = Instance.new("UIStroke", DebugFrame)
+DebugStroke.Color = CurrentTheme.ACCENT
+DebugStroke.Thickness = 1
+DebugStroke.Transparency = 0.5
+
+local DebugLabel = Instance.new("TextLabel")
+DebugLabel.Size = UDim2.new(1, -10, 1, -10)
+DebugLabel.Position = UDim2.new(0, 5, 0, 5)
+DebugLabel.BackgroundTransparency = 1
+DebugLabel.TextColor3 = CONFIG.VISUALS.INNER_SAFE
+DebugLabel.Font = Enum.Font.Code
+DebugLabel.TextSize = 12
+DebugLabel.TextXAlignment = Enum.TextXAlignment.Left
+DebugLabel.TextYAlignment = Enum.TextYAlignment.Top
+DebugLabel.Text = "Ожидание..."
+DebugLabel.Parent = DebugFrame
+
+-- ============================================================
+-- [ ЛОГИКА ЯДРА ]
 -- ============================================================
 local function GetBall()
     if STATE.Ball and STATE.Ball.Parent then return STATE.Ball end
@@ -447,7 +604,6 @@ local PulseTime = 0
 
 RunService.Heartbeat:Connect(function(dt)
     pcall(function()
-        -- Anti-Lag Check
         STATE.Frames = STATE.Frames + 1
         local render = true
         if STATE.AntiLag and (STATE.Frames % 3 ~= 0) then render = false end
@@ -461,7 +617,8 @@ RunService.Heartbeat:Connect(function(dt)
 
         local ball = GetBall()
         local dist, zone, speed = 0, CONFIG.ZONE.MIN_DIST, 0
-        local targetColor = CONFIG.VISUALS.SAFE_COLOR
+        local targetColor = CONFIG.VISUALS.OUTER_SAFE
+        local status = "Safe"
 
         if ball then
             local bp = ball.Position
@@ -482,6 +639,7 @@ RunService.Heartbeat:Connect(function(dt)
             if IsTargetingMe(ball) then
                 zone = GetZone(speed)
                 if dist <= zone then
+                    status = "DANGER!"
                     targetColor = CONFIG.VISUALS.DANGER_COLOR
                     if STATE.Enabled and STATE.IsArmed and (tick() - STATE.LastParry > CONFIG.SYSTEM.PARRY_COOLDOWN) then
                         pcall(function()
@@ -492,7 +650,11 @@ RunService.Heartbeat:Connect(function(dt)
                         STATE.LastParry = tick()
                         STATE.IsArmed = false
                     end
+                else
+                    status = "Incoming"
                 end
+            else
+                status = "Other Target"
             end
             STATE.PrevBallPos = bp
         else
@@ -500,24 +662,38 @@ RunService.Heartbeat:Connect(function(dt)
             STATE.PrevBallPos = nil
         end
 
-        -- Visual Update
         if render and STATE.ShowVisuals and OuterSphere and InnerSphere then
             PulseTime = PulseTime + (dt * CONFIG.VISUALS.PULSE_SPEED)
             local targetSize = zone * 2
             local currentSize = OuterSphere.Size.X
-            -- Smooth Lerp
             local newSize = currentSize + (targetSize - currentSize) * math.exp(-10 * dt)
-            
-            -- Pulse effect
             local finalSize = newSize * (1 + math.sin(PulseTime) * 0.03)
             
             OuterSphere.Size = Vector3.new(finalSize, finalSize, finalSize)
             OuterSphere.CFrame = CFrame.new(hrp.Position + Vector3.new(0, CONFIG.VISUALS.Y_OFFSET, 0))
+            
+            -- Цвета: Купол Зеленый (или красный при угрозе), Ядро Бирюзовое (или красное)
             OuterSphere.Color = OuterSphere.Color:Lerp(targetColor, math.clamp(10 * dt, 0, 1))
-            InnerSphere.Color = OuterSphere.Color
+            if targetColor == CONFIG.VISUALS.DANGER_COLOR then
+                InnerSphere.Color = InnerSphere.Color:Lerp(CONFIG.VISUALS.DANGER_COLOR, math.clamp(10 * dt, 0, 1))
+            else
+                InnerSphere.Color = InnerSphere.Color:Lerp(CONFIG.VISUALS.INNER_SAFE, math.clamp(10 * dt, 0, 1))
+            end
             
             InnerSphere.CFrame = OuterSphere.CFrame * CFrame.Angles(PulseTime, PulseTime, 0)
             InnerSphere.Size = Vector3.new(finalSize * 0.2, finalSize * 0.2, finalSize * 0.2)
+        end
+        
+        if DebugLabel and DebugLabel.Parent then
+            DebugLabel.Text = string.format(
+                "⚡ Speed: %.0f\n🎯 Status: %s\n📏 Dist: %.1f\n🛡️ Armed: %s",
+                speed, status, dist, tostring(STATE.IsArmed)
+            )
+            if status == "DANGER!" then
+                DebugLabel.TextColor3 = CONFIG.VISUALS.DANGER_COLOR
+            else
+                DebugLabel.TextColor3 = CONFIG.VISUALS.INNER_SAFE
+            end
         end
     end)
 end)
@@ -528,4 +704,4 @@ LP.CharacterAdded:Connect(function()
     STATE.Ball = nil
 end)
 
-print("✅ UI Loaded. Press the ⚙ icon to open.")
+print("✅ PREMIUM v5.0 LOADED | Theme Manager & Dual-Color Sphere Active")
