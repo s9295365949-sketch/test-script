@@ -1,16 +1,14 @@
 --[[
     ╔═══════════════════════════════════════════════════════════════════════════╗
-    ║   [ BEE SWARM SIMULATOR | AUTO COLLECTOR v3.0 ]                           ║
+    ║   [ BEE SWARM SIMULATOR | AUTO COLLECTOR v3.1 ]                           ║
+    ║   • Улучшенный Auto Pollen (поиск цветов + поворот + взмах)               ║
     ║   • Debug HUD (видно, что делает скрипт)                                  ║
-    ║   • Исправлен поиск токенов (Workspace.Tokens)                            ║
-    ║   • Клики в центр экрана для взмаха палкой                                ║
     ╚═══════════════════════════════════════════════════════════════════════════╝
 ]]
 
 print("⏳ [BSS] Запуск...")
 
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 local UserInputService = game:GetService("UserInputService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
@@ -103,7 +101,7 @@ DebugGui.DisplayOrder = 998
 DebugGui.Parent = PGui
 
 local DebugLabel = Instance.new("TextLabel")
-DebugLabel.Size = UDim2.new(0, 250, 0, 40)
+DebugLabel.Size = UDim2.new(0, 300, 0, 60)
 DebugLabel.Position = UDim2.new(0, 10, 0, 10)
 DebugLabel.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 DebugLabel.BackgroundTransparency = 0.5
@@ -111,6 +109,7 @@ DebugLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
 DebugLabel.Font = Enum.Font.Code
 DebugLabel.TextSize = 12
 DebugLabel.TextXAlignment = Enum.TextXAlignment.Left
+DebugLabel.TextYAlignment = Enum.TextYAlignment.Top
 DebugLabel.Text = "Загрузка..."
 DebugLabel.Parent = DebugGui
 
@@ -136,32 +135,78 @@ UserInputService.InputEnded:Connect(function(input)
 end)
 
 -- ============================================================
--- [ ЛОГИКА: AUTO POLLEN ]
+-- [ ЛОГИКА: AUTO POLLEN (УЛУЧШЕННАЯ) ]
 -- ============================================================
 task.spawn(function()
-    while task.wait(0.15) do
+    while task.wait(0.2) do -- Небольшая задержка между взмахами
         if STATE.AutoPollen then
             local char = LP.Character
-            if char then
-                local tool = char:FindFirstChildOfClass("Tool")
-                if tool then
-                    STATE.DebugText = "Pollen: Tool found ("..tool.Name..")"
-                    
-                    -- Способ 1: Активация инструмента
-                    pcall(function() tool:Activate() end)
-                    
-                    -- Способ 2: Клик в центр экрана (чтобы махать палкой)
-                    pcall(function()
-                        local cam = Workspace.CurrentCamera
-                        local vp = cam.ViewportSize
-                        VirtualInputManager:SendMouseButtonEvent(vp.X/2, vp.Y/2, 0, true, game, 0)
-                        task.wait(0.05)
-                        VirtualInputManager:SendMouseButtonEvent(vp.X/2, vp.Y/2, 0, false, game, 0)
-                    end)
-                else
-                    STATE.DebugText = "Pollen: NO TOOL EQUIPPED!"
+            if not char then continue end
+            
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            local tool = char:FindFirstChildOfClass("Tool")
+            local camera = Workspace.CurrentCamera
+            
+            if not tool then
+                STATE.DebugText = "❌ Инструмент не в руках!"
+                continue
+            end
+            
+            if not hrp then continue end
+
+            -- 1. Ищем ближайший цветок
+            local nearestFlower = nil
+            local shortestDist = 35 -- Радиус поиска цветов
+            
+            local flowerFolder = Workspace:FindFirstChild("Flowers") or Workspace
+            for _, obj in ipairs(flowerFolder:GetChildren()) do
+                if obj:IsA("BasePart") and (obj.Name:find("Flower") or obj.Name:find("Pollen")) then
+                    local dist = (obj.Position - hrp.Position).Magnitude
+                    if dist < shortestDist then
+                        shortestDist = dist
+                        nearestFlower = obj
+                    end
                 end
             end
+
+            -- 2. Поворачиваем персонажа и камеру на цветок
+            if nearestFlower then
+                STATE.DebugText = string.format("🌸 Цветок найден (%.1f стабсов). Взмах!", shortestDist)
+                local targetPos = nearestFlower.Position
+                
+                -- Поворачиваем персонажа
+                pcall(function()
+                    hrp.CFrame = CFrame.lookAt(hrp.Position, Vector3.new(targetPos.X, hrp.Position.Y, targetPos.Z))
+                end)
+                
+                -- Поворачиваем камеру (чтобы клик попал в цветок)
+                pcall(function()
+                    camera.CFrame = CFrame.lookAt(camera.CFrame.Position, targetPos)
+                end)
+            else
+                STATE.DebugText = "🔍 Цветок не найден рядом."
+            end
+
+            -- 3. Делаем взмах (3 метода для надежности)
+            pcall(function()
+                tool:Activate() -- Метод 1: Встроенный
+            end)
+            
+            pcall(function()
+                -- Метод 2: Клик через mouse1click (если есть)
+                if mouse1click then 
+                    mouse1click() 
+                end
+            end)
+            
+            pcall(function()
+                -- Метод 3: Виртуальный клик в центр экрана
+                local vp = camera.ViewportSize
+                VirtualInputManager:SendMouseButtonEvent(vp.X/2, vp.Y/2, 0, true, game, 0)
+                task.wait(0.05)
+                VirtualInputManager:SendMouseButtonEvent(vp.X/2, vp.Y/2, 0, false, game, 0)
+            end)
+            
         end
     end
 end)
@@ -178,22 +223,16 @@ task.spawn(function()
                 local humanoid = char.Humanoid
                 
                 local nearestToken = nil
-                local shortestDist = 150 -- Увеличили радиус поиска
+                local shortestDist = 150
                 
-                -- Ищем токены в папке Tokens, если она есть, иначе везде
                 local searchFolders = {Workspace}
-                if Workspace:FindFirstChild("Tokens") then
-                    table.insert(searchFolders, Workspace.Tokens)
-                end
-                if Workspace:FindFirstChild("Debris") then
-                    table.insert(searchFolders, Workspace.Debris)
-                end
+                if Workspace:FindFirstChild("Tokens") then table.insert(searchFolders, Workspace.Tokens) end
                 
                 for _, folder in ipairs(searchFolders) do
                     for _, obj in ipairs(folder:GetChildren()) do
                         if obj:IsA("BasePart") then
                             local name = obj.Name:lower()
-                            if name:find("token") or name:find("honey") or name:find("pollen") or name:find("strawberry") or name:find("blueberry") then
+                            if name:find("token") or name:find("honey") or name:find("pollen") then
                                 local dist = (obj.Position - hrp.Position).Magnitude
                                 if dist < shortestDist then
                                     shortestDist = dist
@@ -205,15 +244,13 @@ task.spawn(function()
                 end
                 
                 if nearestToken then
-                    STATE.DebugText = string.format("Token: Found '%s' (%.1f studs)", nearestToken.Name, shortestDist)
+                    STATE.DebugText = string.format("🍯 Токен найден (%.1f ст.)", shortestDist)
                     humanoid:MoveTo(nearestToken.Position)
-                    
-                    -- Прыжок, если застряли
                     if humanoid.MoveDirection.Magnitude < 0.1 then
                         humanoid.Jump = true
                     end
                 else
-                    STATE.DebugText = "Token: None found (Radius 150)"
+                    STATE.DebugText = "🍯 Токены не найдены (радиус 150)."
                 end
             end
         end
@@ -235,4 +272,4 @@ task.spawn(function()
     end
 end)
 
-print("✅ [BSS] Скрипт запущен! Смотри зеленый текст в левом верхнем углу.")
+print("✅ [BSS] Скрипт запущен! Смотри зеленый текст.")
