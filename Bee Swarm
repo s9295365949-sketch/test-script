@@ -1,12 +1,13 @@
 --[[
     ╔═══════════════════════════════════════════════════════════════════════════╗
-    ║   [ BEE SWARM SIMULATOR | AUTO POLLEN & TOKEN COLLECTOR ]                 ║
-    ║   • Auto Collect Pollen (Авто-взмах инструментом)                         ║
-    ║   • Auto Collect Token (Персонаж бежит к ближайшему токену)               ║
+    ║   [ BEE SWARM SIMULATOR | AUTO COLLECTOR v3.0 ]                           ║
+    ║   • Debug HUD (видно, что делает скрипт)                                  ║
+    ║   • Исправлен поиск токенов (Workspace.Tokens)                            ║
+    ║   • Клики в центр экрана для взмаха палкой                                ║
     ╚═══════════════════════════════════════════════════════════════════════════╝
 ]]
 
-print("⏳ [BSS] Запуск скрипта...")
+print("⏳ [BSS] Запуск...")
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -19,12 +20,10 @@ local PGui = LP:WaitForChild("PlayerGui", 10)
 
 if PGui:FindFirstChild("BSS_Hub") then PGui.BSS_Hub:Destroy() end
 
--- ============================================================
--- [ НАСТРОЙКИ ]
--- ============================================================
 local STATE = {
     AutoPollen = false,
-    AutoToken = false
+    AutoToken = false,
+    DebugText = "Ожидание..."
 }
 
 -- ============================================================
@@ -56,7 +55,6 @@ Title.Font = Enum.Font.GothamBold
 Title.TextSize = 15
 Title.Parent = MainFrame
 
--- Кнопка закрытия
 local CloseBtn = Instance.new("TextButton")
 CloseBtn.Size = UDim2.new(0, 25, 0, 25)
 CloseBtn.Position = UDim2.new(1, -30, 0, 7)
@@ -69,7 +67,6 @@ CloseBtn.Active = true
 Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(0, 6)
 CloseBtn.MouseButton1Click:Connect(function() ScreenGui:Destroy() end)
 
--- Функция создания красивых тумблеров
 local function CreateToggle(yPos, text, stateKey)
     local Btn = Instance.new("TextButton")
     Btn.Size = UDim2.new(0, 220, 0, 45)
@@ -87,7 +84,6 @@ local function CreateToggle(yPos, text, stateKey)
         STATE[stateKey] = not STATE[stateKey]
         Btn.Text = text .. ": " .. (STATE[stateKey] and "ВКЛ" or "ВЫКЛ")
         Btn.BackgroundColor3 = STATE[stateKey] and Color3.fromRGB(60, 180, 100) or Color3.fromRGB(40, 40, 45)
-        print("🐝 " .. text .. ": " .. (STATE[stateKey] and "ВКЛ" or "ВЫКЛ"))
     end
     
     Btn.MouseButton1Click:Connect(onClick)
@@ -97,7 +93,28 @@ end
 CreateToggle(50, "Auto Collect Pollen", "AutoPollen")
 CreateToggle(105, "Auto Collect Token", "AutoToken")
 
--- Перетаскивание
+-- ============================================================
+-- [ DEBUG HUD (ПАНЕЛЬ ОТЛАДКИ) ]
+-- ============================================================
+local DebugGui = Instance.new("ScreenGui")
+DebugGui.Name = "BSS_Debug"
+DebugGui.ResetOnSpawn = false
+DebugGui.DisplayOrder = 998
+DebugGui.Parent = PGui
+
+local DebugLabel = Instance.new("TextLabel")
+DebugLabel.Size = UDim2.new(0, 250, 0, 40)
+DebugLabel.Position = UDim2.new(0, 10, 0, 10)
+DebugLabel.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+DebugLabel.BackgroundTransparency = 0.5
+DebugLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
+DebugLabel.Font = Enum.Font.Code
+DebugLabel.TextSize = 12
+DebugLabel.TextXAlignment = Enum.TextXAlignment.Left
+DebugLabel.Text = "Загрузка..."
+DebugLabel.Parent = DebugGui
+
+-- Перетаскивание меню
 local dragging, dragStart, startPos = false, nil, nil
 MainFrame.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -119,26 +136,30 @@ UserInputService.InputEnded:Connect(function(input)
 end)
 
 -- ============================================================
--- [ ЛОГИКА: AUTO COLLECT POLLEN (МАХАТЬ ПАЛКОЙ) ]
+-- [ ЛОГИКА: AUTO POLLEN ]
 -- ============================================================
 task.spawn(function()
-    while task.wait(0.15) do -- Задержка между взмахами
+    while task.wait(0.15) do
         if STATE.AutoPollen then
             local char = LP.Character
             if char then
                 local tool = char:FindFirstChildOfClass("Tool")
                 if tool then
-                    -- Способ 1: Пытаемся активировать инструмент напрямую
-                    pcall(function()
-                        tool:Activate()
-                    end)
+                    STATE.DebugText = "Pollen: Tool found ("..tool.Name..")"
                     
-                    -- Способ 2: Дублируем кликом мыши (для надежности на некоторых серверах)
+                    -- Способ 1: Активация инструмента
+                    pcall(function() tool:Activate() end)
+                    
+                    -- Способ 2: Клик в центр экрана (чтобы махать палкой)
                     pcall(function()
-                        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 0)
+                        local cam = Workspace.CurrentCamera
+                        local vp = cam.ViewportSize
+                        VirtualInputManager:SendMouseButtonEvent(vp.X/2, vp.Y/2, 0, true, game, 0)
                         task.wait(0.05)
-                        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 0)
+                        VirtualInputManager:SendMouseButtonEvent(vp.X/2, vp.Y/2, 0, false, game, 0)
                     end)
+                else
+                    STATE.DebugText = "Pollen: NO TOOL EQUIPPED!"
                 end
             end
         end
@@ -146,10 +167,10 @@ task.spawn(function()
 end)
 
 -- ============================================================
--- [ ЛОГИКА: AUTO COLLECT TOKEN (БЕЖАТЬ К ТОКЕНУ) ]
+-- [ ЛОГИКА: AUTO TOKEN (БЕГ) ]
 -- ============================================================
 task.spawn(function()
-    while task.wait(0.5) do -- Проверяем токены каждые полсекунды
+    while task.wait(0.3) do
         if STATE.AutoToken then
             local char = LP.Character
             if char and char:FindFirstChild("HumanoidRootPart") and char:FindFirstChildOfClass("Humanoid") then
@@ -157,30 +178,61 @@ task.spawn(function()
                 local humanoid = char.Humanoid
                 
                 local nearestToken = nil
-                local shortestDist = 100 -- Максимальный радиус поиска (100 стабсов)
+                local shortestDist = 150 -- Увеличили радиус поиска
                 
-                -- Ищем токены в Workspace
-                for _, obj in ipairs(Workspace:GetChildren()) do
-                    if obj:IsA("BasePart") then
-                        local name = obj.Name:lower()
-                        -- Ищем по именам: Token, Honey, Pollen и т.д.
-                        if name:find("token") or name:find("honey") or name:find("pollen") or name:find("strawberry") then
-                            local dist = (obj.Position - hrp.Position).Magnitude
-                            if dist < shortestDist then
-                                shortestDist = dist
-                                nearestToken = obj
+                -- Ищем токены в папке Tokens, если она есть, иначе везде
+                local searchFolders = {Workspace}
+                if Workspace:FindFirstChild("Tokens") then
+                    table.insert(searchFolders, Workspace.Tokens)
+                end
+                if Workspace:FindFirstChild("Debris") then
+                    table.insert(searchFolders, Workspace.Debris)
+                end
+                
+                for _, folder in ipairs(searchFolders) do
+                    for _, obj in ipairs(folder:GetChildren()) do
+                        if obj:IsA("BasePart") then
+                            local name = obj.Name:lower()
+                            if name:find("token") or name:find("honey") or name:find("pollen") or name:find("strawberry") or name:find("blueberry") then
+                                local dist = (obj.Position - hrp.Position).Magnitude
+                                if dist < shortestDist then
+                                    shortestDist = dist
+                                    nearestToken = obj
+                                end
                             end
                         end
                     end
                 end
                 
-                -- Если нашли токен - бежим к нему
                 if nearestToken then
+                    STATE.DebugText = string.format("Token: Found '%s' (%.1f studs)", nearestToken.Name, shortestDist)
                     humanoid:MoveTo(nearestToken.Position)
+                    
+                    -- Прыжок, если застряли
+                    if humanoid.MoveDirection.Magnitude < 0.1 then
+                        humanoid.Jump = true
+                    end
+                else
+                    STATE.DebugText = "Token: None found (Radius 150)"
                 end
             end
         end
     end
 end)
 
-print("✅ [BSS] Скрипт успешно запущен! Используй меню.")
+-- ============================================================
+-- [ ОБНОВЛЕНИЕ ОТЛАДКИ ]
+-- ============================================================
+task.spawn(function()
+    while task.wait(0.1) do
+        if DebugLabel and DebugLabel.Parent then
+            local status = "Safe"
+            if STATE.AutoPollen then status = "Farming Pollen..." end
+            if STATE.AutoToken then status = "Collecting Tokens..." end
+            
+            DebugLabel.Text = string.format("🐝 Status: %s\n🔍 %s", status, STATE.DebugText)
+        end
+    end
+end)
+
+print("✅ [BSS] Скрипт запущен! Смотри зеленый текст в левом верхнем углу.")
