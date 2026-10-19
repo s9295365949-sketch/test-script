@@ -1,9 +1,8 @@
 --[[
     ╔═══════════════════════════════════════════════════════════════════════╗
-    ║   BLADE BALL — PERFECT TIMING (0.05s STARTUP FIX)                     ║
-    ║   • Учтена задержка старта парирования (0.05 сек)                     ║
-    ║   • Идеальное окно: нажатие ровно за 0.15 сек до удара                ║
-    ║   • Защита от двойного нажатия (armed)                                ║
+    ║   BLADE BALL — REAL KEY PRESS (0.05s FIX)                             ║
+    ║   • Только физическое нажатие F (игнорирует Remote)                   ║
+    ║   • Срабатывание за 0.3 сек до удара                                  ║
     ╚═══════════════════════════════════════════════════════════════════════╝
 ]]
 
@@ -12,7 +11,6 @@ print("▶️ 1. Скрипт запущен...")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 
 local LocalPlayer = Players.LocalPlayer
@@ -22,8 +20,8 @@ if PlayerGui:FindFirstChild("BBDebug") then PlayerGui.BBDebug:Destroy() end
 if PlayerGui:FindFirstChild("BBMenu") then PlayerGui.BBMenu:Destroy() end
 
 local CFG = {
-    PARRY_RADIUS        = 15,        -- Визуальный радиус
-    MAX_RADIUS          = 25,        -- Размер сферы
+    PARRY_RADIUS        = 25,        -- Визуальный радиус
+    MAX_RADIUS          = 35,        -- Размер сферы
     PARRY_COOLDOWN      = 0.25,      
     PARRY_ENABLED       = true,
     SPHERE_VISIBLE      = true,      
@@ -31,20 +29,22 @@ local CFG = {
     COLOR_INSIDE        = Color3.fromRGB(255, 30, 30),
     COLOR_OUTSIDE       = Color3.fromRGB(30, 255, 50),
     
-    -- ИДЕАЛЬНОЕ ВРЕМЯ: нажимаем, когда мячу лететь 0.15 сек (0.05 старт + 0.1 запас на пинг)
-    PERFECT_TRIGGER_TIME = 0.15,     
+    -- Нажимаем за 0.3 секунды до удара (0.05 сек уйдет на старт парирования, остальное на пинг)
+    PREDICT_TIME        = 0.30,      
 }
 
--- 1. REMOTE
-local parryRemote = nil
-task.spawn(function()
-    for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
-        if obj:IsA("RemoteEvent") and (obj.Name:lower():find("parry") or obj.Name:lower():find("attempt")) then
-            parryRemote = obj
-            break
+-- 1. ПОИСК КНОПКИ НА ЭКРАНЕ (запасной метод)
+local parryButton = nil
+local function findButton()
+    for _, obj in ipairs(PlayerGui:GetDescendants()) do
+        if obj:IsA("GuiButton") and obj.Visible then
+            local n = obj.Name:lower()
+            if n:find("block") or n:find("parry") or n:find("deflect") then
+                return obj
+            end
         end
     end
-end)
+end
 
 -- 2. СФЕРА
 local sphere = Instance.new("Part")
@@ -172,30 +172,26 @@ Workspace.ChildAdded:Connect(function(o)
     end
 end)
 
--- 6. ПАРИРОВАНИЕ
+-- 6. ФИЗИЧЕСКОЕ НАЖАТИЕ (ТОЛЬКО F)
 local lastParry = 0
 local lastAction = "None"
-local isArmed = true -- Защита от двойного нажатия
+local isArmed = true
 
 local function executeParry()
     if not CFG.PARRY_ENABLED then return end
     if not isArmed then return end
     if tick() - lastParry < CFG.PARRY_COOLDOWN then return end
 
-    -- Жмем F (это запускает анимацию и блок)
+    -- Жмем клавишу F (игра это 100% засчитает)
     pcall(function()
         VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.F, false, game)
-        task.wait(0.02)
+        task.wait(0.05)
         VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.F, false, game)
     end)
-
-    if parryRemote then
-        pcall(function() parryRemote:FireServer() end)
-    end
-
-    lastAction = "F + Remote"
+    
+    lastAction = "Key F Pressed"
     lastParry = tick()
-    isArmed = false -- Разряжаем скрипт
+    isArmed = false 
 end
 
 -- 7. ЦИКЛ
@@ -233,7 +229,6 @@ RunService.Heartbeat:Connect(function(dt)
             local dist = (hrpPos - bp).Magnitude
             dbg_dist = dist
 
-            -- Перезаряжаем скрипт, если мяч улетел далеко или мы умерли
             if dist > CFG.PARRY_RADIUS * 2.5 then
                 isArmed = true
             end
@@ -259,21 +254,6 @@ RunService.Heartbeat:Connect(function(dt)
                 end
             end
 
-            -- Проверка траектории (Swept Collision)
-            local hitTrajectory = false
-            if prevPos then
-                local ab = bp - prevPos
-                local ap = hrpPos - prevPos
-                local abLenSq = ab:Dot(ab)
-                if abLenSq > 0 then
-                    local t = math.clamp(ap:Dot(ab) / abLenSq, 0, 1)
-                    local closest = prevPos + ab * t
-                    if (hrpPos - closest).Magnitude <= CFG.PARRY_RADIUS then
-                        hitTrajectory = true
-                    end
-                end
-            end
-
             local isTargetingMe = false
             local tVal = ball:GetAttribute("target")
             
@@ -293,8 +273,8 @@ RunService.Heartbeat:Connect(function(dt)
                 local targetRadius = math.clamp(dist, CFG.PARRY_RADIUS, CFG.MAX_RADIUS)
                 targetDiameter = targetRadius * 2
                 
-                -- ИДЕАЛЬНОЕ СРАБАТЫВАНИЕ
-                if dbg_time <= CFG.PERFECT_TRIGGER_TIME or dist <= CFG.PARRY_RADIUS or hitTrajectory then
+                -- Нажимаем за 0.3 сек до удара
+                if dbg_time <= CFG.PREDICT_TIME or dist <= CFG.PARRY_RADIUS then
                     executeParry()
                     if not isArmed then
                         dbg_status = "PARRY!"
@@ -304,7 +284,7 @@ RunService.Heartbeat:Connect(function(dt)
             end
             prevPos = bp
         else
-            isArmed = true -- Если мяча нет, скрипт готов
+            isArmed = true
         end
 
         debugText.Text = string.format("Ball: %s\nDist: %.1f\nTime: %s\nArmed: %s\nStatus: %s\nMethod: %s", 
