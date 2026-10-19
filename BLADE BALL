@@ -12,6 +12,7 @@
     ║   COOLDOWN: 0.12s → 0.18s                                                 ║
     ║   Wrapped: pcall-safe execution                                           ║
     ╚═══════════════════════════════════════════════════════════════════════════╝
+--[[
     ╔═══════════════════════════════════════════════════════════════════════════╗
     ║                                                                           ║
     ║   ██████╗  █████╗ ██████╗ ██████╗ ██╗   ██╗    ██████╗  ██████╗           ║
@@ -60,7 +61,7 @@ if Workspace:FindFirstChild("AuraVisual") then Workspace.AuraVisual:Destroy() en
 local CONFIG = {
     -- Логика парирования
     CLOSE_DIST       = 45,     -- Дистанция "ближнего боя" (спам)
-    COOLDOWN         = 0.21,   -- Кулдаун между парированиями (исправлено: 0.18 -> 0.21)
+    COOLDOWN         = 0.12,   -- Кулдаун между парированиями
     PING_SAFE        = 0.35,   -- Компенсация пинга (350мс)
     PREDICT_TIME     = 0.15,   -- Предсказание позиции мяча (150мс)
     
@@ -920,7 +921,7 @@ end)
 -- ============================================================
 local function TriggerParry()
     local now = tick()
-    -- Защита от спама (COOLDOWN = 0.21)
+    -- Защита от спама
     if now - STATE.LastParry < CONFIG.COOLDOWN then return end
     STATE.LastParry = now
 
@@ -1146,6 +1147,10 @@ LocalPlayer.CharacterAdded:Connect(function()
     STATE.CameraLock = false
     if Camera.CameraType == Enum.CameraType.Scriptable then
         Camera.CameraType = Enum.CameraType.Custom
+    end
+end)
+
+print(">>> [BB] CANDY EDITION v15.0 LOADED! (Human Delay: 0.10-0.15s)")
     end
 end)
 
