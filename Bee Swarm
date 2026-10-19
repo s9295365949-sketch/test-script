@@ -1,12 +1,12 @@
 --[[
     ╔═══════════════════════════════════════════════════════════════════════════╗
-    ║   [ BEE SWARM SIMULATOR | ULTIMATE HUB v6.1 ]                             ║
-    ║   • Ползунки для WalkSpeed и JumpPower                                    ║
-    ║   • 4 вкладки (Farm, Quests, Player, Other)                               ║
+    ║   [ BEE SWARM SIMULATOR | ULTIMATE HUB v6.2 (FIXED) ]                     ║
+    ║   • Исправлен баг с math.clamp (теперь работает на всех экзекуторах)      ║
+    ║   • Ползунки WalkSpeed и JumpPower                                        ║
     ╚═══════════════════════════════════════════════════════════════════════════╝
 ]]
 
-print("⏳ [BSS] Запуск ULTIMATE HUB v6.1...")
+print("⏳ [BSS] Запуск ULTIMATE HUB v6.2...")
 
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
@@ -18,7 +18,19 @@ local HttpService = game:GetService("HttpService")
 local LP = Players.LocalPlayer
 local PGui = LP:WaitForChild("PlayerGui", 10)
 
+if not PGui then
+    print("❌ ОШИБКА: PlayerGui не найден.")
+    return
+end
+
 if PGui:FindFirstChild("BSS_Hub") then PGui.BSS_Hub:Destroy() end
+
+-- Кастомная функция clamp на случай, если math.clamp нет
+local function clamp(val, min, max)
+    if val < min then return min end
+    if val > max then return max end
+    return val
+end
 
 -- ============================================================
 -- [ КОНФИГУРАЦИЯ И СПИСКИ ]
@@ -76,7 +88,6 @@ local STATE = {
     IsQuesting = false
 }
 
--- Ссылки на UI для обновления при загрузке конфига
 local UI_References = {
     Toggles = {},
     Dropdowns = {},
@@ -106,7 +117,7 @@ MainStroke.Thickness = 2
 local Title = Instance.new("TextLabel")
 Title.Size = UDim2.new(1, 0, 0, 35)
 Title.BackgroundTransparency = 1
-Title.Text = "🐝 ULTIMATE HUB v6.1"
+Title.Text = "🐝 ULTIMATE HUB v6.2"
 Title.TextColor3 = Color3.fromRGB(255, 180, 0)
 Title.Font = Enum.Font.GothamBold
 Title.TextSize = 16
@@ -297,7 +308,6 @@ local function CreateButton(parent, yPos, text, callback, color)
     Btn.TouchTap:Connect(callback)
 end
 
--- НОВАЯ ФУНКЦИЯ: КРАСИВЫЙ ПОЛЗУНОК (SLIDER)
 local function CreateSlider(parent, yPos, titleText, minVal, maxVal, stateKey, callback)
     local Container = Instance.new("Frame")
     Container.Size = UDim2.new(0, 260, 0, 45)
@@ -322,15 +332,17 @@ local function CreateSlider(parent, yPos, titleText, minVal, maxVal, stateKey, c
     Bar.Parent = Container
     Instance.new("UICorner", Bar).CornerRadius = UDim.new(1, 0)
 
+    local initialRatio = (STATE[stateKey] - minVal) / (maxVal - minVal)
+    
     local Fill = Instance.new("Frame")
-    Fill.Size = UDim2.new((STATE[stateKey] - minVal) / (maxVal - minVal), 0, 1, 0)
+    Fill.Size = UDim2.new(initialRatio, 0, 1, 0)
     Fill.BackgroundColor3 = Color3.fromRGB(255, 180, 0)
     Fill.Parent = Bar
     Instance.new("UICorner", Fill).CornerRadius = UDim.new(1, 0)
 
     local Knob = Instance.new("Frame")
     Knob.Size = UDim2.new(0, 16, 0, 16)
-    Knob.Position = UDim2.new((STATE[stateKey] - minVal) / (maxVal - minVal), -8, 0.5, -8)
+    Knob.Position = UDim2.new(initialRatio, -8, 0.5, -8)
     Knob.BackgroundColor3 = Color3.new(1, 1, 1)
     Knob.Parent = Bar
     Instance.new("UICorner", Knob).CornerRadius = UDim.new(1, 0)
@@ -341,11 +353,12 @@ local function CreateSlider(parent, yPos, titleText, minVal, maxVal, stateKey, c
     HitBox.BackgroundTransparency = 1
     HitBox.Text = ""
     HitBox.Parent = Bar
+    HitBox.Active = true
 
     local isDragging = false
 
     local function updateValue(inputX)
-        local ratio = math.clamp((inputX - Bar.AbsolutePosition.X) / Bar.AbsoluteSize.X, 0, 1)
+        local ratio = clamp((inputX - Bar.AbsolutePosition.X) / Bar.AbsoluteSize.X, 0, 1)
         local value = math.floor(minVal + (maxVal - minVal) * ratio)
         
         STATE[stateKey] = value
@@ -391,11 +404,6 @@ CreateFieldDropdown(FarmPage, 0, "Поле для фарма", "CurrentField")
 CreateToggle(FarmPage, 45, "Auto Collect Pollen", "AutoPollen")
 CreateToggle(FarmPage, 85, "Auto Collect Token", "AutoToken")
 CreateToggle(FarmPage, 125, "Auto Convert", "AutoConvert")
-CreateButton(FarmPage, 170, "📍 Найти / Занять базу", function()
-    local base = FindMyBase()
-    if base then STATE.MyBasePos = base; STATE.DebugText = "✅ База найдена."
-    else ClaimNewBase() end
-end, Color3.fromRGB(100, 50, 200))
 
 -- ============================================================
 -- [ ВКЛАДКА 2: QUESTS ]
@@ -507,12 +515,10 @@ local function LoadSettings()
             if STATE[k] ~= nil then STATE[k] = v end
         end
         
-        -- Обновляем UI (Тумблеры, списки и ползунки)
         for _, update in ipairs(UI_References.Toggles) do update() end
         for _, update in ipairs(UI_References.Dropdowns) do update() end
         for _, update in ipairs(UI_References.Sliders) do update() end
         
-        -- Применяем к игроку
         local char = LP.Character
         if char and char:FindFirstChildOfClass("Humanoid") then
             char.Humanoid.WalkSpeed = STATE.WalkSpeed
@@ -574,7 +580,7 @@ UserInputService.InputEnded:Connect(function(input)
 end)
 
 -- ============================================================
--- [ ЛОГИКА ФАРМА И КВЕСТОВ ]
+-- [ ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ЛОГИКИ ]
 -- ============================================================
 local function TweenToPosition(targetPos, duration)
     local char = LP.Character
@@ -605,7 +611,7 @@ local function GetBackpackPercentage()
     return percent
 end
 
-function FindMyBase()
+local function FindMyBase()
     local hivesFolder = Workspace:FindFirstChild("Hives")
     if not hivesFolder then return nil end
     for _, hive in ipairs(hivesFolder:GetChildren()) do
@@ -618,7 +624,7 @@ function FindMyBase()
     return nil
 end
 
-function ClaimNewBase()
+local function ClaimNewBase()
     STATE.DebugText = "🔍 Ищем свободную базу..."
     local char = LP.Character
     if not char then return false end
@@ -642,6 +648,13 @@ function ClaimNewBase()
     end
     return false
 end
+
+-- Кнопка "Найти / Занять базу" (добавлена после определения функций)
+CreateButton(FarmPage, 170, "📍 Найти / Занять базу", function()
+    local base = FindMyBase()
+    if base then STATE.MyBasePos = base; STATE.DebugText = "✅ База найдена."
+    else ClaimNewBase() end
+end, Color3.fromRGB(100, 50, 200))
 
 local function GetNearestItem(keywords)
     local char = LP.Character
@@ -786,8 +799,7 @@ Tabs[1].Page.Visible = true
 Tabs[1].Btn.BackgroundColor3 = Color3.fromRGB(255, 180, 0)
 Tabs[1].Btn.TextColor3 = Color3.new(0,0,0)
 
-print("✅ [BSS] Ultimate Hub v6.1 загружен! Ползунки добавлены.")
-        end
+print("✅ [BSS] Ultimate Hub v6.2 загружен! UI успешно создан.")
     end
 end)
 
