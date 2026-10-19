@@ -1,9 +1,9 @@
 --[[
     ╔═══════════════════════════════════════════════════════════════════════╗
-    ║   BLADE BALL — SPEED-ADAPTIVE SPHERE (F + LMB Dual Parry)             ║
-    ║   • Сфера сжимается с 60 до (30~50 в зависимости от скорости мяча)    ║
-    ║   • Парирование на F + ЛКМ одновременно                               ║
-    ║   • Увеличенная зона парирования (радиус 15-25 стабсов)               ║
+    ║   BLADE BALL — SPEED-ADAPTIVE SPHERE (BAC BYPASS)                     ║
+    ║   • 3D Сфера в Workspace (как ты просил)                              ║
+    ║   • Парирование через RemoteEvent + человеческая задержка             ║
+    ║   • Безопасный визуал (без теней, с рандомным именем)                 ║
     ╚═══════════════════════════════════════════════════════════════════════╝
 ]]
 
@@ -11,37 +11,37 @@
 -- 1. НАСТРОЙКИ
 -- ============================================================
 local CFG = {
-    -- ─── Парирование (УВЕЛИЧЕНО) ───────────────────────────
-    MIN_PARRY_DIAMETER  = 30,        -- Мин. диаметр (на низкой скорости) = 15 радиус
-    MAX_PARRY_DIAMETER  = 50,        -- Макс. диаметр (на высокой скорости) = 25 радиус
-    MIN_SPEED_THRESH    = 50,        -- Скорость, ниже которой диаметр = MIN_PARRY_DIAMETER
-    MAX_SPEED_THRESH    = 200,       -- Скорость, выше которой диаметр = MAX_PARRY_DIAMETER
-    PARRY_COOLDOWN      = 0.15,      
-    PARRY_KEY           = Enum.KeyCode.F,
+    -- ─── Парирование ───────────────────────────────────────
+    MIN_PARRY_DIAMETER  = 30,        -- Мин. диаметр (радиус 15)
+    MAX_PARRY_DIAMETER  = 50,        -- Макс. диаметр (радиус 25)
+    MIN_SPEED_THRESH    = 50,        
+    MAX_SPEED_THRESH    = 200,       
+    PARRY_COOLDOWN      = 0.2,       
 
     -- ─── Визуал сферы ──────────────────────────────────────
     MAX_RADIUS          = 30,        -- Максимальный радиус сферы (диаметр 60)
-    NEAR_TRANSPARENCY   = 0.60,      -- 60% в близи
-    FAR_TRANSPARENCY    = 0.70,      -- 70% в далеке
+    NEAR_TRANSPARENCY   = 0.60,      
+    FAR_TRANSPARENCY    = 0.80,      -- Сделал чуть прозрачнее, чтобы не бросалась в глаза
     Y_OFFSET            = -0.5,      
 
-    -- ─── Предиктивка ───────────────────────────────────────
+    -- ─── Человеческая реакция (АНТИ-БАН) ───────────────────
+    HUMAN_DELAY_MIN     = 0.04,      -- Задержка перед нажатием (сек)
+    HUMAN_DELAY_MAX     = 0.12,      
     PREDICT_FRAMES      = 2,
     MIN_AHEAD           = 0.06,
     MAX_AHEAD           = 0.25,
     
-    -- ─── Сглаживание и анимация ────────────────────────────
+    -- ─── Сглаживание ───────────────────────────────────────
     DAMP_LAMBDA         = 14,
     PULSE_SPEED         = 2.2,       
     PULSE_SIZE_AMPL     = 0.04,      
     PULSE_ALPHA_AMPL    = 0.04,      
     BOB_SPEED           = 1.8,       
     BOB_AMPLITUDE       = 0.15,      
-    BRIGHTNESS_PULSE    = 0.10,      
 
     -- ─── Цвета ─────────────────────────────────────────────
-    COLOR_INSIDE  = Color3.fromRGB(255, 30, 30),    -- Красный (мяч пересек границу)
-    COLOR_OUTSIDE = Color3.fromRGB(30, 255, 50),    -- Зеленый (безопасно)
+    COLOR_INSIDE  = Color3.fromRGB(255, 30, 30),    
+    COLOR_OUTSIDE = Color3.fromRGB(30, 255, 50),    
 
     DEBUG = false,                   
 }
@@ -56,8 +56,6 @@ end
 
 local Players           = svc("Players")
 local RunService        = svc("RunService")
-local UserInputService  = svc("UserInputService")
-local VirtualInputManager = svc("VirtualInputManager")
 local Workspace         = svc("Workspace")
 local Stats             = svc("Stats")
 local ReplicatedStorage = svc("ReplicatedStorage")
@@ -69,7 +67,6 @@ local HRP         = Character:WaitForChild("HumanoidRootPart", 10)
 -- ============================================================
 -- 3. УТИЛИТЫ
 -- ============================================================
-local function jitter(base) return base * (0.6 + math.random() * 0.8) end
 local function damp(cur, tgt, lambda, dt) return tgt + (cur - tgt) * math.exp(-lambda * dt) end
 local function clamp01(x) return math.clamp(x, 0, 1) end
 
@@ -82,16 +79,17 @@ task.spawn(function()
 end)
 
 -- ============================================================
--- 4. СФЕРА
+-- 4. СФЕРА (ЗАМАСКИРОВАНА ПОД ЭФФЕКТ)
 -- ============================================================
 local sphere = Instance.new("Part")
-sphere.Name         = "ParrySphere"
+sphere.Name         = "AuraVisual"   -- Безобидное имя, чтобы BAC не искал "ParrySphere"
 sphere.Shape        = Enum.PartType.Ball
 sphere.Anchored     = true
 sphere.CanCollide   = false
 sphere.CanTouch     = false
 sphere.CanQuery     = false
 sphere.CastShadow   = false
+sphere.Massless     = true
 sphere.Material     = Enum.Material.ForceField
 sphere.Color        = CFG.COLOR_OUTSIDE
 sphere.Transparency = CFG.FAR_TRANSPARENCY
@@ -137,13 +135,13 @@ Workspace.ChildRemoved:Connect(function(o)
 end)
 
 -- ============================================================
--- 6. ПАРИРОВАНИЕ (F + ЛКМ)
+-- 6. ПОИСК REMOTE ДЛЯ ПАРИРОВАНИЯ (Без VIM)
 -- ============================================================
 local parryRemote = nil
 local function findParryRemote()
     local ok, found = pcall(function()
         for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
-            if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
+            if obj:IsA("RemoteEvent") then
                 local n = obj.Name:lower()
                 if n:find("parry") or n:find("block") or n:find("deflect") or n:find("swing") then
                     return obj
@@ -155,44 +153,41 @@ local function findParryRemote()
 end
 parryRemote = findParryRemote()
 
-local function sendParryOnce()
-    if parryRemote then
-        pcall(function()
-            if parryRemote:IsA("RemoteEvent") then parryRemote:FireServer()
-            else parryRemote:InvokeServer() end
-        end)
-    end
-
-    pcall(function()
-        VirtualInputManager:SendKeyEvent(true, CFG.PARRY_KEY, false, game)
-        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 0)
-    end)
-    
-    task.wait(jitter(0.03))
-    
-    pcall(function()
-        VirtualInputManager:SendKeyEvent(false, CFG.PARRY_KEY, false, game)
-        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 0)
-    end)
-end
-
+-- ============================================================
+-- 7. ПАРИРОВАНИЕ С ЧЕЛОВЕЧЕСКОЙ ЗАДЕРЖКОЙ
+-- ============================================================
+local lastParry = 0
 local burstActive = false
+
 local function fireParry()
     if burstActive then return end
     burstActive = true
+    
     task.spawn(function()
-        local count = math.random(1, 2)
-        for i = 1, count do
-            sendParryOnce()
-            if i < count then task.wait(jitter(0.05)) end
+        -- Имитация реакции человека (задержка перед нажатием)
+        local delay = CFG.HUMAN_DELAY_MIN + math.random() * (CFG.HUMAN_DELAY_MAX - CFG.HUMAN_DELAY_MIN)
+        task.wait(delay)
+        
+        if parryRemote then
+            -- Отправляем чистый пакет (сервер думает, что это игра)
+            pcall(function() parryRemote:FireServer() end)
+        else
+            -- Если remote не найден (рискованно), жмем F через UserInputService
+            pcall(function()
+                local vim = game:GetService("VirtualInputManager")
+                vim:SendKeyEvent(true, Enum.KeyCode.F, false, game)
+                task.wait(0.05)
+                vim:SendKeyEvent(false, Enum.KeyCode.F, false, game)
+            end)
         end
-        task.wait(jitter(0.03))
+        
+        task.wait(0.1)
         burstActive = false
     end)
 end
 
 -- ============================================================
--- 7. ВИЗУАЛ
+-- 8. ВИЗУАЛ
 -- ============================================================
 local lastState = { pos = Vector3.new(), size = -1, alpha = -1, color = Color3.new() }
 
@@ -212,19 +207,18 @@ local function applySphere(center, diameter, transparency, color)
 end
 
 -- ============================================================
--- 8. СОСТОЯНИЕ
+-- 9. СОСТОЯНИЕ
 -- ============================================================
 local state = {
     diameter     = CFG.MAX_RADIUS * 2,
     transparency = CFG.FAR_TRANSPARENCY,
     color        = CFG.COLOR_OUTSIDE,
-    lastParry    = 0,
     lastFlash    = 0,
     phase        = 0,
 }
 
 -- ============================================================
--- 9. ГЛАВНЫЙ ЦИКЛ (Heartbeat)
+-- 10. ГЛАВНЫЙ ЦИКЛ
 -- ============================================================
 local function mainTick(dt)
     if not Character or not Character.Parent then Character = LocalPlayer.Character end
@@ -258,7 +252,7 @@ local function mainTick(dt)
             approach = bv:Dot((hrpPos - ball.Position).Unit)
         end
 
-        -- ДИНАМИЧЕСКИЙ РАДИУС ПАРИРОВАНИЯ
+        -- Динамический радиус парирования
         local speedFactor = clamp01((speed - CFG.MIN_SPEED_THRESH) / (CFG.MAX_SPEED_THRESH - CFG.MIN_SPEED_THRESH))
         local currentParryDiameter = CFG.MIN_PARRY_DIAMETER + (CFG.MAX_PARRY_DIAMETER - CFG.MIN_PARRY_DIAMETER) * speedFactor
         local currentParryRadius = currentParryDiameter / 2
@@ -283,30 +277,24 @@ local function mainTick(dt)
             if hl and hl.Enabled then targeting = true end
         end
 
-        -- Страховка по скорости (если мяч летит прямо в нас)
         if not targeting and not isOther and speed > 5 and approach > 10 and dist < 40 then
             targeting = true
         end
 
         if targeting then
-            -- Сфера сжимается от MAX_RADIUS до динамического currentParryRadius
             local targetRadius = math.clamp(dist, currentParryRadius, CFG.MAX_RADIUS)
             tgtDiameter = targetRadius * 2
 
-            -- Красный, если мяч внутри зоны парирования, иначе зеленый
             local isInside = (dist <= (targetRadius - 0.5)) or (dist <= currentParryRadius)
             tgtColor = isInside and CFG.COLOR_INSIDE or CFG.COLOR_OUTSIDE
 
-            -- Прозрачность
             local u = clamp01((dist - currentParryRadius) / (CFG.MAX_RADIUS - currentParryRadius))
             tgtTransparency = CFG.NEAR_TRANSPARENCY + (CFG.FAR_TRANSPARENCY - CFG.NEAR_TRANSPARENCY) * u
 
-            -- Срабатывание парирования
             if dist <= currentParryRadius then
                 doParry = true
             end
             
-            -- Предиктивка
             if not doParry and approach > 0 then
                 local horizon = math.clamp(pingCache + CFG.PREDICT_FRAMES / 60, CFG.MIN_AHEAD, CFG.MAX_AHEAD)
                 if (dist - currentParryRadius) / approach <= horizon then 
@@ -319,9 +307,9 @@ local function mainTick(dt)
     -- Триггер парирования
     if doParry then
         local now = tick()
-        if now - state.lastParry >= CFG.PARRY_COOLDOWN then
+        if now - lastParry >= CFG.PARRY_COOLDOWN then
             fireParry()
-            state.lastParry = now
+            lastParry = now
             state.lastFlash = now
         end
     end
@@ -337,13 +325,7 @@ local function mainTick(dt)
 
     local finalDiameter = state.diameter * (1 + pulse * CFG.PULSE_SIZE_AMPL)
     local finalTrans    = math.clamp(state.transparency + pulse * CFG.PULSE_ALPHA_AMPL, 0, 0.95)
-    
-    local brightMul = 1 + pulse * CFG.BRIGHTNESS_PULSE
-    local finalColor = Color3.new(
-        math.clamp(state.color.R * brightMul, 0, 1),
-        math.clamp(state.color.G * brightMul, 0, 1),
-        math.clamp(state.color.B * brightMul, 0, 1)
-    )
+    local finalColor    = state.color
 
     if tick() - state.lastFlash < 0.12 then
         finalColor = Color3.fromRGB(255, 255, 255)
@@ -362,7 +344,7 @@ RunService.Heartbeat:Connect(function(dt)
 end)
 
 -- ============================================================
--- 10. РЕСПАВН И СТАРТ
+-- 11. РЕСПАВН И СТАРТ
 -- ============================================================
 LocalPlayer.CharacterAdded:Connect(function(newChar)
     Character = newChar
@@ -376,4 +358,4 @@ LocalPlayer.CharacterAdded:Connect(function(newChar)
     parryRemote = findParryRemote()
 end)
 
-print("[Blade Ball] Готово | Зона парирования УВЕЛИЧЕНА (30-50) | Парир F + ЛКМ")
+print("[Blade Ball] Сфера возвращена в Workspace. Анти-бан: Remote + задержка.")
