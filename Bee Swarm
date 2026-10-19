@@ -1,14 +1,13 @@
 --[[
     ╔═══════════════════════════════════════════════════════════════════════════╗
-    ║   [ BEE SWARM SIMULATOR | ULTIMATE HUB v6.3 ]                             ║
-    ║   • Убраны все эмодзи (защита от краша UI)                                ║
-    ║   • Убран IgnoreGuiInset (защита от краша ScreenGui)                      ║
-    ║   • Ползунки WalkSpeed и JumpPower                                        ║
+    ║   [ BEE SWARM SIMULATOR | ULTIMATE HUB v7.1 ]                             ║
+    ║   • Авто-захват базы при старте                                           ║
+    ║   • Система профилей (Save/Load/Auto-Load)                                ║
+    ║   • Авто-реконнект с твоей ссылкой                                        ║
     ╚═══════════════════════════════════════════════════════════════════════════╝
 ]]
 
--- ВАЖНО: Смотри ошибки в консоли ЭКЗЕКУТОРА, а не Roblox!
-print(">>> [BSS] ЗАПУСК СКРИПТА...")
+print(">>> [BSS] ЗАПУСК ULTIMATE HUB v7.1...")
 
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
@@ -20,11 +19,7 @@ local HttpService = game:GetService("HttpService")
 local LP = Players.LocalPlayer
 local PGui = LP:WaitForChild("PlayerGui", 10)
 
-if not PGui then
-    print(">>> ОШИБКА: PlayerGui не найден.")
-    return
-end
-
+if not PGui then return end
 if PGui:FindFirstChild("BSS_Hub") then PGui.BSS_Hub:Destroy() end
 
 local function clamp(val, min, max)
@@ -55,6 +50,10 @@ local ALL_FIELDS = {
     ["Mountain Top"]= Vector3.new(0, 10, 0)
 }
 
+local SORTED_FIELDS = {}
+for fieldName, _ in pairs(ALL_FIELDS) do table.insert(SORTED_FIELDS, fieldName) end
+table.sort(SORTED_FIELDS)
+
 local QUESTS = {
     ["Black Bear"] = { Pos = Vector3.new(-30, 10, -20) },
     ["Brown Bear"] = { Pos = Vector3.new(50, 10, 50) },
@@ -69,7 +68,7 @@ local BASE_LOCATIONS = {
 }
 
 local STATE = {
-    AutoPollen = false, AutoToken = false, AutoConvert = false, AutoQuest = false,
+    AutoPollen = false, AutoToken = false, AutoConvert = false, AutoQuest = false, AutoRejoin = false,
     CurrentField = "Strawberry", CurrentQuestNPC = "Black Bear",
     QuestFieldRed = "Strawberry", QuestFieldWhite = "Cactus", QuestFieldBlue = "Pine Tree",
     WalkSpeed = 16, JumpPower = 50, MyBasePos = nil, DebugText = "Ожидание...",
@@ -79,22 +78,102 @@ local STATE = {
 local UI_References = { Toggles = {}, Dropdowns = {}, Sliders = {} }
 
 -- ============================================================
+-- [ СИСТЕМА ПРОФИЛЕЙ И ФАЙЛОВ ]
+-- ============================================================
+local PROFILE_FOLDER = "BSS_Profiles"
+pcall(function() if makefolder and not isfolder(PROFILE_FOLDER) then makefolder(PROFILE_FOLDER) end end)
+
+local function SaveSettings()
+    local pName = "Default"
+    if _G.BSS_ProfileNameBox and _G.BSS_ProfileNameBox.Text ~= "" then pName = _G.BSS_ProfileNameBox.Text end
+    
+    local data = {
+        AutoPollen = STATE.AutoPollen, AutoToken = STATE.AutoToken, AutoConvert = STATE.AutoConvert, AutoQuest = STATE.AutoQuest,
+        CurrentField = STATE.CurrentField, CurrentQuestNPC = STATE.CurrentQuestNPC,
+        QuestFieldRed = STATE.QuestFieldRed, QuestFieldWhite = STATE.QuestFieldWhite, QuestFieldBlue = STATE.QuestFieldBlue,
+        WalkSpeed = STATE.WalkSpeed, JumpPower = STATE.JumpPower
+    }
+    local success = pcall(function()
+        writefile(PROFILE_FOLDER .. "/" .. pName .. ".json", HttpService:JSONEncode(data))
+    end)
+    if success then print(">>> [BSS] Профиль '" .. pName .. "' сохранен!") 
+    else print(">>> [BSS] Ошибка сохранения.") end
+    
+    if _G.BSS_RefreshProfiles then _G.BSS_RefreshProfiles() end
+end
+
+local function LoadSettings(profileName)
+    local success, data = pcall(function()
+        if isfile and isfile(PROFILE_FOLDER .. "/" .. profileName .. ".json") then 
+            return HttpService:JSONDecode(readfile(PROFILE_FOLDER .. "/" .. profileName .. ".json")) 
+        end
+    end)
+    if success and data then
+        for k, v in pairs(data) do if STATE[k] ~= nil then STATE[k] = v end end
+        for _, update in ipairs(UI_References.Toggles) do update() end
+        for _, update in ipairs(UI_References.Dropdowns) do update() end
+        for _, update in ipairs(UI_References.Sliders) do update() end
+        local char = LP.Character
+        if char and char:FindFirstChildOfClass("Humanoid") then
+            char.Humanoid.WalkSpeed = STATE.WalkSpeed
+            char.Humanoid.JumpPower = STATE.JumpPower
+            char.Humanoid.UseJumpPower = true
+        end
+        print(">>> [BSS] Профиль '" .. profileName .. "' загружен!")
+    else 
+        print(">>> [BSS] Профиль не найден.") 
+    end
+end
+
+-- ============================================================
+-- [ АВТО-РЕКОННЕКТ (ВСТАВЛЕНА ТВОЯ ССЫЛКА) ]
+-- ============================================================
+local function SetupAutoRejoin()
+    -- Твоя ссылка на скрипт
+    local SCRIPT_URL = "loadstring(game:HttpGet('https://raw.githubusercontent.com/s9295365949-sketch/test-script/refs/heads/main/Bee%20Swarm'))()"
+    
+    local function queueTeleport()
+        pcall(function()
+            if syn and syn.queue_on_teleport then syn.queue_on_teleport(SCRIPT_URL)
+            elseif queue_on_teleport then queue_on_teleport(SCRIPT_URL)
+            elseif fluxus and fluxus.queue_on_teleport then fluxus.queue_on_teleport(SCRIPT_URL)
+            elseif getgenv().queue_on_teleport then getgenv().queue_on_teleport(SCRIPT_URL) end
+        end)
+    end
+    
+    -- Сохраняем скрипт при телепорте (например, при переходе между полями)
+    LP.OnTeleport:Connect(function(State)
+        if State == Enum.TeleportState.Started then queueTeleport() end
+    end)
+    
+    -- Обработка вылета (Ошибка интернета / Кик)
+    game:GetService("CoreGui").RobloxPromptGui.promptOverlay.ChildAdded:Connect(function(child)
+        if child.Name == "ErrorPrompt" and STATE.AutoRejoin then
+            task.wait(5)
+            pcall(function()
+                game:GetService("TeleportService"):Teleport(game.PlaceId, LP)
+            end)
+        end
+    end)
+    
+    print(">>> [BSS] Auto Rejoin активирован. Ссылка загружена.")
+end
+
+-- ============================================================
 -- [ UI ФРЕЙМВОРК ]
 -- ============================================================
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "BSS_Hub"
 ScreenGui.ResetOnSpawn = false
--- Убрали IgnoreGuiInset = true, он часто крашит мобилки
 ScreenGui.DisplayOrder = 999
 ScreenGui.Parent = PGui
 
 local MainFrame = Instance.new("Frame")
-MainFrame.Size = UDim2.new(0, 280, 0, 400)
-MainFrame.Position = UDim2.new(0.5, -140, 0.5, -200)
+MainFrame.Size = UDim2.new(0, 280, 0, 420)
+MainFrame.Position = UDim2.new(0.5, -140, 0.5, -210)
 MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
 MainFrame.Parent = ScreenGui
 Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 12)
-
 local MainStroke = Instance.new("UIStroke", MainFrame)
 MainStroke.Color = Color3.fromRGB(255, 180, 0)
 MainStroke.Thickness = 2
@@ -102,7 +181,7 @@ MainStroke.Thickness = 2
 local Title = Instance.new("TextLabel")
 Title.Size = UDim2.new(1, 0, 0, 35)
 Title.BackgroundTransparency = 1
-Title.Text = "BSS ULTIMATE HUB v6.3"
+Title.Text = "BSS ULTIMATE HUB v7.1"
 Title.TextColor3 = Color3.fromRGB(255, 180, 0)
 Title.Font = Enum.Font.GothamBold
 Title.TextSize = 16
@@ -178,7 +257,7 @@ end
 -- ============================================================
 -- [ ФУНКЦИИ UI ]
 -- ============================================================
-local function CreateToggle(parent, yPos, text, stateKey)
+local function CreateToggle(parent, yPos, text, stateKey, callback)
     local Btn = Instance.new("TextButton")
     Btn.Size = UDim2.new(0, 260, 0, 35)
     Btn.Position = UDim2.new(0, 0, 0, yPos)
@@ -199,8 +278,8 @@ local function CreateToggle(parent, yPos, text, stateKey)
     Btn.MouseButton1Click:Connect(function()
         STATE[stateKey] = not STATE[stateKey]
         updateUI()
+        if callback then callback(STATE[stateKey]) end
     end)
-    
     table.insert(UI_References.Toggles, updateUI)
 end
 
@@ -220,6 +299,7 @@ local function CreateFieldDropdown(parent, yPos, titleText, stateKey)
     DropdownBtn.TextSize = 12
     DropdownBtn.Parent = Container
     DropdownBtn.Active = true
+    DropdownBtn.ZIndex = 5
     Instance.new("UICorner", DropdownBtn).CornerRadius = UDim.new(0, 6)
 
     local ListFrame = Instance.new("ScrollingFrame")
@@ -227,17 +307,19 @@ local function CreateFieldDropdown(parent, yPos, titleText, stateKey)
     ListFrame.Position = UDim2.new(0, 0, 0, 40)
     ListFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
     ListFrame.BorderSizePixel = 0
-    ListFrame.ScrollBarThickness = 2
+    ListFrame.ScrollBarThickness = 4
     ListFrame.Visible = false
     ListFrame.ZIndex = 10
+    ListFrame.CanvasSize = UDim2.new(0, 0, 0, #SORTED_FIELDS * 27)
     ListFrame.Parent = Container
     Instance.new("UICorner", ListFrame).CornerRadius = UDim.new(0, 6)
 
     local ListLayout = Instance.new("UIListLayout")
     ListLayout.Padding = UDim.new(0, 2)
+    ListLayout.SortOrder = Enum.SortOrder.LayoutOrder
     ListLayout.Parent = ListFrame
 
-    for fieldName, _ in pairs(ALL_FIELDS) do
+    for _, fieldName in ipairs(SORTED_FIELDS) do
         local Item = Instance.new("TextButton")
         Item.Size = UDim2.new(0.95, 0, 0, 25)
         Item.BackgroundColor3 = (STATE[stateKey] == fieldName) and Color3.fromRGB(255, 180, 0) or Color3.fromRGB(40, 40, 45)
@@ -247,6 +329,7 @@ local function CreateFieldDropdown(parent, yPos, titleText, stateKey)
         Item.TextSize = 11
         Item.Parent = ListFrame
         Item.Active = true
+        Item.ZIndex = 11
         Instance.new("UICorner", Item).CornerRadius = UDim.new(0, 4)
 
         Item.MouseButton1Click:Connect(function()
@@ -313,7 +396,6 @@ local function CreateSlider(parent, yPos, titleText, minVal, maxVal, stateKey, c
     Instance.new("UICorner", Bar).CornerRadius = UDim.new(1, 0)
 
     local initialRatio = (STATE[stateKey] - minVal) / (maxVal - minVal)
-    
     local Fill = Instance.new("Frame")
     Fill.Size = UDim2.new(initialRatio, 0, 1, 0)
     Fill.BackgroundColor3 = Color3.fromRGB(255, 180, 0)
@@ -336,11 +418,9 @@ local function CreateSlider(parent, yPos, titleText, minVal, maxVal, stateKey, c
     HitBox.Active = true
 
     local isDragging = false
-
     local function updateValue(inputX)
         local ratio = clamp((inputX - Bar.AbsolutePosition.X) / Bar.AbsoluteSize.X, 0, 1)
         local value = math.floor(minVal + (maxVal - minVal) * ratio)
-        
         STATE[stateKey] = value
         Label.Text = titleText .. ": " .. tostring(value)
         Fill.Size = UDim2.new(ratio, 0, 1, 0)
@@ -350,17 +430,14 @@ local function CreateSlider(parent, yPos, titleText, minVal, maxVal, stateKey, c
 
     HitBox.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            isDragging = true
-            updateValue(input.Position.X)
+            isDragging = true; updateValue(input.Position.X)
         end
     end)
-
     UserInputService.InputChanged:Connect(function(input)
         if isDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
             updateValue(input.Position.X)
         end
     end)
-
     UserInputService.InputEnded:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             isDragging = false
@@ -404,6 +481,7 @@ npcListFrame.Position = UDim2.new(0, 0, 0, 20)
 npcListFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
 npcListFrame.BorderSizePixel = 0
 npcListFrame.ScrollBarThickness = 2
+npcListFrame.CanvasSize = UDim2.new(0, 0, 0, #npcNames * 26)
 npcListFrame.Parent = QuestPage
 Instance.new("UICorner", npcListFrame).CornerRadius = UDim.new(0, 6)
 
@@ -444,51 +522,116 @@ CreateToggle(QuestPage, 240, "Auto Quest", "AutoQuest")
 local PlayerPage = CreateTab("Player")
 CreateSlider(PlayerPage, 0, "WalkSpeed (Скорость)", 0, 120, "WalkSpeed", function(val)
     local char = LP.Character
-    if char and char:FindFirstChildOfClass("Humanoid") then
-        char.Humanoid.WalkSpeed = val
-    end
+    if char and char:FindFirstChildOfClass("Humanoid") then char.Humanoid.WalkSpeed = val end
 end)
 CreateSlider(PlayerPage, 60, "JumpPower (Прыжок)", 0, 200, "JumpPower", function(val)
     local char = LP.Character
-    if char and char:FindFirstChildOfClass("Humanoid") then
-        char.Humanoid.JumpPower = val
-        char.Humanoid.UseJumpPower = true
+    if char and char:FindFirstChildOfClass("Humanoid") then 
+        char.Humanoid.JumpPower = val; char.Humanoid.UseJumpPower = true 
     end
 end)
 
+-- ============================================================
+-- [ ВКЛАДКА OTHER ]
+-- ============================================================
 local OtherPage = CreateTab("Other")
-local function SaveSettings()
-    local data = {
-        AutoPollen = STATE.AutoPollen, AutoToken = STATE.AutoToken, AutoConvert = STATE.AutoConvert, AutoQuest = STATE.AutoQuest,
-        CurrentField = STATE.CurrentField, CurrentQuestNPC = STATE.CurrentQuestNPC,
-        QuestFieldRed = STATE.QuestFieldRed, QuestFieldWhite = STATE.QuestFieldWhite, QuestFieldBlue = STATE.QuestFieldBlue,
-        WalkSpeed = STATE.WalkSpeed, JumpPower = STATE.JumpPower
-    }
-    local success, err = pcall(function() writefile("BB_BSS_Config.json", HttpService:JSONEncode(data)) end)
-    if success then print(">>> [BSS] Настройки сохранены!") else print(">>> [BSS] Ошибка сохранения.") end
-end
 
-local function LoadSettings()
-    local success, data = pcall(function()
-        if isfile and isfile("BB_BSS_Config.json") then return HttpService:JSONDecode(readfile("BB_BSS_Config.json")) end
-    end)
-    if success and data then
-        for k, v in pairs(data) do if STATE[k] ~= nil then STATE[k] = v end end
-        for _, update in ipairs(UI_References.Toggles) do update() end
-        for _, update in ipairs(UI_References.Dropdowns) do update() end
-        for _, update in ipairs(UI_References.Sliders) do update() end
-        local char = LP.Character
-        if char and char:FindFirstChildOfClass("Humanoid") then
-            char.Humanoid.WalkSpeed = STATE.WalkSpeed
-            char.Humanoid.JumpPower = STATE.JumpPower
-            char.Humanoid.UseJumpPower = true
+local ProfileNameBox = Instance.new("TextBox")
+ProfileNameBox.Size = UDim2.new(0, 260, 0, 35)
+ProfileNameBox.Position = UDim2.new(0, 0, 0, 0)
+ProfileNameBox.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+ProfileNameBox.PlaceholderText = "Имя профиля..."
+ProfileNameBox.Text = ""
+ProfileNameBox.TextColor3 = Color3.new(1,1,1)
+ProfileNameBox.Font = Enum.Font.Gotham
+ProfileNameBox.TextSize = 12
+ProfileNameBox.Parent = OtherPage
+Instance.new("UICorner", ProfileNameBox).CornerRadius = UDim.new(0, 6)
+_G.BSS_ProfileNameBox = ProfileNameBox
+
+CreateButton(OtherPage, 40, "Save Profile", function() SaveSettings() end, Color3.fromRGB(60, 180, 100))
+
+local ProfileList = Instance.new("ScrollingFrame")
+ProfileList.Size = UDim2.new(0, 260, 0, 120)
+ProfileList.Position = UDim2.new(0, 0, 0, 80)
+ProfileList.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+ProfileList.BorderSizePixel = 0
+ProfileList.ScrollBarThickness = 2
+ProfileList.CanvasSize = UDim2.new(0, 0, 0, 0)
+ProfileList.AutomaticCanvasSize = Enum.AutomaticSize.Y
+ProfileList.Parent = OtherPage
+Instance.new("UICorner", ProfileList).CornerRadius = UDim.new(0, 6)
+
+local ProfileLayout = Instance.new("UIListLayout")
+ProfileLayout.Padding = UDim.new(0, 2)
+ProfileLayout.Parent = ProfileList
+
+_G.BSS_RefreshProfiles = function()
+    for _, child in ipairs(ProfileList:GetChildren()) do
+        if child:IsA("TextButton") or child:IsA("Frame") then child:Destroy() end
+    end
+    
+    local files = {}
+    pcall(function()
+        if listfiles then
+            for _, f in ipairs(listfiles(PROFILE_FOLDER)) do
+                local match = f:match("(.+)%.json")
+                if match then table.insert(files, match) end
+            end
         end
-        print(">>> [BSS] Настройки загружены!")
-    else print(">>> [BSS] Файл конфигурации не найден.") end
+    end)
+    
+    if #files == 0 then
+        local lbl = Instance.new("TextLabel")
+        lbl.Size = UDim2.new(1, 0, 0, 25)
+        lbl.BackgroundTransparency = 1
+        lbl.Text = "Нет сохранений"
+        lbl.TextColor3 = Color3.fromRGB(150, 150, 150)
+        lbl.Font = Enum.Font.Gotham
+        lbl.TextSize = 11
+        lbl.Parent = ProfileList
+        return
+    end
+
+    for _, name in ipairs(files) do
+        local row = Instance.new("Frame")
+        row.Size = UDim2.new(1, 0, 0, 25)
+        row.BackgroundTransparency = 1
+        row.Parent = ProfileList
+
+        local loadBtn = Instance.new("TextButton")
+        loadBtn.Size = UDim2.new(0.6, -2, 1, 0)
+        loadBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
+        loadBtn.Text = name
+        loadBtn.TextColor3 = Color3.new(1,1,1)
+        loadBtn.Font = Enum.Font.GothamBold
+        loadBtn.TextSize = 11
+        loadBtn.Parent = row
+        Instance.new("UICorner", loadBtn).CornerRadius = UDim.new(0, 4)
+        loadBtn.MouseButton1Click:Connect(function() LoadSettings(name) end)
+
+        local autoBtn = Instance.new("TextButton")
+        autoBtn.Size = UDim2.new(0.4, -2, 1, 0)
+        autoBtn.Position = UDim2.new(0.6, 2, 0, 0)
+        autoBtn.BackgroundColor3 = Color3.fromRGB(100, 150, 255)
+        autoBtn.Text = "Set Auto"
+        autoBtn.TextColor3 = Color3.new(1,1,1)
+        autoBtn.Font = Enum.Font.GothamBold
+        autoBtn.TextSize = 10
+        autoBtn.Parent = row
+        Instance.new("UICorner", autoBtn).CornerRadius = UDim.new(0, 4)
+        autoBtn.MouseButton1Click:Connect(function()
+            pcall(function() writefile("BSS_AutoLoad.txt", name) end)
+            print(">>> [BSS] Профиль '" .. name .. "' установлен на авто-старт.")
+        end)
+    end
 end
 
-CreateButton(OtherPage, 0, "Save Settings", SaveSettings, Color3.fromRGB(60, 180, 100))
-CreateButton(OtherPage, 45, "Load Settings", LoadSettings, Color3.fromRGB(100, 150, 255))
+CreateToggle(OtherPage, 205, "Auto Rejoin", "AutoRejoin", function(enabled)
+    if enabled then SetupAutoRejoin() end
+end)
+
+_G.BSS_RefreshProfiles()
 
 -- ============================================================
 -- [ ОТЛАДКА И ЛОГИКА ]
@@ -619,6 +762,7 @@ local function GetNearestItem(keywords)
     return nearest, shortestDist
 end
 
+-- ЦИКЛЫ
 task.spawn(function()
     while task.wait(0.3) do
         if STATE.AutoToken and not STATE.IsConverting and not STATE.IsQuesting then
@@ -711,6 +855,29 @@ task.spawn(function()
     end
 end)
 
+-- АВТО-ЗАХВАТ БАЗЫ И АВТО-ЗАГРУЗКА ПРОФИЛЯ ПРИ СТАРТЕ
+task.spawn(function()
+    task.wait(3)
+    pcall(function()
+        if isfile and isfile("BSS_AutoLoad.txt") then
+            local autoName = readfile("BSS_AutoLoad.txt")
+            LoadSettings(autoName)
+            print(">>> [BSS] Авто-загрузка профиля: " .. autoName)
+        end
+    end)
+
+    local base = FindMyBase()
+    if base then 
+        STATE.MyBasePos = base; STATE.DebugText = "База найдена."
+    else 
+        ClaimNewBase() 
+    end
+end)
+
+Tabs[1].Page.Visible = true
+Tabs[1].Btn.BackgroundColor3 = Color3.fromRGB(255, 180, 0)
+Tabs[1].Btn.TextColor3 = Color3.new(0,0,0)
+
 task.spawn(function()
     while task.wait(0.1) do
         if DebugLabel and DebugLabel.Parent then
@@ -724,15 +891,4 @@ task.spawn(function()
     end
 end)
 
-task.spawn(function()
-    task.wait(2)
-    local base = FindMyBase()
-    if base then STATE.MyBasePos = base; STATE.DebugText = "База найдена."
-    else ClaimNewBase() end
-end)
-
-Tabs[1].Page.Visible = true
-Tabs[1].Btn.BackgroundColor3 = Color3.fromRGB(255, 180, 0)
-Tabs[1].Btn.TextColor3 = Color3.new(0,0,0)
-
-print(">>> [BSS] Скрипт успешно загружен. Меню создано.")
+print(">>> [BSS] Скрипт v7.1 загружен. Твоя ссылка для реконнекта установлена.")
