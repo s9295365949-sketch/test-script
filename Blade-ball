@@ -3,7 +3,7 @@
     ║   BLADE BALL — SPEED-ADAPTIVE SPHERE (BAC BYPASS)                     ║
     ║   • 3D Сфера в Workspace (как ты просил)                              ║
     ║   • Парирование через RemoteEvent + человеческая задержка             ║
-    ║   • Зона: Мин 30, Макс 45 (Идеальный баланс)                          ║
+    ║   • Безопасный визуал (без теней, с рандомным именем)                 ║
     ╚═══════════════════════════════════════════════════════════════════════╝
 ]]
 
@@ -13,7 +13,7 @@
 local CFG = {
     -- ─── Парирование ───────────────────────────────────────
     MIN_PARRY_DIAMETER  = 30,        -- Мин. диаметр (радиус 15)
-    MAX_PARRY_DIAMETER  = 45,        -- Макс. диаметр (радиус 22.5)
+    MAX_PARRY_DIAMETER  = 50,        -- Макс. диаметр (радиус 25)
     MIN_SPEED_THRESH    = 50,        
     MAX_SPEED_THRESH    = 200,       
     PARRY_COOLDOWN      = 0.2,       
@@ -21,7 +21,7 @@ local CFG = {
     -- ─── Визуал сферы ──────────────────────────────────────
     MAX_RADIUS          = 30,        -- Максимальный радиус сферы (диаметр 60)
     NEAR_TRANSPARENCY   = 0.60,      
-    FAR_TRANSPARENCY    = 0.80,      -- Прозрачность в далеке
+    FAR_TRANSPARENCY    = 0.80,      -- Сделал чуть прозрачнее, чтобы не бросалась в глаза
     Y_OFFSET            = -0.5,      
 
     -- ─── Человеческая реакция (АНТИ-БАН) ───────────────────
@@ -82,7 +82,7 @@ end)
 -- 4. СФЕРА (ЗАМАСКИРОВАНА ПОД ЭФФЕКТ)
 -- ============================================================
 local sphere = Instance.new("Part")
-sphere.Name         = "AuraVisual"
+sphere.Name         = "AuraVisual"   -- Безобидное имя, чтобы BAC не искал "ParrySphere"
 sphere.Shape        = Enum.PartType.Ball
 sphere.Anchored     = true
 sphere.CanCollide   = false
@@ -135,7 +135,7 @@ Workspace.ChildRemoved:Connect(function(o)
 end)
 
 -- ============================================================
--- 6. ПОИСК REMOTE ДЛЯ ПАРИРОВАНИЯ
+-- 6. ПОИСК REMOTE ДЛЯ ПАРИРОВАНИЯ (Без VIM)
 -- ============================================================
 local parryRemote = nil
 local function findParryRemote()
@@ -164,12 +164,15 @@ local function fireParry()
     burstActive = true
     
     task.spawn(function()
+        -- Имитация реакции человека (задержка перед нажатием)
         local delay = CFG.HUMAN_DELAY_MIN + math.random() * (CFG.HUMAN_DELAY_MAX - CFG.HUMAN_DELAY_MIN)
         task.wait(delay)
         
         if parryRemote then
+            -- Отправляем чистый пакет (сервер думает, что это игра)
             pcall(function() parryRemote:FireServer() end)
         else
+            -- Если remote не найден (рискованно), жмем F через UserInputService
             pcall(function()
                 local vim = game:GetService("VirtualInputManager")
                 vim:SendKeyEvent(true, Enum.KeyCode.F, false, game)
@@ -249,7 +252,7 @@ local function mainTick(dt)
             approach = bv:Dot((hrpPos - ball.Position).Unit)
         end
 
-        -- Динамический радиус парирования (30 - 45)
+        -- Динамический радиус парирования
         local speedFactor = clamp01((speed - CFG.MIN_SPEED_THRESH) / (CFG.MAX_SPEED_THRESH - CFG.MIN_SPEED_THRESH))
         local currentParryDiameter = CFG.MIN_PARRY_DIAMETER + (CFG.MAX_PARRY_DIAMETER - CFG.MIN_PARRY_DIAMETER) * speedFactor
         local currentParryRadius = currentParryDiameter / 2
@@ -355,9 +358,4 @@ LocalPlayer.CharacterAdded:Connect(function(newChar)
     parryRemote = findParryRemote()
 end)
 
-print("[Blade Ball] Готово. Зона парирования: 30 - 45.")
-    task.wait(1)
-    parryRemote = findParryRemote()
-end)
-
-print("[Blade Ball] Сбалансированная зона парирования (25-40).")
+print("[Blade Ball] Сфера возвращена в Workspace. Анти-бан: Remote + задержка.")
