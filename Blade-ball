@@ -1,9 +1,9 @@
 --[[
     ╔═══════════════════════════════════════════════════════════════════════╗
-    ║   BLADE BALL — GIANT SPHERE + ULTRA EARLY (0.45s)                     ║
-    ║   • Радиус сферы 40 (Огромный шар)                                    ║
-    ║   • Без кликов по экрану (только Remote + F)                          ║
-    ║   • Предсказание за 0.45 сек до удара                                 ║
+    ║   BLADE BALL — COMPACT SPHERE + SLOW BALL FIX                         ║
+    ║   • Сфера уменьшена на 50% (радиус 20, макс 30)                       ║
+    ║   • Ловит медленные мячи (порог скорости снижен)                      ║
+    ║   • Предсказание за 0.45 сек (защита от быстрых)                      ║
     ╚═══════════════════════════════════════════════════════════════════════╝
 ]]
 
@@ -23,8 +23,8 @@ if PlayerGui:FindFirstChild("BBDebug") then PlayerGui.BBDebug:Destroy() end
 if PlayerGui:FindFirstChild("BBMenu") then PlayerGui.BBMenu:Destroy() end
 
 local CFG = {
-    PARRY_RADIUS        = 40,        -- ОГРОМНЫЙ РАДИУС (было 15)
-    MAX_RADIUS          = 60,        -- МАКСИМАЛЬНЫЙ РАЗМЕР СФЕРЫ (было 25)
+    PARRY_RADIUS        = 20,        -- УМЕНЬШЕНО НА 50% (было 40)
+    MAX_RADIUS          = 30,        -- УМЕНЬШЕНО НА 50% (было 60)
     PARRY_COOLDOWN      = 0.25,      
     PARRY_ENABLED       = true,
     SPHERE_VISIBLE      = true,      
@@ -32,7 +32,7 @@ local CFG = {
     COLOR_INSIDE        = Color3.fromRGB(255, 30, 30),
     COLOR_OUTSIDE       = Color3.fromRGB(30, 255, 50),
     
-    PREDICT_TIME        = 0.45,      -- Срабатывать за 0.45 сек до удара (УЛЬТРА РАНО)
+    PREDICT_TIME        = 0.45,      -- Срабатывание за 0.45 сек до удара
 }
 
 -- 1. ПИНГ
@@ -183,7 +183,7 @@ Workspace.ChildAdded:Connect(function(o)
     end
 end)
 
--- 7. ПАРИРОВАНИЕ (БЕЗ КЛИКОВ ПО ЭКРАНУ)
+-- 7. ПАРИРОВАНИЕ
 local lastParry = 0
 local lastAction = "None"
 
@@ -191,22 +191,17 @@ local function executeParry()
     if not CFG.PARRY_ENABLED then return end
     if tick() - lastParry < CFG.PARRY_COOLDOWN then return end
 
-    local fired = false
-
-    -- 1. Отправляем Remote (мгновенно)
     if parryRemote then
         pcall(function() parryRemote:FireServer() end)
-        fired = true
+        lastAction = "Remote Fired"
     end
 
-    -- 2. Жмем клавишу F (мгновенно, без кликов по UI)
     pcall(function()
         VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.F, false, game)
         task.wait(0.02)
         VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.F, false, game)
     end)
 
-    lastAction = "F + Remote"
     lastParry = tick()
 end
 
@@ -257,10 +252,11 @@ RunService.Heartbeat:Connect(function(dt)
                 local moveVec = bp - prevPos
                 speed = moveVec.Magnitude / dt
                 
-                if speed > 5 then
+                -- СНИЖЕН ПОРОГ С 5 ДО 1 (для медленных мячей)
+                if speed > 1 then 
                     local dirToMe = (hrpPos - bp).Unit
                     local dot = moveVec.Unit:Dot(dirToMe)
-                    if dot > 0.7 then 
+                    if dot > 0.5 then -- Расширен угол
                         approachSpeed = speed * dot
                     end
                 end
@@ -271,22 +267,20 @@ RunService.Heartbeat:Connect(function(dt)
             
             if tVal and (tVal == LocalPlayer.Name or tostring(tVal) == LocalPlayer.Name) then 
                 isTargetingMe = true 
-            elseif approachSpeed > 10 then
+            elseif approachSpeed > 2 or (speed > 2 and dist < CFG.PARRY_RADIUS) then -- Снижен порог с 10 до 2
                 isTargetingMe = true 
             end
 
             if isTargetingMe then
-                if approachSpeed > 5 then
+                if approachSpeed > 2 then
                     dbg_time = dist / approachSpeed
                 end
 
                 dbg_status = "Incoming!"
                 
-                -- Сфера теперь реально сжимается от 60 до 40
                 local targetRadius = math.clamp(dist, CFG.PARRY_RADIUS, CFG.MAX_RADIUS)
                 targetDiameter = targetRadius * 2
                 
-                -- СРАБАТЫВАНИЕ: если времени меньше 0.45 сек
                 if dbg_time <= CFG.PREDICT_TIME or dist <= CFG.PARRY_RADIUS then
                     executeParry()
                     dbg_status = "PARRY!"
