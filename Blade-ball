@@ -1,50 +1,78 @@
 --[[
     ╔═══════════════════════════════════════════════════════════════════════╗
-    ║   BLADE BALL — STEALTH 3D SPHERE (EARLY PARRY)                        ║
-    ║   • Сфера в 3D, но привязана к Camera (сервер её НЕ ВИДИТ)            ║
-    ║   • Увеличенный радиус парирования (срабатывает заранее)              ║
-    ║   • Высокая прозрачность (не мешает обзору)                           ║
+    ║   BLADE BALL — SPEED-ADAPTIVE SPHERE (F + LMB Dual Parry)             ║
+    ║   • Сфера сжимается с 60 до (30~50 в зависимости от скорости мяча)    ║
+    ║   • Парирование на F + ЛКМ одновременно                               ║
+    ║   • Увеличенная зона парирования (радиус 15-25 стабсов)               ║
     ╚═══════════════════════════════════════════════════════════════════════╝
 ]]
 
+-- ============================================================
+-- 1. НАСТРОЙКИ
+-- ============================================================
 local CFG = {
-    -- ─── Настройки парирования (УВЕЛИЧЕНЫ) ─────────────────
-    MIN_PARRY_DIAMETER  = 35,        -- Мин. диаметр (срабатывает заранее)
-    MAX_PARRY_DIAMETER  = 55,        -- Макс. диаметр (для очень быстрых мячей)
-    MIN_SPEED_THRESH    = 50,        
-    MAX_SPEED_THRESH    = 200,       
-    PARRY_COOLDOWN      = 0.2,       
+    -- ─── Парирование (УВЕЛИЧЕНО) ───────────────────────────
+    MIN_PARRY_DIAMETER  = 30,        -- Мин. диаметр (на низкой скорости) = 15 радиус
+    MAX_PARRY_DIAMETER  = 50,        -- Макс. диаметр (на высокой скорости) = 25 радиус
+    MIN_SPEED_THRESH    = 50,        -- Скорость, ниже которой диаметр = MIN_PARRY_DIAMETER
+    MAX_SPEED_THRESH    = 200,       -- Скорость, выше которой диаметр = MAX_PARRY_DIAMETER
+    PARRY_COOLDOWN      = 0.15,      
+    PARRY_KEY           = Enum.KeyCode.F,
 
     -- ─── Визуал сферы ──────────────────────────────────────
-    MAX_RADIUS          = 25,        -- Максимальный радиус (50 диаметр)
-    NEAR_TRANSPARENCY   = 0.65,      -- Прозрачность в близи (было 0.6)
-    FAR_TRANSPARENCY    = 0.85,      -- Прозрачность в далеке (было 0.7, теперь почти невидима)
-    Y_OFFSET            = -0.5,      -- Высота сферы (пояс)
+    MAX_RADIUS          = 30,        -- Максимальный радиус сферы (диаметр 60)
+    NEAR_TRANSPARENCY   = 0.60,      -- 60% в близи
+    FAR_TRANSPARENCY    = 0.70,      -- 70% в далеке
+    Y_OFFSET            = -0.5,      
 
-    -- ─── Безопасность и Предиктивка ────────────────────────
-    HUMAN_DELAY_MIN     = 0.02,      -- Задержка реакции (сделали меньше, чтобы не опаздывать)
-    HUMAN_DELAY_MAX     = 0.08,      
-    PREDICT_FRAMES      = 3,         -- Увеличено для раннего срабатывания
-    MIN_AHEAD           = 0.10,      -- Увеличено
-    MAX_AHEAD           = 0.30,      -- Увеличено
+    -- ─── Предиктивка ───────────────────────────────────────
+    PREDICT_FRAMES      = 2,
+    MIN_AHEAD           = 0.06,
+    MAX_AHEAD           = 0.25,
+    
+    -- ─── Сглаживание и анимация ────────────────────────────
+    DAMP_LAMBDA         = 14,
+    PULSE_SPEED         = 2.2,       
+    PULSE_SIZE_AMPL     = 0.04,      
+    PULSE_ALPHA_AMPL    = 0.04,      
+    BOB_SPEED           = 1.8,       
+    BOB_AMPLITUDE       = 0.15,      
+    BRIGHTNESS_PULSE    = 0.10,      
 
     -- ─── Цвета ─────────────────────────────────────────────
-    COLOR_INSIDE  = Color3.fromRGB(255, 30, 30),    -- Красный (опасность)
+    COLOR_INSIDE  = Color3.fromRGB(255, 30, 30),    -- Красный (мяч пересек границу)
     COLOR_OUTSIDE = Color3.fromRGB(30, 255, 50),    -- Зеленый (безопасно)
+
+    DEBUG = false,                   
 }
 
-local Players           = game:GetService("Players")
-local RunService        = game:GetService("RunService")
-local Workspace         = game:GetService("Workspace")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local VirtualInputManager = game:GetService("VirtualInputManager")
-local Stats             = game:GetService("Stats")
+-- ============================================================
+-- 2. СЕРВИСЫ
+-- ============================================================
+local function svc(name)
+    local ok, s = pcall(function() return cloneref(game:GetService(name)) end)
+    return ok and s or game:GetService(name)
+end
+
+local Players           = svc("Players")
+local RunService        = svc("RunService")
+local UserInputService  = svc("UserInputService")
+local VirtualInputManager = svc("VirtualInputManager")
+local Workspace         = svc("Workspace")
+local Stats             = svc("Stats")
+local ReplicatedStorage = svc("ReplicatedStorage")
 
 local LocalPlayer = Players.LocalPlayer
 local Character   = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 local HRP         = Character:WaitForChild("HumanoidRootPart", 10)
 
--- Кэш пинга
+-- ============================================================
+-- 3. УТИЛИТЫ
+-- ============================================================
+local function jitter(base) return base * (0.6 + math.random() * 0.8) end
+local function damp(cur, tgt, lambda, dt) return tgt + (cur - tgt) * math.exp(-lambda * dt) end
+local function clamp01(x) return math.clamp(x, 0, 1) end
+
 local pingCache = 0.05
 task.spawn(function()
     while task.wait(1) do
@@ -54,10 +82,10 @@ task.spawn(function()
 end)
 
 -- ============================================================
--- 1. 3D СФЕРА (Привязана к Камере = Локальная)
+-- 4. СФЕРА
 -- ============================================================
 local sphere = Instance.new("Part")
-sphere.Name         = "StealthSphere"
+sphere.Name         = "ParrySphere"
 sphere.Shape        = Enum.PartType.Ball
 sphere.Anchored     = true
 sphere.CanCollide   = false
@@ -68,58 +96,17 @@ sphere.Material     = Enum.Material.ForceField
 sphere.Color        = CFG.COLOR_OUTSIDE
 sphere.Transparency = CFG.FAR_TRANSPARENCY
 sphere.Size         = Vector3.new(CFG.MAX_RADIUS * 2, CFG.MAX_RADIUS * 2, CFG.MAX_RADIUS * 2)
--- ВАЖНО: Родитель - Camera. Сервер и другие игроки её не видят!
-sphere.Parent       = Workspace.CurrentCamera 
+sphere.Parent       = Workspace
 
 -- ============================================================
--- 2. ПОИСК REMOTE ДЛЯ ПАРИРОВАНИЯ
--- ============================================================
-local parryRemote = nil
-local function findParryRemote()
-    local searchRoots = {ReplicatedStorage, Workspace, LocalPlayer}
-    for _, root in ipairs(searchRoots) do
-        for _, obj in ipairs(root:GetDescendants()) do
-            if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
-                local n = obj.Name:lower()
-                if n:find("parry") or n:find("block") or n:find("deflect") or n:find("swing") then
-                    return obj
-                end
-            end
-        end
-    end
-end
-parryRemote = findParryRemote()
-
-local lastParry = 0
-local function fireParry()
-    local now = tick()
-    if now - lastParry >= CFG.PARRY_COOLDOWN then
-        lastParry = now
-        task.spawn(function()
-            local delay = CFG.HUMAN_DELAY_MIN + math.random() * (CFG.HUMAN_DELAY_MAX - CFG.HUMAN_DELAY_MIN)
-            task.wait(delay)
-            
-            if parryRemote then
-                pcall(function()
-                    if parryRemote:IsA("RemoteEvent") then parryRemote:FireServer()
-                    else parryRemote:InvokeServer() end
-                end)
-            else
-                pcall(function()
-                    VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.F, false, game)
-                    task.wait(math.random(20, 50) / 1000)
-                    VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.F, false, game)
-                end)
-            end
-        end)
-    end
-end
-
--- ============================================================
--- 3. ПОИСК МЯЧА
+-- 5. ПОИСК МЯЧА
 -- ============================================================
 local cachedBall = nil
+
 local function findBall()
+    for _, o in ipairs(Workspace:GetChildren()) do
+        if o:IsA("BasePart") and o:GetAttribute("realBall") then return o end
+    end
     local bf = Workspace:FindFirstChild("Balls")
     if bf then
         for _, o in ipairs(bf:GetChildren()) do
@@ -127,14 +114,22 @@ local function findBall()
         end
     end
     for _, o in ipairs(Workspace:GetChildren()) do
-        if o:IsA("BasePart") and o:GetAttribute("realBall") then return o end
+        if o:IsA("BasePart") then
+            local n = o.Name:lower()
+            if (n == "ball" or n == "energyball" or n == "fireball" or n == "iceball" or n == "snowball") 
+               and not n:find("explosion") then
+                return o
+            end
+        end
     end
+    return nil
 end
-cachedBall = findBall()
 
+cachedBall = findBall()
 Workspace.ChildAdded:Connect(function(o)
-    if o:IsA("BasePart") and (o:GetAttribute("realBall") or o.Name:lower():find("ball")) then
-        if not cachedBall then cachedBall = o end
+    if o:IsA("BasePart") and not cachedBall then
+        local n = o.Name:lower()
+        if o:GetAttribute("realBall") or n == "ball" then cachedBall = o end
     end
 end)
 Workspace.ChildRemoved:Connect(function(o)
@@ -142,21 +137,99 @@ Workspace.ChildRemoved:Connect(function(o)
 end)
 
 -- ============================================================
--- 4. ГЛАВНЫЙ ЦИКЛ (Heartbeat = максимально часто)
+-- 6. ПАРИРОВАНИЕ (F + ЛКМ)
 -- ============================================================
-local currentRadius = CFG.MAX_RADIUS
-local currentColor = CFG.COLOR_OUTSIDE
+local parryRemote = nil
+local function findParryRemote()
+    local ok, found = pcall(function()
+        for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
+            if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
+                local n = obj.Name:lower()
+                if n:find("parry") or n:find("block") or n:find("deflect") or n:find("swing") then
+                    return obj
+                end
+            end
+        end
+    end)
+    return ok and found or nil
+end
+parryRemote = findParryRemote()
 
-local function damp(cur, tgt, lambda, dt) return tgt + (cur - tgt) * math.exp(-lambda * dt) end
-local function clamp01(x) return math.clamp(x, 0, 1) end
+local function sendParryOnce()
+    if parryRemote then
+        pcall(function()
+            if parryRemote:IsA("RemoteEvent") then parryRemote:FireServer()
+            else parryRemote:InvokeServer() end
+        end)
+    end
 
-RunService.Heartbeat:Connect(function(dt)
-    if not Character or not Character.Parent then Character = LocalPlayer.Character end
-    if not HRP or not HRP.Parent then HRP = Character and Character:FindFirstChild("HumanoidRootPart") end
-    if not HRP then 
-        sphere.Transparency = 1
+    pcall(function()
+        VirtualInputManager:SendKeyEvent(true, CFG.PARRY_KEY, false, game)
+        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 0)
+    end)
+    
+    task.wait(jitter(0.03))
+    
+    pcall(function()
+        VirtualInputManager:SendKeyEvent(false, CFG.PARRY_KEY, false, game)
+        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 0)
+    end)
+end
+
+local burstActive = false
+local function fireParry()
+    if burstActive then return end
+    burstActive = true
+    task.spawn(function()
+        local count = math.random(1, 2)
+        for i = 1, count do
+            sendParryOnce()
+            if i < count then task.wait(jitter(0.05)) end
+        end
+        task.wait(jitter(0.03))
+        burstActive = false
+    end)
+end
+
+-- ============================================================
+-- 7. ВИЗУАЛ
+-- ============================================================
+local lastState = { pos = Vector3.new(), size = -1, alpha = -1, color = Color3.new() }
+
+local function applySphere(center, diameter, transparency, color)
+    if (center - lastState.pos).Magnitude < 0.005 and math.abs(diameter - lastState.size) < 0.005 
+       and math.abs(transparency - lastState.alpha) < 0.003 
+       and (color.R - lastState.color.R)^2 + (color.G - lastState.color.G)^2 + (color.B - lastState.color.B)^2 < 0.0001 then
         return 
     end
+
+    lastState.pos, lastState.size, lastState.alpha, lastState.color = center, diameter, transparency, color
+
+    sphere.CFrame       = CFrame.new(center)
+    sphere.Size         = Vector3.new(diameter, diameter, diameter)
+    sphere.Transparency = transparency
+    sphere.Color        = color
+end
+
+-- ============================================================
+-- 8. СОСТОЯНИЕ
+-- ============================================================
+local state = {
+    diameter     = CFG.MAX_RADIUS * 2,
+    transparency = CFG.FAR_TRANSPARENCY,
+    color        = CFG.COLOR_OUTSIDE,
+    lastParry    = 0,
+    lastFlash    = 0,
+    phase        = 0,
+}
+
+-- ============================================================
+-- 9. ГЛАВНЫЙ ЦИКЛ (Heartbeat)
+-- ============================================================
+local function mainTick(dt)
+    if not Character or not Character.Parent then Character = LocalPlayer.Character end
+    if not HRP or not HRP.Parent then HRP = Character and Character:FindFirstChild("HumanoidRootPart") end
+    if not HRP then return end
 
     local humanoid = Character:FindFirstChildOfClass("Humanoid")
     if not humanoid or humanoid.Health <= 0 then
@@ -165,13 +238,14 @@ RunService.Heartbeat:Connect(function(dt)
     end
 
     if not cachedBall or not cachedBall.Parent then cachedBall = findBall() end
-    local ball = cachedBall
-    local hrpPos = HRP.Position
 
-    local targetRadius = CFG.MAX_RADIUS
-    local targetColor = CFG.COLOR_OUTSIDE
-    local targetTransparency = CFG.FAR_TRANSPARENCY
-    local doParry = false
+    local hrpPos = HRP.Position
+    local ball   = cachedBall
+
+    local tgtDiameter     = CFG.MAX_RADIUS * 2
+    local tgtTransparency = CFG.FAR_TRANSPARENCY
+    local tgtColor        = CFG.COLOR_OUTSIDE
+    local doParry         = false
 
     if ball then
         local dist = (hrpPos - ball.Position).Magnitude
@@ -184,59 +258,122 @@ RunService.Heartbeat:Connect(function(dt)
             approach = bv:Dot((hrpPos - ball.Position).Unit)
         end
 
-        -- Динамический радиус парирования (35 - 55)
+        -- ДИНАМИЧЕСКИЙ РАДИУС ПАРИРОВАНИЯ
         local speedFactor = clamp01((speed - CFG.MIN_SPEED_THRESH) / (CFG.MAX_SPEED_THRESH - CFG.MIN_SPEED_THRESH))
-        local parryDiameter = CFG.MIN_PARRY_DIAMETER + (CFG.MAX_PARRY_DIAMETER - CFG.MIN_PARRY_DIAMETER) * speedFactor
-        local parryRadius = parryDiameter / 2
+        local currentParryDiameter = CFG.MIN_PARRY_DIAMETER + (CFG.MAX_PARRY_DIAMETER - CFG.MIN_PARRY_DIAMETER) * speedFactor
+        local currentParryRadius = currentParryDiameter / 2
 
-        -- Проверка цели
+        -- Детект цели
         local targeting = false
+        local isOther = false
+
         local tVal = ball:GetAttribute("target") or ball:GetAttribute("Target")
-        if tVal and (tVal == LocalPlayer.Name or tostring(tVal) == LocalPlayer.Name or tVal == LocalPlayer) then
-            targeting = true
-        elseif Character:FindFirstChild("Highlight") then
-            targeting = true
-        elseif speed > 5 and approach > 10 and dist < 50 then
+                  or ball:GetAttribute("targetPlayer") or ball:GetAttribute("TargetPlayer")
+        if tVal then
+            if tVal == LocalPlayer.Name or tVal == LocalPlayer.UserId or tostring(tVal) == LocalPlayer.Name
+               or tVal == LocalPlayer or tVal == Character then
+                targeting = true
+            else
+                isOther = true
+            end
+        end
+
+        if not targeting and not isOther then
+            local hl = Character and Character:FindFirstChild("Highlight")
+            if hl and hl.Enabled then targeting = true end
+        end
+
+        -- Страховка по скорости (если мяч летит прямо в нас)
+        if not targeting and not isOther and speed > 5 and approach > 10 and dist < 40 then
             targeting = true
         end
 
         if targeting then
-            targetRadius = math.clamp(dist, parryRadius, CFG.MAX_RADIUS)
-            
-            -- Прозрачность: ближе = плотнее, дальше = прозрачнее
-            local u = clamp01((dist - parryRadius) / (CFG.MAX_RADIUS - parryRadius))
-            targetTransparency = CFG.NEAR_TRANSPARENCY + (CFG.FAR_TRANSPARENCY - CFG.NEAR_TRANSPARENCY) * u
+            -- Сфера сжимается от MAX_RADIUS до динамического currentParryRadius
+            local targetRadius = math.clamp(dist, currentParryRadius, CFG.MAX_RADIUS)
+            tgtDiameter = targetRadius * 2
 
-            if dist <= parryRadius then
-                targetColor = CFG.COLOR_INSIDE
-                targetTransparency = CFG.NEAR_TRANSPARENCY -- Вспышка плотности при опасности
+            -- Красный, если мяч внутри зоны парирования, иначе зеленый
+            local isInside = (dist <= (targetRadius - 0.5)) or (dist <= currentParryRadius)
+            tgtColor = isInside and CFG.COLOR_INSIDE or CFG.COLOR_OUTSIDE
+
+            -- Прозрачность
+            local u = clamp01((dist - currentParryRadius) / (CFG.MAX_RADIUS - currentParryRadius))
+            tgtTransparency = CFG.NEAR_TRANSPARENCY + (CFG.FAR_TRANSPARENCY - CFG.NEAR_TRANSPARENCY) * u
+
+            -- Срабатывание парирования
+            if dist <= currentParryRadius then
                 doParry = true
             end
             
-            -- Предиктивка (срабатывает еще ДО того, как мяч зайдет в зону)
+            -- Предиктивка
             if not doParry and approach > 0 then
                 local horizon = math.clamp(pingCache + CFG.PREDICT_FRAMES / 60, CFG.MIN_AHEAD, CFG.MAX_AHEAD)
-                if (dist - parryRadius) / approach <= horizon then 
+                if (dist - currentParryRadius) / approach <= horizon then 
                     doParry = true 
-                    targetColor = CFG.COLOR_INSIDE
                 end
             end
         end
     end
 
+    -- Триггер парирования
     if doParry then
-        fireParry()
+        local now = tick()
+        if now - state.lastParry >= CFG.PARRY_COOLDOWN then
+            fireParry()
+            state.lastParry = now
+            state.lastFlash = now
+        end
     end
 
-    -- Сглаживание визуала
-    currentRadius = damp(currentRadius, targetRadius, 14, dt)
-    currentColor = currentColor:Lerp(targetColor, 0.2)
+    -- Сглаживание
+    state.diameter     = damp(state.diameter,     tgtDiameter,     CFG.DAMP_LAMBDA, dt)
+    state.transparency = damp(state.transparency, tgtTransparency, CFG.DAMP_LAMBDA, dt)
+    state.color        = state.color:Lerp(tgtColor, clamp01(CFG.DAMP_LAMBDA * dt))
+
+    -- Анимация
+    state.phase = state.phase + dt * CFG.PULSE_SPEED
+    local pulse = math.sin(state.phase)
+
+    local finalDiameter = state.diameter * (1 + pulse * CFG.PULSE_SIZE_AMPL)
+    local finalTrans    = math.clamp(state.transparency + pulse * CFG.PULSE_ALPHA_AMPL, 0, 0.95)
     
-    -- Применяем к 3D-сфере
-    sphere.Size = Vector3.new(currentRadius * 2, currentRadius * 2, currentRadius * 2)
-    sphere.Color = currentColor
-    sphere.Transparency = damp(sphere.Transparency, targetTransparency, 10, dt)
-    sphere.CFrame = CFrame.new(hrpPos + Vector3.new(0, CFG.Y_OFFSET, 0))
+    local brightMul = 1 + pulse * CFG.BRIGHTNESS_PULSE
+    local finalColor = Color3.new(
+        math.clamp(state.color.R * brightMul, 0, 1),
+        math.clamp(state.color.G * brightMul, 0, 1),
+        math.clamp(state.color.B * brightMul, 0, 1)
+    )
+
+    if tick() - state.lastFlash < 0.12 then
+        finalColor = Color3.fromRGB(255, 255, 255)
+    end
+
+    local bob = math.sin(state.phase * (CFG.BOB_SPEED / CFG.PULSE_SPEED)) * CFG.BOB_AMPLITUDE
+    local center = Vector3.new(hrpPos.X, hrpPos.Y + CFG.Y_OFFSET + bob, hrpPos.Z)
+
+    applySphere(center, finalDiameter, finalTrans, finalColor)
+    sphere.Transparency = finalTrans
+end
+
+RunService.Heartbeat:Connect(function(dt)
+    local ok, err = pcall(mainTick, dt)
+    if not ok and CFG.DEBUG then warn("[BB] tick:", err) end
 end)
 
-print("[Stealth 3D] Активировано! Радиус парирования: 17.5 - 27.5 studs.")
+-- ============================================================
+-- 10. РЕСПАВН И СТАРТ
+-- ============================================================
+LocalPlayer.CharacterAdded:Connect(function(newChar)
+    Character = newChar
+    HRP       = newChar:WaitForChild("HumanoidRootPart", 10)
+    state.diameter    = CFG.MAX_RADIUS * 2
+    state.transparency = CFG.FAR_TRANSPARENCY
+    state.color       = CFG.COLOR_OUTSIDE
+    cachedBall  = nil
+    parryRemote = nil
+    task.wait(1)
+    parryRemote = findParryRemote()
+end)
+
+print("[Blade Ball] Готово | Зона парирования УВЕЛИЧЕНА (30-50) | Парир F + ЛКМ")
