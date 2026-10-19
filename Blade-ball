@@ -1,13 +1,13 @@
 --[[
     ╔═══════════════════════════════════════════════════════════════════════╗
-    ║   BLADE BALL — FULL MENU (FIXED BUTTONS)                              ║
-    ║   • Исправлено переключение кнопок (ВКЛ/ВЫКЛ)                         ║
-    ║   • Радиус парирования 25 (оптимально для сервера)                    ║
-    ║   • Авто-удаление старых GUI                                          ║
+    ║   BLADE BALL — ULTIMATE MOBILE FIX                                    ║
+    ║   • Кнопки работают через Activated (для мобилок)                     ║
+    ║   • Авто-поиск кнопки БЛОК на экране (если Remote не работает)        ║
+    ║   • Простой и надежный детект мяча                                    ║
     ╚═══════════════════════════════════════════════════════════════════════╝
 ]]
 
-print("▶️ 1. Запуск скрипта...")
+print("▶️ 1. Скрипт запущен...")
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -16,52 +16,70 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 
 local LocalPlayer = Players.LocalPlayer
-local PlayerGui = LocalPlayer:FindFirstChild("PlayerGui") or LocalPlayer:WaitForChild("PlayerGui", 10)
-if not PlayerGui then return end
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui", 10)
 
--- Удаляем старые GUI
-local oldDebug = PlayerGui:FindFirstChild("BBDebug")
-if oldDebug then oldDebug:Destroy() end
-local oldMenu = PlayerGui:FindFirstChild("BBMenu")
-if oldMenu then oldMenu:Destroy() end
+-- Удаляем старые версии
+if PlayerGui:FindFirstChild("BBDebug") then PlayerGui.BBDebug:Destroy() end
+if PlayerGui:FindFirstChild("BBMenu") then PlayerGui.BBMenu:Destroy() end
 
 local CFG = {
-    PARRY_RADIUS        = 25,        -- УМЕНЬШИЛИ ДО 25 (чтобы сервер засчитывал парир)
-    MAX_RADIUS          = 35,        -- Размер сферы
-    PARRY_COOLDOWN      = 0.25,      
+    PARRY_RADIUS        = 15,        -- Радиус (15 стабсов - идеально для сервера)
+    PARRY_COOLDOWN      = 0.2,       
     PARRY_ENABLED       = true,
     SPHERE_VISIBLE      = true,      
     Y_OFFSET            = -0.5,
     COLOR_INSIDE        = Color3.fromRGB(255, 30, 30),
     COLOR_OUTSIDE       = Color3.fromRGB(30, 255, 50),
-    USE_REMOTE          = true,
-    USE_F_KEY           = false,     -- ВЫКЛЮЧЕНО ДЛЯ БЕЗОПАСНОСТИ
 }
 
--- 1. СФЕРА
+-- 1. ПОИСК REMOTE И КНОПКИ
+local parryRemote = nil
+local parryButton = nil
+
+task.spawn(function()
+    for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
+        if obj:IsA("RemoteEvent") and obj.Name:lower():find("parry") then
+            parryRemote = obj
+            print("✅ Найден Remote: " .. obj.Name)
+            break
+        end
+    end
+end)
+
+local function findButton()
+    for _, obj in ipairs(PlayerGui:GetDescendants()) do
+        if obj:IsA("GuiButton") and obj.Visible then
+            local n = obj.Name:lower()
+            -- Ищем кнопку с именем Block, Parry или Deflect
+            if n:find("block") or n:find("parry") or n:find("deflect") then
+                return obj
+            end
+        end
+    end
+end
+
+-- 2. СФЕРА
 local sphere = Instance.new("Part")
 sphere.Name = "VisualEffect"
 sphere.Shape = Enum.PartType.Ball
 sphere.Anchored = true
 sphere.CanCollide = false
-sphere.CanTouch = false
 sphere.CanQuery = false
 sphere.CastShadow = false
-sphere.Massless = true
 sphere.Material = Enum.Material.ForceField
 sphere.Color = CFG.COLOR_OUTSIDE
 sphere.Transparency = 1
-sphere.Size = Vector3.new(CFG.MAX_RADIUS * 2, CFG.MAX_RADIUS * 2, CFG.MAX_RADIUS * 2)
+sphere.Size = Vector3.new(CFG.PARRY_RADIUS * 2, CFG.PARRY_RADIUS * 2, CFG.PARRY_RADIUS * 2)
 sphere.Parent = Workspace
 
--- 2. ОТЛАДЧИК
+-- 3. ОТЛАДЧИК
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "BBDebug"
 screenGui.ResetOnSpawn = false
 screenGui.Parent = PlayerGui
 
 local debugText = Instance.new("TextLabel")
-debugText.Size = UDim2.new(0, 280, 0, 120)
+debugText.Size = UDim2.new(0, 280, 0, 100)
 debugText.Position = UDim2.new(0, 10, 0, 60) 
 debugText.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 debugText.BackgroundTransparency = 0.5
@@ -70,10 +88,10 @@ debugText.Font = Enum.Font.Code
 debugText.TextSize = 12
 debugText.TextXAlignment = Enum.TextXAlignment.Left
 debugText.TextYAlignment = Enum.TextYAlignment.Top
-debugText.Text = "Ожидание мяча..."
+debugText.Text = "Ожидание..."
 debugText.Parent = screenGui
 
--- 3. МЕНЮ
+-- 4. МЕНЮ (ИСПРАВЛЕНО ПОД МОБИЛКИ)
 local menuGui = Instance.new("ScreenGui")
 menuGui.Name = "BBMenu"
 menuGui.ResetOnSpawn = false
@@ -90,70 +108,53 @@ menuBtn.Parent = menuGui
 Instance.new("UICorner", menuBtn).CornerRadius = UDim.new(1, 0)
 
 local menuFrame = Instance.new("Frame")
-menuFrame.Size = UDim2.new(0, 250, 0, 280)
-menuFrame.Position = UDim2.new(1, -270, 1, -380)
+menuFrame.Size = UDim2.new(0, 250, 0, 220)
+menuFrame.Position = UDim2.new(1, -270, 1, -320)
 menuFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
 menuFrame.Visible = false
 menuFrame.Parent = menuGui
 Instance.new("UICorner", menuFrame).CornerRadius = UDim.new(0, 10)
 
-local closeMenu = Instance.new("TextButton")
-closeMenu.Size = UDim2.new(0, 30, 0, 30)
-closeMenu.Position = UDim2.new(1, -35, 0, 5)
-closeMenu.BackgroundColor3 = Color3.fromRGB(200, 60, 60)
-closeMenu.Text = "X"
-closeMenu.TextColor3 = Color3.new(1,1,1)
-closeMenu.Parent = menuFrame
-Instance.new("UICorner", closeMenu).CornerRadius = UDim.new(0, 6)
-
--- ИСПРАВЛЕННАЯ ФУНКЦИЯ КНОПОК
 local function createToggle(yPos, text, cfKey)
     local btn = Instance.new("TextButton")
     btn.Size = UDim2.new(1, -20, 0, 40)
     btn.Position = UDim2.new(0, 10, 0, yPos)
-    btn.TextColor3 = Color3.new(1,1,1)
     btn.Font = Enum.Font.GothamBold
     btn.TextSize = 13
     btn.Parent = menuFrame
     Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
     
-    -- Функция обновления внешнего вида кнопки
     local function updateUI()
-        local state = CFG[cfKey] -- Берем актуальное значение из таблицы
+        local state = CFG[cfKey]
         btn.Text = text .. (state and " ВКЛ" or " ВЫКЛ")
         btn.BackgroundColor3 = state and Color3.fromRGB(60, 180, 100) or Color3.fromRGB(180, 60, 60)
+        btn.TextColor3 = Color3.new(1,1,1)
     end
     
-    updateUI() -- Ставим начальное значение при создании
+    updateUI()
 
-    btn.MouseButton1Click:Connect(function()
-        CFG[cfKey] = not CFG[cfKey] -- Переключаем значение
-        updateUI() -- Мгновенно обновляем кнопку
+    -- Используем Activated вместо MouseButton1Click (лучше для мобилок)
+    btn.Activated:Connect(function()
+        CFG[cfKey] = not CFG[cfKey]
+        updateUI()
     end)
 end
 
--- Создаем кнопки (передаем ключ из CFG)
-createToggle(50, "Парирование", "PARRY_ENABLED")
-createToggle(100, "Визуал сферы", "SPHERE_VISIBLE")
-createToggle(150, "Метод Remote", "USE_REMOTE")
-createToggle(200, "Метод F", "USE_F_KEY")
+createToggle(20, "Парирование", "PARRY_ENABLED")
+createToggle(70, "Визуал", "SPHERE_VISIBLE")
 
-menuBtn.MouseButton1Click:Connect(function() menuFrame.Visible = not menuFrame.Visible end)
-closeMenu.MouseButton1Click:Connect(function() menuFrame.Visible = false end)
+-- Кнопка закрытия меню
+local closeBtn = Instance.new("TextButton")
+closeBtn.Size = UDim2.new(0, 30, 0, 30)
+closeBtn.Position = UDim2.new(1, -35, 0, 5)
+closeBtn.BackgroundColor3 = Color3.fromRGB(200, 60, 60)
+closeBtn.Text = "X"
+closeBtn.TextColor3 = Color3.new(1,1,1)
+closeBtn.Parent = menuFrame
+Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0, 6)
 
--- 4. ПОИСК REMOTE
-local parryRemote = nil
-local remoteName = "None"
-for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
-    if obj:IsA("RemoteEvent") then
-        local n = obj.Name:lower()
-        if n:find("parry") or n:find("block") or n:find("deflect") or n:find("swing") or n:find("attempt") then
-            parryRemote = obj
-            remoteName = obj.Name
-            break
-        end
-    end
-end
+menuBtn.Activated:Connect(function() menuFrame.Visible = not menuFrame.Visible end)
+closeBtn.Activated:Connect(function() menuFrame.Visible = false end)
 
 -- 5. ПОИСК МЯЧА
 local cachedBall = nil
@@ -161,13 +162,15 @@ local function findBall()
     local bf = Workspace:FindFirstChild("Balls")
     if bf then for _, o in ipairs(bf:GetChildren()) do if o:IsA("BasePart") then return o end end end
     for _, o in ipairs(Workspace:GetChildren()) do
-        if o:IsA("BasePart") then
-            local n = o.Name:lower()
-            if (o:GetAttribute("realBall") or n:find("ball")) and not n:find("explosion") then return o end
-        end
+        if o:IsA("BasePart") and o:GetAttribute("realBall") then return o end
     end
 end
 cachedBall = findBall()
+Workspace.ChildAdded:Connect(function(o)
+    if o:IsA("BasePart") and (o:GetAttribute("realBall") or o.Name:lower():find("ball")) then
+        if not cachedBall then cachedBall = o end
+    end
+end)
 
 -- 6. ПАРИРОВАНИЕ
 local lastParry = 0
@@ -177,124 +180,87 @@ local function executeParry()
     if not CFG.PARRY_ENABLED then return end
     if tick() - lastParry < CFG.PARRY_COOLDOWN then return end
 
-    local fired = false
-    if CFG.USE_REMOTE and parryRemote then
-        pcall(function() parryRemote:FireServer() end)
-        fired = true
-    end
-    if CFG.USE_F_KEY then
+    -- Пытаемся нажать кнопку на экране
+    if not parryButton then parryButton = findButton() end
+    
+    if parryButton then
+        local pos = parryButton.AbsolutePosition
+        local size = parryButton.AbsoluteSize
         pcall(function()
-            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.F, false, game)
-            task.wait(0.02)
-            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.F, false, game)
+            VirtualInputManager:SendMouseButtonEvent(pos.X + size.X/2, pos.Y + size.Y/2, 0, true, game, 0)
+            task.wait(0.05)
+            VirtualInputManager:SendMouseButtonEvent(pos.X + size.X/2, pos.Y + size.Y/2, 0, false, game, 0)
         end)
-        fired = true
+        lastAction = "Button"
+    elseif parryRemote then
+        -- Если кнопки нет, шлем Remote
+        pcall(function() parryRemote:FireServer() end)
+        lastAction = "Remote"
     end
-
-    lastAction = fired and "Fired" or "None"
+    
     lastParry = tick()
 end
 
--- 7. ГЛАВНЫЙ ЦИКЛ
-local state = { diameter = CFG.MAX_RADIUS * 2, color = CFG.COLOR_OUTSIDE }
+-- 7. ЦИКЛ
 local lastBall = nil
-local prevBallPos = nil
+local prevPos = nil
 
-RunService.Heartbeat:Connect(function(dt)
-    local Character = LocalPlayer.Character
-    if not Character then return end
-    local HRP = Character:FindFirstChild("HumanoidRootPart")
-    if not HRP then return end
-    local humanoid = Character:FindFirstChildOfClass("Humanoid")
-    if not humanoid or humanoid.Health <= 0 then
-        sphere.Transparency = 1
-        return
-    end
+RunService.Heartbeat:Connect(function()
+    local char = LocalPlayer.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
 
     if not cachedBall or not cachedBall.Parent then cachedBall = findBall() end
     local ball = cachedBall
-    local hrpPos = HRP.Position
-
-    local tgtDiameter = CFG.MAX_RADIUS * 2
-    local tgtColor = CFG.COLOR_OUTSIDE
-    local dbg_status = "Safe"
-    local dbg_dist = 0
+    local hrpPos = hrp.Position
+    
     local dbg_ball = "NO"
+    local dbg_dist = 0
+    local dbg_status = "Safe"
 
     if ball then
         dbg_ball = "YES"
-        local ballPos = ball.Position
-        local dist = (hrpPos - ballPos).Magnitude
+        local bp = ball.Position
+        local dist = (hrpPos - bp).Magnitude
         dbg_dist = dist
-        
+
         if lastBall ~= ball then
-            prevBallPos = ballPos
+            prevPos = bp
             lastBall = ball
         end
 
-        -- Проверка траектории (Swept Collision)
-        local hitTrajectory = false
-        if prevBallPos then
-            local ab = ballPos - prevBallPos
-            local ap = hrpPos - prevBallPos
-            local abLenSq = ab:Dot(ab)
-            if abLenSq > 0 then
-                local t = math.clamp(ap:Dot(ab) / abLenSq, 0, 1)
-                local closest = prevBallPos + ab * t
-                if (hrpPos - closest).Magnitude <= CFG.PARRY_RADIUS then
-                    hitTrajectory = true
-                end
-            end
+        -- Простой детект: летит ли в нас
+        local isMoving = prevPos and (bp - prevPos).Magnitude > 0.5
+        local isTargetingMe = false
+        
+        local tVal = ball:GetAttribute("target")
+        if tVal and (tVal == LocalPlayer.Name or tostring(tVal) == LocalPlayer.Name) then 
+            isTargetingMe = true 
+        elseif isMoving and dist < 50 then
+            isTargetingMe = true 
         end
 
-        local hitInside = (dist <= CFG.PARRY_RADIUS)
-
-        local targeting = false
-        local tVal = ball:GetAttribute("target") or ball:GetAttribute("Target")
-        if tVal and (tVal == LocalPlayer.Name or tostring(tVal) == LocalPlayer.Name) then targeting = true
-        elseif Character:FindFirstChild("Highlight") then targeting = true
-        elseif (ballPos - (prevBallPos or ballPos)).Magnitude > 1 and dist < 100 then targeting = true end
-
-        if targeting then
-            local targetRadius = math.clamp(dist, CFG.PARRY_RADIUS, CFG.MAX_RADIUS)
-            tgtDiameter = targetRadius * 2
-            tgtColor = (hitInside or hitTrajectory) and CFG.COLOR_INSIDE or CFG.COLOR_OUTSIDE
-
-            if hitTrajectory or hitInside then
+        if isTargetingMe then
+            dbg_status = "Incoming!"
+            if dist <= CFG.PARRY_RADIUS then
                 executeParry()
-                dbg_status = hitTrajectory and "Hit Path!" or "Hit Inside!"
+                dbg_status = "PARRY!"
             end
         end
-        prevBallPos = ballPos
-    else
-        lastBall = nil
-        prevBallPos = nil
+        prevPos = bp
     end
 
-    if debugText and debugText.Parent then
-        debugText.Text = string.format("Ball: %s\nDist: %.1f\nStatus: %s\nMethod: %s\nRemote: %s", 
-            dbg_ball, dbg_dist, dbg_status, lastAction, remoteName)
-    end
+    debugText.Text = string.Format("Ball: %s\nDist: %.1f\nStatus: %s\nMethod: %s", 
+        dbg_ball, dbg_dist, dbg_status, lastAction)
 
     -- Визуал
-    if sphere and sphere.Parent then
-        if CFG.SPHERE_VISIBLE then
-            state.diameter = state.diameter + (tgtDiameter - state.diameter) * math.exp(-14 * dt)
-            state.color = state.color:Lerp(tgtColor, math.clamp(14 * dt, 0, 1))
-            sphere.CFrame = CFrame.new(hrpPos.X, hrpPos.Y + CFG.Y_OFFSET, hrpPos.Z)
-            sphere.Size = Vector3.new(state.diameter, state.diameter, state.diameter)
-            sphere.Transparency = 0.7
-            sphere.Color = state.color
-        else
-            sphere.Transparency = 1 
-        end
+    if CFG.SPHERE_VISIBLE then
+        sphere.CFrame = CFrame.new(hrpPos.X, hrpPos.Y + CFG.Y_OFFSET, hrpPos.Z)
+        sphere.Size = Vector3.new(CFG.PARRY_RADIUS * 2, CFG.PARRY_RADIUS * 2, CFG.PARRY_RADIUS * 2)
+        sphere.Transparency = (dbg_status == "PARRY!") and 0.3 or 0.7
+        sphere.Color = (dbg_status == "PARRY!") and CFG.COLOR_INSIDE or CFG.COLOR_OUTSIDE
+    else
+        sphere.Transparency = 1
     end
 end)
-
-LocalPlayer.CharacterAdded:Connect(function(newChar)
-    cachedBall = nil
-    lastBall = nil
-    prevBallPos = nil
-end)
-
-print("✅ Скрипт запущен. Кнопки исправлены.")
