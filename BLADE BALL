@@ -12,6 +12,7 @@
     ║   COOLDOWN: 0.12s → 0.18s                                                 ║
     ║   Wrapped: pcall-safe execution                                           ║
     ╚═══════════════════════════════════════════════════════════════════════════╝
+--[[
     ╔═══════════════════════════════════════════════════════════════════════════╗
     ║                                                                           ║
     ║   ██████╗  █████╗ ██████╗ ██████╗ ██╗   ██╗    ██████╗  ██████╗           ║
@@ -21,9 +22,11 @@
     ║   ██║     ██║  ██║██║  ██║██║  ██║   ██║       ██║     ╚██████╔╝          ║
     ║   ╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝       ╚═╝      ╚═════╝           ║
     ║                                                                           ║
-    ║   [ CANDY EDITION | v15.0 | ULTRA-FAST PARRY ]                            ║
+    ║   [ CANDY EDITION | v15.1 | ONE PARRY PER BALL ]                          ║
     ║   • 12 Premium Themes (6 Dark / 6 Light)                                  ║
     ║   • Human Delay: 0.10 - 0.15s (x1.5 Faster)                               ║
+    ║   • COOLDOWN: 0.21s                                                       ║
+    ║   • 1 Parry = 1 Ball (No Spam)                                            ║
     ║   • Anti-Close Spam & Predictive Hit                                      ║
     ║   • Camera Lock & Profile Manager                                         ║
     ║   • Smart Debug HUD & Right Ctrl Toggle                                   ║
@@ -60,7 +63,7 @@ if Workspace:FindFirstChild("AuraVisual") then Workspace.AuraVisual:Destroy() en
 local CONFIG = {
     -- Логика парирования
     CLOSE_DIST       = 45,     -- Дистанция "ближнего боя" (спам)
-    COOLDOWN         = 0.21,   -- Кулдаун между парированиями (исправлено: 0.18 -> 0.21)
+    COOLDOWN         = 0.21,   -- Кулдаун между парированиями
     PING_SAFE        = 0.35,   -- Компенсация пинга (350мс)
     PREDICT_TIME     = 0.15,   -- Предсказание позиции мяча (150мс)
     
@@ -94,6 +97,7 @@ local STATE = {
     LastParry = 0,
     Ball = nil,
     PrevBallPos = nil,
+    ParriedBall = nil,      -- ← мяч, по которому уже парировали (1 мяч = 1 парирование)
     Frames = 0,
     Remote = nil,
     ParryMethod = "N/A"
@@ -916,11 +920,11 @@ UserInputService.InputBegan:Connect(function(input, gpe)
 end)
 
 -- ============================================================
--- [ 16. ЛОГИКА ПАРИРОВАНИЯ (HUMAN DELAY 0.10-0.15s) ]
+-- [ 16. ЛОГИКА ПАРИРОВАНИЯ (1 PARRY PER BALL) ]
 -- ============================================================
 local function TriggerParry()
     local now = tick()
-    -- Защита от спама (COOLDOWN = 0.21)
+    -- Страховка от спама на случай нескольких мячей одновременно
     if now - STATE.LastParry < CONFIG.COOLDOWN then return end
     STATE.LastParry = now
 
@@ -1022,10 +1026,12 @@ RunService.Heartbeat:Connect(function(dt)
             local bp = ball.Position
             dist = (hrp.Position - bp).Magnitude
 
+            -- Новый мяч → сбрасываем трекинг "уже парировали"
             if STATE.Ball ~= ball then
                 STATE.Ball = ball
                 STATE.PrevBallPos = bp
                 STATE.IsArmed = true
+                STATE.ParriedBall = nil
             end
 
             if dist > 80 then STATE.IsArmed = true end
@@ -1058,9 +1064,11 @@ RunService.Heartbeat:Connect(function(dt)
                 if dist <= CONFIG.CLOSE_DIST or timeToImpact <= CONFIG.PING_SAFE or predictedHit then
                     targetColor = Color3.fromRGB(255, 50, 50)
                     status = "DANGER!"
-                    if STATE.Enabled then
-                        TriggerParry()
+                    -- ⚡ 1 нажатие на 1 мяч (без спама)
+                    if STATE.Enabled and STATE.ParriedBall ~= ball then
+                        STATE.ParriedBall = ball
                         STATE.IsArmed = false
+                        TriggerParry()
                     end
                 else
                     targetColor = Color3.fromRGB(255, 200, 0)
@@ -1074,6 +1082,7 @@ RunService.Heartbeat:Connect(function(dt)
         else
             STATE.IsArmed = true
             STATE.PrevBallPos = nil
+            STATE.ParriedBall = nil   -- мяч пропал → сбрасываем трекинг
         end
 
         -- Визуал сферы (макс. 90)
@@ -1143,10 +1152,11 @@ LocalPlayer.CharacterAdded:Connect(function()
     STATE.IsArmed = true
     STATE.PrevBallPos = nil
     STATE.Ball = nil
+    STATE.ParriedBall = nil
     STATE.CameraLock = false
     if Camera.CameraType == Enum.CameraType.Scriptable then
         Camera.CameraType = Enum.CameraType.Custom
     end
 end)
 
-print(">>> [BB] CANDY EDITION v15.0 LOADED! (COOLDOWN: 0.21s, Human Delay: 0.10-0.15s)")
+print(">>> [BB] CANDY EDITION v15.1 LOADED! (1 Parry per Ball | COOLDOWN: 0.21s | Human Delay: 0.10-0.15s)")
