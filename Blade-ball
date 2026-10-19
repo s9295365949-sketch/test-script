@@ -1,7 +1,7 @@
 --[[
     ╔═══════════════════════════════════════════════════════════════════════╗
-    ║   BLADE BALL — DEBUG EDITION                                          ║
-    ║   • Экранный отладчик в левом верхнем углу                            ║
+    ║   BLADE BALL — DEBUG EDITION (UI FIXED)                               ║
+    ║   • Экранный отладчик опущен ниже панели Roblox                       ║
     ║   • Парирование через Remote, Кнопку или F (каскадный fallback)       ║
     ╚═══════════════════════════════════════════════════════════════════════╝
 ]]
@@ -162,7 +162,7 @@ local function executeParry()
     end)
 end
 
--- Экранный Отладчик (Левый верхний угол)
+-- Экранный Отладчик (Опущен ниже панели Roblox)
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "BBDebug"
 screenGui.ResetOnSpawn = false
@@ -171,7 +171,8 @@ screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
 
 local debugText = Instance.new("TextLabel")
 debugText.Size = UDim2.new(0, 250, 0, 100)
-debugText.Position = UDim2.new(0, 10, 0, 10)
+-- ИЗМЕНЕНИЕ ЗДЕСЬ: Y = 60 вместо 10
+debugText.Position = UDim2.new(0, 10, 0, 60) 
 debugText.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 debugText.BackgroundTransparency = 0.5
 debugText.TextColor3 = Color3.fromRGB(0, 255, 0)
