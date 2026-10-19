@@ -60,7 +60,7 @@ if Workspace:FindFirstChild("AuraVisual") then Workspace.AuraVisual:Destroy() en
 local CONFIG = {
     -- Логика парирования
     CLOSE_DIST       = 45,     -- Дистанция "ближнего боя" (спам)
-    COOLDOWN         = 0.18,   -- Кулдаун между парированиями
+    COOLDOWN         = 0.21,   -- Кулдаун между парированиями (исправлено: 0.18 -> 0.21)
     PING_SAFE        = 0.35,   -- Компенсация пинга (350мс)
     PREDICT_TIME     = 0.15,   -- Предсказание позиции мяча (150мс)
     
@@ -71,7 +71,7 @@ local CONFIG = {
     -- Визуал сферы
     SPHERE_MIN       = 40,     -- Мин. диаметр сферы
     SPHERE_MAX       = 90,     -- Макс. диаметр сферы
-    CORE_RATIO       = 0.20,   -- Размер ядра (20% от сферы)
+    CORE_RATIO       = 0.23,   -- Размер ядра (23% от сферы)
 }
 
 local STATE = {
@@ -920,7 +920,7 @@ end)
 -- ============================================================
 local function TriggerParry()
     local now = tick()
-    -- Защита от спама
+    -- Защита от спама (COOLDOWN = 0.21)
     if now - STATE.LastParry < CONFIG.COOLDOWN then return end
     STATE.LastParry = now
 
@@ -1149,8 +1149,4 @@ LocalPlayer.CharacterAdded:Connect(function()
     end
 end)
 
-print(">>> [BB] CANDY EDITION v15.0 LOADED! (Human Delay: 0.10-0.15s)")
-    end
-end)
-
-print(">>> [BB] CANDY EDITION v15.0 LOADED! (Human Delay: 0.10-0.15s)")
+print(">>> [BB] CANDY EDITION v15.0 LOADED! (COOLDOWN: 0.21s, Human Delay: 0.10-0.15s)")
