@@ -1,9 +1,9 @@
 --[[
     ╔═══════════════════════════════════════════════════════════════════════╗
-    ║   BLADE BALL — MEGA RADIUS + FULL MENU                                ║
-    ║   • Меню с 4 кнопками (Парир, Визуал, Remote, F)                      ║
-    ║   • Радиус 45 (срабатывает заранее)                                   ║
-    ║   • Защита от спама и бана (F по умолчанию ВЫКЛ)                      ║
+    ║   BLADE BALL — FULL MENU (FIXED BUTTONS)                              ║
+    ║   • Исправлено переключение кнопок (ВКЛ/ВЫКЛ)                         ║
+    ║   • Радиус парирования 25 (оптимально для сервера)                    ║
+    ║   • Авто-удаление старых GUI                                          ║
     ╚═══════════════════════════════════════════════════════════════════════╝
 ]]
 
@@ -26,11 +26,11 @@ local oldMenu = PlayerGui:FindFirstChild("BBMenu")
 if oldMenu then oldMenu:Destroy() end
 
 local CFG = {
-    PARRY_RADIUS        = 45,        -- Радиус парирования (45 стабсов)
-    MAX_RADIUS          = 60,        -- Максимальный размер сферы
+    PARRY_RADIUS        = 25,        -- УМЕНЬШИЛИ ДО 25 (чтобы сервер засчитывал парир)
+    MAX_RADIUS          = 35,        -- Размер сферы
     PARRY_COOLDOWN      = 0.25,      
     PARRY_ENABLED       = true,
-    SPHERE_VISIBLE      = true,      -- Визуал сферы
+    SPHERE_VISIBLE      = true,      
     Y_OFFSET            = -0.5,
     COLOR_INSIDE        = Color3.fromRGB(255, 30, 30),
     COLOR_OUTSIDE       = Color3.fromRGB(30, 255, 50),
@@ -73,7 +73,7 @@ debugText.TextYAlignment = Enum.TextYAlignment.Top
 debugText.Text = "Ожидание мяча..."
 debugText.Parent = screenGui
 
--- 3. МЕНЮ (ПОЛНОЕ)
+-- 3. МЕНЮ
 local menuGui = Instance.new("ScreenGui")
 menuGui.Name = "BBMenu"
 menuGui.ResetOnSpawn = false
@@ -90,7 +90,7 @@ menuBtn.Parent = menuGui
 Instance.new("UICorner", menuBtn).CornerRadius = UDim.new(1, 0)
 
 local menuFrame = Instance.new("Frame")
-menuFrame.Size = UDim2.new(0, 250, 0, 280) -- Увеличили высоту для 4 кнопок
+menuFrame.Size = UDim2.new(0, 250, 0, 280)
 menuFrame.Position = UDim2.new(1, -270, 1, -380)
 menuFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
 menuFrame.Visible = false
@@ -106,32 +106,37 @@ closeMenu.TextColor3 = Color3.new(1,1,1)
 closeMenu.Parent = menuFrame
 Instance.new("UICorner", closeMenu).CornerRadius = UDim.new(0, 6)
 
--- Функция создания кнопок
-local function createToggle(yPos, text, stateVar, callback)
+-- ИСПРАВЛЕННАЯ ФУНКЦИЯ КНОПОК
+local function createToggle(yPos, text, cfKey)
     local btn = Instance.new("TextButton")
     btn.Size = UDim2.new(1, -20, 0, 40)
     btn.Position = UDim2.new(0, 10, 0, yPos)
-    btn.BackgroundColor3 = stateVar and Color3.fromRGB(60, 180, 100) or Color3.fromRGB(180, 60, 60)
-    btn.Text = text .. (stateVar and " ВКЛ" or " ВЫКЛ")
     btn.TextColor3 = Color3.new(1,1,1)
     btn.Font = Enum.Font.GothamBold
     btn.TextSize = 13
     btn.Parent = menuFrame
     Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
     
+    -- Функция обновления внешнего вида кнопки
+    local function updateUI()
+        local state = CFG[cfKey] -- Берем актуальное значение из таблицы
+        btn.Text = text .. (state and " ВКЛ" or " ВЫКЛ")
+        btn.BackgroundColor3 = state and Color3.fromRGB(60, 180, 100) or Color3.fromRGB(180, 60, 60)
+    end
+    
+    updateUI() -- Ставим начальное значение при создании
+
     btn.MouseButton1Click:Connect(function()
-        callback()
-        -- Обновляем состояние после клика
-        btn.Text = text .. (stateVar and " ВКЛ" or " ВЫКЛ")
-        btn.BackgroundColor3 = stateVar and Color3.fromRGB(60, 180, 100) or Color3.fromRGB(180, 60, 60)
+        CFG[cfKey] = not CFG[cfKey] -- Переключаем значение
+        updateUI() -- Мгновенно обновляем кнопку
     end)
 end
 
--- Создаем кнопки (yPos: 50, 100, 150, 200)
-createToggle(50, "Парирование", CFG.PARRY_ENABLED, function() CFG.PARRY_ENABLED = not CFG.PARRY_ENABLED end)
-createToggle(100, "Визуал сферы", CFG.SPHERE_VISIBLE, function() CFG.SPHERE_VISIBLE = not CFG.SPHERE_VISIBLE end)
-createToggle(150, "Метод Remote", CFG.USE_REMOTE, function() CFG.USE_REMOTE = not CFG.USE_REMOTE end)
-createToggle(200, "Метод F", CFG.USE_F_KEY, function() CFG.USE_F_KEY = not CFG.USE_F_KEY end)
+-- Создаем кнопки (передаем ключ из CFG)
+createToggle(50, "Парирование", "PARRY_ENABLED")
+createToggle(100, "Визуал сферы", "SPHERE_VISIBLE")
+createToggle(150, "Метод Remote", "USE_REMOTE")
+createToggle(200, "Метод F", "USE_F_KEY")
 
 menuBtn.MouseButton1Click:Connect(function() menuFrame.Visible = not menuFrame.Visible end)
 closeMenu.MouseButton1Click:Connect(function() menuFrame.Visible = false end)
@@ -145,7 +150,6 @@ for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
         if n:find("parry") or n:find("block") or n:find("deflect") or n:find("swing") or n:find("attempt") then
             parryRemote = obj
             remoteName = obj.Name
-            print("✅ Найден Remote: " .. remoteName)
             break
         end
     end
@@ -272,7 +276,7 @@ RunService.Heartbeat:Connect(function(dt)
             dbg_ball, dbg_dist, dbg_status, lastAction, remoteName)
     end
 
-    -- Визуал (если включен)
+    -- Визуал
     if sphere and sphere.Parent then
         if CFG.SPHERE_VISIBLE then
             state.diameter = state.diameter + (tgtDiameter - state.diameter) * math.exp(-14 * dt)
@@ -282,7 +286,7 @@ RunService.Heartbeat:Connect(function(dt)
             sphere.Transparency = 0.7
             sphere.Color = state.color
         else
-            sphere.Transparency = 1 -- Скрываем сферу
+            sphere.Transparency = 1 
         end
     end
 end)
@@ -293,4 +297,4 @@ LocalPlayer.CharacterAdded:Connect(function(newChar)
     prevBallPos = nil
 end)
 
-print("✅ Скрипт успешно запущен! Меню справа снизу.")
+print("✅ Скрипт запущен. Кнопки исправлены.")
