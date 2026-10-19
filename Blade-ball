@@ -1,19 +1,11 @@
 --[[
     ╔═══════════════════════════════════════════════════════════════════════════╗
-    ║                                                                           ║
-    ║   ██████╗  █████╗ ██████╗ ██████╗ ██╗   ██╗    ███████╗██████╗ ██████╗     ║
-    ║   ██╔══██╗██╔══██╗██╔══██╗██╔══██╗╚██╗ ██╔╝    ██╔════╝██╔══██╗██╔══██╗    ║
-    ║   ██████╔╝███████║██████╔╝██████╔╝ ╚████╔╝     █████╗  ██████╔╝██████╔╝    ║
-    ║   ██╔═══╝ ██╔══██║██╔══██╗██╔══██╗  ╚██╔╝      ██╔══╝  ██╔══██╗██╔══██╗    ║
-    ║   ██║     ██║  ██║██║  ██║██║  ██║   ██║       ██║     ██║  ██║██║  ██║    ║
-    ║   ╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝       ╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝    ║
-    ║                                                                           ║
-    ║   [ DEVELOPER EDITION v6.0 | GLASS UI & SMOOTH ANIMATIONS ]               ║
+    ║   [ DEVELOPER EDITION v6.1 | FIXED LAYOUT & SCROLLING ]                   ║
     ╚═══════════════════════════════════════════════════════════════════════════╝
 ]]
 
 -- ============================================================
--- [ КОНФИГУРАЦИЯ И СИСТЕМНЫЕ НАСТРОЙКИ ]
+-- [ КОНФИГУРАЦИЯ ]
 -- ============================================================
 local CONFIG = {
     ZONE = {
@@ -73,7 +65,7 @@ local STATE = {
 }
 
 -- ============================================================
--- [ 3D СФЕРА (Купол + Ядро) ]
+-- [ 3D СФЕРА ]
 -- ============================================================
 local OuterSphere = Instance.new("Part")
 OuterSphere.Name = "AuraVisual"
@@ -101,7 +93,7 @@ InnerSphere.Size = Vector3.new(10, 10, 10)
 InnerSphere.Parent = OuterSphere
 
 -- ============================================================
--- [ UI ФРЕЙМВОРК (КРАСИВЫЙ ИНТЕРФЕЙС) ]
+-- [ ИНТЕРФЕЙС (UI) ]
 -- ============================================================
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "BB_UI"
@@ -119,7 +111,7 @@ ClickSound.Volume = 0.3
 ClickSound.Parent = ScreenGui
 local function PlayClick() pcall(function() ClickSound:Play() end) end
 
--- Кнопка вызова меню (Стеклянная)
+-- Кнопка вызова
 local ToggleBtn = Instance.new("TextButton")
 ToggleBtn.Size = UDim2.new(0, 50, 0, 50)
 ToggleBtn.Position = UDim2.new(1, -70, 0.5, -25)
@@ -136,10 +128,10 @@ BtnStroke.Color = CurrentTheme.ACCENT
 BtnStroke.Thickness = 1.5
 BtnStroke.Transparency = 0.2
 
--- Главное окно (Стеклянное)
+-- Главное окно (Увеличено)
 local Window = Instance.new("Frame")
-Window.Size = UDim2.new(0, 290, 0, 460)
-Window.Position = UDim2.new(0.5, -145, 0.5, -230)
+Window.Size = UDim2.new(0, 300, 0, 480)
+Window.Position = UDim2.new(0.5, -150, 0.5, -240)
 Window.BackgroundColor3 = CurrentTheme.BG
 Window.BackgroundTransparency = 0.1
 Window.Visible = false
@@ -166,7 +158,6 @@ HeaderMask.BackgroundTransparency = 0.1
 HeaderMask.BorderSizePixel = 0
 HeaderMask.Parent = Header
 
--- Логотип ASCII
 local Title = Instance.new("TextLabel")
 Title.Size = UDim2.new(1, -10, 1, -10)
 Title.Position = UDim2.new(0, 5, 0, 5)
@@ -178,7 +169,6 @@ Title.TextSize = 9
 Title.TextXAlignment = Enum.TextXAlignment.Center
 Title.Parent = Header
 
--- Кнопка закрытия
 local CloseBtn = Instance.new("TextButton")
 CloseBtn.Size = UDim2.new(0, 25, 0, 25)
 CloseBtn.Position = UDim2.new(1, -32, 0, 8)
@@ -202,11 +192,17 @@ TabLayout.FillDirection = Enum.FillDirection.Horizontal
 TabLayout.Padding = UDim.new(0, 8)
 TabLayout.Parent = TabContainer
 
--- Страницы
-local Pages = Instance.new("Frame")
+-- Страницы (Теперь со скроллом, чтобы ничего не обрезалось)
+local Pages = Instance.new("ScrollingFrame")
 Pages.Size = UDim2.new(1, -20, 1, -170)
 Pages.Position = UDim2.new(0, 10, 0, 160)
 Pages.BackgroundTransparency = 1
+Pages.BorderSizePixel = 0
+Pages.ScrollBarThickness = 2
+Pages.ScrollBarImageColor3 = CurrentTheme.ACCENT
+Pages.ScrollBarImageTransparency = 0.5
+Pages.CanvasSize = UDim2.new(0, 0, 0, 0)
+Pages.AutomaticCanvasSize = Enum.AutomaticSize.Y -- Автоматически растягивает скролл
 Pages.Parent = Window
 
 -- ============================================================
@@ -282,7 +278,7 @@ for name, data in pairs(THEMES) do
 end
 
 -- ============================================================
--- [ ПЕРЕТАСКИВАНИЕ ОКНА ]
+-- [ ПЕРЕТАСКИВАНИЕ ]
 -- ============================================================
 local dragging, dragStart, startPos = false, nil, nil
 Header.InputBegan:Connect(function(input)
@@ -307,20 +303,21 @@ ToggleBtn.Activated:Connect(function()
     Window.Visible = not Window.Visible
     ThemePanel.Visible = false
     if Window.Visible then
-        Window.Size = UDim2.new(0, 290, 0, 0)
-        TweenService:Create(Window, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Size = UDim2.new(0, 290, 0, 460)}):Play()
+        Window.Size = UDim2.new(0, 300, 0, 0)
+        TweenService:Create(Window, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Size = UDim2.new(0, 300, 0, 480)}):Play()
     end
 end)
 CloseBtn.Activated:Connect(function() PlayClick(); Window.Visible = false; ThemePanel.Visible = false end)
 
 -- ============================================================
--- [ UI ЭЛЕМЕНТЫ (КНОПКИ, ТУМБЛЕРЫ) ]
+-- [ UI ЭЛЕМЕНТЫ ]
 -- ============================================================
 local PagesList, TabsList = {}, {}
 
 local function CreateTab(name, icon)
     local Page = Instance.new("Frame")
-    Page.Size = UDim2.new(1, 0, 1, 0)
+    Page.Size = UDim2.new(1, 0, 0, 0)
+    Page.AutomaticSize = Enum.AutomaticSize.Y
     Page.BackgroundTransparency = 1
     Page.Visible = false
     Page.Parent = Pages
@@ -331,7 +328,7 @@ local function CreateTab(name, icon)
     Layout.Parent = Page
     
     local TabBtn = Instance.new("TextButton")
-    TabBtn.Size = UDim2.new(0.5, -4, 1, 0)
+    TabBtn.Size = UDim2.new(0.5, -4, 1, 0) -- Теперь ровно 50% на 50%
     TabBtn.BackgroundColor3 = CurrentTheme.OFF
     TabBtn.BackgroundTransparency = 0.3
     TabBtn.Text = icon .. " " .. name
@@ -517,12 +514,12 @@ CreateButton(VisPage, "Change Theme", function()
 end)
 
 -- ============================================================
--- [ ПАНЕЛЬ ОТЛАДКИ ]
+-- [ ПАНЕЛЬ ОТЛАДКИ (Поверх всего) ]
 -- ============================================================
 local DebugGui = Instance.new("ScreenGui")
 DebugGui.Name = "BB_Debug"
 DebugGui.ResetOnSpawn = false
-DebugGui.DisplayOrder = 998
+DebugGui.DisplayOrder = 1000 -- Вытащили на самый верх
 DebugGui.Parent = PGui
 
 local DebugFrame = Instance.new("Frame")
@@ -564,6 +561,7 @@ ApplyTheme = function()
     PanelStroke.Color = CurrentTheme.ACCENT
     DebugFrame.BackgroundColor3 = CurrentTheme.BG
     DebugStroke.Color = CurrentTheme.ACCENT
+    Pages.ScrollBarImageColor3 = CurrentTheme.ACCENT
     
     for _, t in ipairs(TabsList) do
         if t.Page.Visible then
@@ -595,7 +593,7 @@ TabsList[1].Btn.BackgroundColor3 = CurrentTheme.ACCENT
 TabsList[1].Btn.TextColor3 = CurrentTheme.BG
 
 -- ============================================================
--- [ ЛОГИКА ЯДРА (СФЕРА И ПАРИРОВАНИЕ) ]
+-- [ ЛОГИКА ЯДРА ]
 -- ============================================================
 local function GetBall()
     if STATE.Ball and STATE.Ball.Parent then return STATE.Ball end
@@ -741,4 +739,4 @@ LP.CharacterAdded:Connect(function()
     STATE.Ball = nil
 end)
 
-print("✅ DEVELOPER EDITION v6.0 | Loaded Successfully.")
+print("✅ DEVELOPER EDITION v6.1 | Layout Fixed.")
