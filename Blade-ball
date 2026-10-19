@@ -1,8 +1,9 @@
 --[[
     ╔═══════════════════════════════════════════════════════════════════════╗
-    ║   BLADE BALL — EARLY PREDICTION (3X FASTER)                           ║
-    ║   • Нажимает за 0.3 сек до удара (независимо от дистанции)            ║
-    ║   • Отправляет Remote, затем жмет кнопку                              ║
+    ║   BLADE BALL — GIANT SPHERE + ULTRA EARLY (0.45s)                     ║
+    ║   • Радиус сферы 40 (Огромный шар)                                    ║
+    ║   • Без кликов по экрану (только Remote + F)                          ║
+    ║   • Предсказание за 0.45 сек до удара                                 ║
     ╚═══════════════════════════════════════════════════════════════════════╝
 ]]
 
@@ -22,8 +23,8 @@ if PlayerGui:FindFirstChild("BBDebug") then PlayerGui.BBDebug:Destroy() end
 if PlayerGui:FindFirstChild("BBMenu") then PlayerGui.BBMenu:Destroy() end
 
 local CFG = {
-    PARRY_RADIUS        = 15,        -- Радиус (визуальный)
-    MAX_RADIUS          = 25,        
+    PARRY_RADIUS        = 40,        -- ОГРОМНЫЙ РАДИУС (было 15)
+    MAX_RADIUS          = 60,        -- МАКСИМАЛЬНЫЙ РАЗМЕР СФЕРЫ (было 25)
     PARRY_COOLDOWN      = 0.25,      
     PARRY_ENABLED       = true,
     SPHERE_VISIBLE      = true,      
@@ -31,7 +32,7 @@ local CFG = {
     COLOR_INSIDE        = Color3.fromRGB(255, 30, 30),
     COLOR_OUTSIDE       = Color3.fromRGB(30, 255, 50),
     
-    PREDICT_TIME        = 0.30,      -- Срабатывать за 0.3 секунды до удара (в 3 раза раньше)
+    PREDICT_TIME        = 0.45,      -- Срабатывать за 0.45 сек до удара (УЛЬТРА РАНО)
 }
 
 -- 1. ПИНГ
@@ -45,10 +46,8 @@ task.spawn(function()
     end
 end)
 
--- 2. REMOTE И КНОПКА
+-- 2. REMOTE
 local parryRemote = nil
-local parryButton = nil
-
 task.spawn(function()
     for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
         if obj:IsA("RemoteEvent") and (obj.Name:lower():find("parry") or obj.Name:lower():find("attempt")) then
@@ -57,17 +56,6 @@ task.spawn(function()
         end
     end
 end)
-
-local function findButton()
-    for _, obj in ipairs(PlayerGui:GetDescendants()) do
-        if obj:IsA("GuiButton") and obj.Visible then
-            local n = obj.Name:lower()
-            if n:find("block") or n:find("parry") or n:find("deflect") then
-                return obj
-            end
-        end
-    end
-end
 
 -- 3. СФЕРА
 local sphere = Instance.new("Part")
@@ -102,7 +90,7 @@ debugText.TextYAlignment = Enum.TextYAlignment.Top
 debugText.Text = "Ожидание..."
 debugText.Parent = screenGui
 
--- 5. МЕНЮ (С ЗАЩИТОЙ ОТ ДВОЙНОГО КЛИКА)
+-- 5. МЕНЮ
 local menuGui = Instance.new("ScreenGui")
 menuGui.Name = "BBMenu"
 menuGui.ResetOnSpawn = false
@@ -195,7 +183,7 @@ Workspace.ChildAdded:Connect(function(o)
     end
 end)
 
--- 7. ПАРИРОВАНИЕ
+-- 7. ПАРИРОВАНИЕ (БЕЗ КЛИКОВ ПО ЭКРАНУ)
 local lastParry = 0
 local lastAction = "None"
 
@@ -205,30 +193,24 @@ local function executeParry()
 
     local fired = false
 
-    -- 1. Отправляем Remote (быстро)
+    -- 1. Отправляем Remote (мгновенно)
     if parryRemote then
         pcall(function() parryRemote:FireServer() end)
         fired = true
     end
 
-    -- 2. Жмем кнопку (дублируем для надежности)
-    if not parryButton then parryButton = findButton() end
-    if parryButton then
-        local pos = parryButton.AbsolutePosition
-        local size = parryButton.AbsoluteSize
-        pcall(function()
-            VirtualInputManager:SendMouseButtonEvent(pos.X + size.X/2, pos.Y + size.Y/2, 0, true, game, 0)
-            task.wait(0.02)
-            VirtualInputManager:SendMouseButtonEvent(pos.X + size.X/2, pos.Y + size.Y/2, 0, false, game, 0)
-        end)
-        fired = true
-    end
+    -- 2. Жмем клавишу F (мгновенно, без кликов по UI)
+    pcall(function()
+        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.F, false, game)
+        task.wait(0.02)
+        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.F, false, game)
+    end)
 
-    lastAction = fired and "Fired" or "None"
+    lastAction = "F + Remote"
     lastParry = tick()
 end
 
--- 8. ЦИКЛ ПРЕДСКАЗАНИЯ
+-- 8. ЦИКЛ
 local lastBall = nil
 local prevPos = nil
 local currentDiameter = CFG.MAX_RADIUS * 2
@@ -254,7 +236,6 @@ RunService.Heartbeat:Connect(function(dt)
         local dbg_dist = 0
         local dbg_time = 999
         local dbg_status = "Safe"
-        local dbg_target = "NO"
         local targetDiameter = CFG.MAX_RADIUS * 2
         local targetColor = CFG.COLOR_OUTSIDE
 
@@ -269,7 +250,6 @@ RunService.Heartbeat:Connect(function(dt)
                 lastBall = ball
             end
 
-            -- Считаем скорость и направление
             local speed = 0
             local approachSpeed = 0
             
@@ -280,7 +260,7 @@ RunService.Heartbeat:Connect(function(dt)
                 if speed > 5 then
                     local dirToMe = (hrpPos - bp).Unit
                     local dot = moveVec.Unit:Dot(dirToMe)
-                    if dot > 0.7 then -- Летит в нас
+                    if dot > 0.7 then 
                         approachSpeed = speed * dot
                     end
                 end
@@ -291,10 +271,8 @@ RunService.Heartbeat:Connect(function(dt)
             
             if tVal and (tVal == LocalPlayer.Name or tostring(tVal) == LocalPlayer.Name) then 
                 isTargetingMe = true 
-                dbg_target = "ATTR"
             elseif approachSpeed > 10 then
                 isTargetingMe = true 
-                dbg_target = "FLYING"
             end
 
             if isTargetingMe then
@@ -303,10 +281,12 @@ RunService.Heartbeat:Connect(function(dt)
                 end
 
                 dbg_status = "Incoming!"
+                
+                -- Сфера теперь реально сжимается от 60 до 40
                 local targetRadius = math.clamp(dist, CFG.PARRY_RADIUS, CFG.MAX_RADIUS)
                 targetDiameter = targetRadius * 2
                 
-                -- ГЛАВНОЕ ИСПРАВЛЕНИЕ: Предсказание по времени (за 0.3 сек до удара)
+                -- СРАБАТЫВАНИЕ: если времени меньше 0.45 сек
                 if dbg_time <= CFG.PREDICT_TIME or dist <= CFG.PARRY_RADIUS then
                     executeParry()
                     dbg_status = "PARRY!"
@@ -316,8 +296,8 @@ RunService.Heartbeat:Connect(function(dt)
             prevPos = bp
         end
 
-        debugText.Text = string.format("Ball: %s\nDist: %.1f\nTime: %s\nTarget: %s\nStatus: %s\nMethod: %s", 
-            dbg_ball, dbg_dist, (dbg_time > 900 and "N/A" or string.format("%.2fs", dbg_time)), dbg_target, dbg_status, lastAction)
+        debugText.Text = string.format("Ball: %s\nDist: %.1f\nTime: %s\nStatus: %s\nMethod: %s", 
+            dbg_ball, dbg_dist, (dbg_time > 900 and "N/A" or string.format("%.2fs", dbg_time)), dbg_status, lastAction)
 
         if CFG.SPHERE_VISIBLE then
             currentDiameter = currentDiameter + (targetDiameter - currentDiameter) * math.exp(-14 * dt)
