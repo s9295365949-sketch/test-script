@@ -1,45 +1,42 @@
 --[[
     ╔═══════════════════════════════════════════════════════════════════════════╗
-    ║   [ DEVELOPER EDITION v12.3 | CLEAN & STABLE ]                            ║
-    ║   • Убраны все эмодзи (защита от краша)                                   ║
-    ║   • Увеличенное ядро (+15%)                                               ║
-    ║   • Рабочий Camera Lock                                                   ║
+    ║   ██████╗  █████╗ ██████╗ ██████╗ ██╗   ██╗    ██████╗  ██████╗           ║
+    ║   ██╔══██╗██╔══██╗██╔══██╗██╔══██╗╚██╗ ██╔╝    ██╔══██╗██╔═══██╗          ║
+    ║   ██████╔╝███████║██████╔╝██████╔╝ ╚████╔╝     ██████╔╝██║   ██║          ║
+    ║   ██╔═══╝ ██╔══██║██╔══██╗██╔══██╗  ╚██╔╝      ██╔═══╝ ██║   ██║          ║
+    ║   ██║     ██║  ██║██║  ██║██║  ██║   ██║       ██║     ╚██████╔╝          ║
+    ║   ╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝       ╚═╝      ╚═════╝           ║
+    ║                                                                           ║
+    ║   [ PREMIUM EDITION | ULTIMATE PARRY, PROFILES & CAMERA LOCK ]            ║
+    ║   • "Candy in a Wrapper" UI Loader                                        ║
+    ║   • Anti-Close Spam + getconnections Parry                                ║
+    ║   • Profile Manager with Auto-Load & Stars                                ║
     ╚═══════════════════════════════════════════════════════════════════════════╝
 ]]
 
-print(">>> [BB] Запуск v12.3...")
-
 -- ============================================================
--- [ КОНФИГУРАЦИЯ ]
+-- [ ОБЁРТКА (LOADER) ]
 -- ============================================================
-local CONFIG = {
-    ZONE = {
-        MIN_SPEED  = 50,   MIN_DIST  = 20,   
-        MID_SPEED  = 125,  MID_DIST  = 45,   
-        MAX_SPEED  = 200,  MAX_DIST  = 80,   
-    },
-    VISUALS = {
-        DEFAULT_OUTER = Color3.fromRGB(0, 255, 50),     
-        DEFAULT_INNER = Color3.fromRGB(0, 255, 200),    
-        DANGER_COLOR  = Color3.fromRGB(255, 30, 30),    
-        Y_OFFSET      = -0.5,
-        PULSE_SPEED   = 2.5,
-    },
-    SYSTEM = {
-        PARRY_COOLDOWN = 0.25,
-        CLICK_SOUND    = "rbxassetid://6895079853",
-        PING_BUFFER    = 0.30 
-    }
-}
+local CoreGui = game:GetService("CoreGui")
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local HttpService = game:GetService("HttpService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local Lighting = game:GetService("Lighting")
 
-local THEMES = {
-    ["Dark Metal"]      = { BG = Color3.fromRGB(15, 16, 20), HEADER = Color3.fromRGB(22, 24, 30), ACCENT = Color3.fromRGB(0, 200, 255), TEXT = Color3.fromRGB(240, 240, 240), OFF = Color3.fromRGB(40, 44, 52) },
-    ["Cyber Neon"]      = { BG = Color3.fromRGB(20, 5, 25), HEADER = Color3.fromRGB(35, 10, 45), ACCENT = Color3.fromRGB(255, 0, 200), TEXT = Color3.fromRGB(255, 200, 255), OFF = Color3.fromRGB(60, 20, 70) },
-    ["Crimson Void"]    = { BG = Color3.fromRGB(25, 5, 5), HEADER = Color3.fromRGB(45, 10, 10), ACCENT = Color3.fromRGB(255, 60, 60), TEXT = Color3.fromRGB(255, 200, 200), OFF = Color3.fromRGB(70, 15, 15) },
-}
+local LP = Players.LocalPlayer
+local PGui = LP:WaitForChild("PlayerGui", 10)
+local Camera = Workspace.CurrentCamera
 
-local CurrentThemeName = "Dark Metal"
-local CurrentTheme = THEMES[CurrentThemeName]
+-- Очистка
+for _, v in ipairs(PGui:GetChildren()) do
+    if v.Name:match("^BB_") then v:Destroy() end
+end
+if Workspace:FindFirstChild("AuraVisual") then Workspace.AuraVisual:Destroy() end
 
 -- Кастомный clamp
 local function clamp(val, min, max)
@@ -48,45 +45,135 @@ local function clamp(val, min, max)
     return val
 end
 
--- ============================================================
--- [ СЕРВИСЫ ]
--- ============================================================
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local Workspace = game:GetService("Workspace")
-local TweenService = game:GetService("TweenService")
-local UserInputService = game:GetService("UserInputService")
-local VirtualInputManager = game:GetService("VirtualInputManager")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local HttpService = game:GetService("HttpService")
-local Camera = Workspace.CurrentCamera
+-- Экран загрузки
+local function ShowLoader()
+    local LoaderGui = Instance.new("ScreenGui")
+    LoaderGui.Name = "BB_Loader"
+    LoaderGui.ResetOnSpawn = false
+    LoaderGui.IgnoreGuiInset = true
+    LoaderGui.DisplayOrder = 10000
+    LoaderGui.Parent = PGui
 
-local LP = Players.LocalPlayer
-local PGui = LP:WaitForChild("PlayerGui")
+    local Bg = Instance.new("Frame")
+    Bg.Size = UDim2.new(1, 0, 1, 0)
+    Bg.BackgroundColor3 = Color3.fromRGB(10, 10, 12)
+    Bg.Parent = LoaderGui
 
-for _, v in ipairs(PGui:GetChildren()) do
-    if v.Name:match("^BB_") then v:Destroy() end
+    local Logo = Instance.new("TextLabel")
+    Logo.Size = UDim2.new(1, 0, 0, 100)
+    Logo.Position = UDim2.new(0, 0, 0.5, -60)
+    Logo.BackgroundTransparency = 1
+    Logo.Text = "BLADE BALL\nPREMIUM"
+    Logo.TextColor3 = Color3.fromRGB(0, 200, 255)
+    Logo.Font = Enum.Font.GothamBlack
+    Logo.TextSize = 30
+    Logo.Parent = Bg
+
+    local BarBg = Instance.new("Frame")
+    BarBg.Size = UDim2.new(0, 300, 0, 6)
+    BarBg.Position = UDim2.new(0.5, -150, 0.5, 60)
+    BarBg.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
+    BarBg.Parent = Bg
+    Instance.new("UICorner", BarBg).CornerRadius = UDim.new(1, 0)
+
+    local BarFill = Instance.new("Frame")
+    BarFill.Size = UDim2.new(0, 0, 1, 0)
+    BarFill.BackgroundColor3 = Color3.fromRGB(0, 200, 255)
+    BarFill.Parent = BarBg
+    Instance.new("UICorner", BarFill).CornerRadius = UDim.new(1, 0)
+
+    local StatusText = Instance.new("TextLabel")
+    StatusText.Size = UDim2.new(1, 0, 0, 20)
+    StatusText.Position = UDim2.new(0, 0, 0.5, 80)
+    StatusText.BackgroundTransparency = 1
+    StatusText.Text = "Инициализация..."
+    StatusText.TextColor3 = Color3.fromRGB(150, 150, 150)
+    StatusText.Font = Enum.Font.GothamMedium
+    StatusText.TextSize = 12
+    StatusText.Parent = Bg
+
+    -- Анимация загрузки
+    task.spawn(function()
+        local steps = {
+            {text = "Загрузка модулей...", time = 0.5},
+            {text = "Обход защиты...", time = 0.8},
+            {text = "Поиск RemoteEvent...", time = 0.6},
+            {text = "Применение настроек...", time = 0.4}
+        }
+        for i, step in ipairs(steps) do
+            StatusText.Text = step.text
+            TweenService:Create(BarFill, TweenInfo.new(step.time, Enum.EasingStyle.Quad), {
+                Size = UDim2.new(i / #steps, 0, 1, 0)
+            }):Play()
+            task.wait(step.time)
+        end
+        StatusText.Text = "Успешно!"
+        task.wait(0.5)
+        
+        -- Плавное исчезновение
+        TweenService:Create(Bg, TweenInfo.new(0.5), {BackgroundTransparency = 1}):Play()
+        TweenService:Create(Logo, TweenInfo.new(0.5), {TextTransparency = 1}):Play()
+        TweenService:Create(BarBg, TweenInfo.new(0.5), {BackgroundTransparency = 1}):Play()
+        TweenService:Create(BarFill, TweenInfo.new(0.5), {BackgroundTransparency = 1}):Play()
+        TweenService:Create(StatusText, TweenInfo.new(0.5), {TextTransparency = 1}):Play()
+        
+        task.wait(0.5)
+        LoaderGui:Destroy()
+    end)
 end
-if Workspace:FindFirstChild("AuraVisual") then Workspace.AuraVisual:Destroy() end
+
+ShowLoader()
+
+-- ============================================================
+-- [ НАСТРОЙКИ ]
+-- ============================================================
+local CONFIG = {
+    CLOSE_DIST = 25,
+    COOLDOWN = 0.1,
+    PING_SAFE = 0.15
+}
 
 local STATE = {
     Enabled = true, ShowVisuals = true, AntiLag = false,
     HideInner = false, StaticSphere = false, NightModeSphere = false, NightMap = false,
     CameraLock = false,
-    OuterColor = CONFIG.VISUALS.DEFAULT_OUTER, InnerColor = CONFIG.VISUALS.DEFAULT_INNER,
+    OuterColor = Color3.fromRGB(0, 255, 50), InnerColor = Color3.fromRGB(0, 255, 200),
     IsArmed = true, LastParry = 0, Ball = nil, PrevBallPos = nil, Frames = 0, Remote = nil
 }
 
+local THEMES = {
+    ["Premium Dark"] = { BG = Color3.fromRGB(15, 16, 20), HEADER = Color3.fromRGB(22, 24, 30), ACCENT = Color3.fromRGB(0, 200, 255), TEXT = Color3.fromRGB(240, 240, 240), OFF = Color3.fromRGB(40, 44, 52) },
+    ["Cyber Neon"]   = { BG = Color3.fromRGB(20, 5, 25), HEADER = Color3.fromRGB(35, 10, 45), ACCENT = Color3.fromRGB(255, 0, 200), TEXT = Color3.fromRGB(255, 200, 255), OFF = Color3.fromRGB(60, 20, 70) },
+    ["Crimson Void"] = { BG = Color3.fromRGB(25, 5, 5), HEADER = Color3.fromRGB(45, 10, 10), ACCENT = Color3.fromRGB(255, 60, 60), TEXT = Color3.fromRGB(255, 200, 200), OFF = Color3.fromRGB(70, 15, 15) },
+}
+local CurrentThemeName = "Premium Dark"
+local CurrentTheme = THEMES[CurrentThemeName]
+
+-- ============================================================
+-- [ ПОИСК REMOTE И КНОПКИ ]
+-- ============================================================
 task.spawn(function()
     for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
-        if obj:IsA("RemoteEvent") and (obj.Name:lower():find("parry") or obj.Name:lower():find("attempt")) then
+        if obj:IsA("RemoteEvent") and (obj.Name:lower():find("parry") or obj.Name:lower():find("block") or obj.Name:lower():find("attempt")) then
             STATE.Remote = obj; break
         end
     end
 end)
 
+local function FindBlockButton()
+    for _, gui in ipairs(PGui:GetDescendants()) do
+        if gui:IsA("TextButton") or gui:IsA("ImageButton") then
+            local name = gui.Name:lower()
+            if name:find("block") or name:find("parry") or name:find("shield") then
+                return gui
+            end
+        end
+    end
+    return nil
+end
+
 -- ============================================================
--- [ 3D СФЕРА ]
+-- [ 3D СФЕРА (УВЕЛИЧЕННОЕ ЯДРО) ]
 -- ============================================================
 local OuterSphere = Instance.new("Part")
 OuterSphere.Name = "AuraVisual"
@@ -109,12 +196,48 @@ InnerSphere.CanQuery = false
 InnerSphere.CastShadow = false
 InnerSphere.Material = Enum.Material.Neon
 InnerSphere.Color = STATE.InnerColor
-InnerSphere.Transparency = 0.8
-InnerSphere.Size = Vector3.new(11.5, 11.5, 11.5) -- УВЕЛИЧЕНО НА 15%
+InnerSphere.Transparency = 0.7
+InnerSphere.Size = Vector3.new(11.5, 11.5, 11.5)
 InnerSphere.Parent = OuterSphere
 
 -- ============================================================
--- [ UI ФРЕЙМВОРК (БЕЗ ЭМОДЗИ) ]
+-- [ НОЧЬ ]
+-- ============================================================
+local originalLighting = {}
+local createdAtmosphere = nil
+
+local function SetNightMap(enabled)
+    if enabled then
+        originalLighting = {
+            ClockTime = Lighting.ClockTime, Brightness = Lighting.Brightness,
+            Ambient = Lighting.Ambient, OutdoorAmbient = Lighting.OutdoorAmbient,
+            FogEnd = Lighting.FogEnd, FogColor = Lighting.FogColor,
+        }
+        Lighting.ClockTime = 0; Lighting.Brightness = 0.5
+        Lighting.Ambient = Color3.fromRGB(20, 20, 30)
+        Lighting.OutdoorAmbient = Color3.fromRGB(30, 30, 40)
+        Lighting.FogEnd = 500; Lighting.FogColor = Color3.fromRGB(10, 10, 20)
+        if not Lighting:FindFirstChildOfClass("Atmosphere") then
+            local atm = Instance.new("Atmosphere")
+            atm.Density = 0.4; atm.Color = Color3.fromRGB(50, 50, 80)
+            atm.Decay = Color3.fromRGB(20, 20, 40)
+            atm.Parent = Lighting; createdAtmosphere = atm
+        end
+    else
+        if originalLighting.ClockTime then
+            Lighting.ClockTime = originalLighting.ClockTime
+            Lighting.Brightness = originalLighting.Brightness
+            Lighting.Ambient = originalLighting.Ambient
+            Lighting.OutdoorAmbient = originalLighting.OutdoorAmbient
+            Lighting.FogEnd = originalLighting.FogEnd
+            Lighting.FogColor = originalLighting.FogColor
+        end
+        if createdAtmosphere then createdAtmosphere:Destroy(); createdAtmosphere = nil end
+    end
+end
+
+-- ============================================================
+-- [ UI ФРЕЙМВОРК ]
 -- ============================================================
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "BB_UI"
@@ -124,21 +247,20 @@ ScreenGui.Parent = PGui
 
 local UI_Elements = {}
 local ApplyTheme
-local RefreshProfileList
 
 local ClickSound = Instance.new("Sound")
-ClickSound.SoundId = CONFIG.SYSTEM.CLICK_SOUND
+ClickSound.SoundId = "rbxassetid://6895079853"
 ClickSound.Volume = 0.3
 ClickSound.Parent = ScreenGui
 local function PlayClick() pcall(function() ClickSound:Play() end) end
 
 local ToggleBtn = Instance.new("TextButton")
-ToggleBtn.Size = UDim2.new(0, 50, 0, 50)
-ToggleBtn.Position = UDim2.new(1, -70, 0.5, -25)
+ToggleBtn.Size = UDim2.new(0, 45, 0, 45)
+ToggleBtn.Position = UDim2.new(1, -60, 0.5, -22)
 ToggleBtn.BackgroundColor3 = CurrentTheme.BG
 ToggleBtn.BackgroundTransparency = 0.2
 ToggleBtn.Text = "BB"
-ToggleBtn.TextSize = 18
+ToggleBtn.TextSize = 16
 ToggleBtn.TextColor3 = CurrentTheme.ACCENT
 ToggleBtn.Font = Enum.Font.GothamBlack
 ToggleBtn.Parent = ScreenGui
@@ -149,8 +271,8 @@ BtnStroke.Thickness = 1.5
 BtnStroke.Transparency = 0.2
 
 local Window = Instance.new("Frame")
-Window.Size = UDim2.new(0, 320, 0, 560)
-Window.Position = UDim2.new(0.5, -160, 0.5, -280)
+Window.Size = UDim2.new(0, 320, 0, 500)
+Window.Position = UDim2.new(0.5, -160, 0.5, -250)
 Window.BackgroundColor3 = CurrentTheme.BG
 Window.BackgroundTransparency = 0.1
 Window.Visible = false
@@ -162,29 +284,21 @@ WinStroke.Thickness = 1.5
 WinStroke.Transparency = 0.4
 
 local Header = Instance.new("Frame")
-Header.Size = UDim2.new(1, 0, 0, 105)
+Header.Size = UDim2.new(1, 0, 0, 60)
 Header.BackgroundColor3 = CurrentTheme.HEADER
 Header.BackgroundTransparency = 0.1
 Header.Parent = Window
 Instance.new("UICorner", Header).CornerRadius = UDim.new(0, 12)
 
-local HeaderMask = Instance.new("Frame")
-HeaderMask.Size = UDim2.new(1, 0, 0, 15)
-HeaderMask.Position = UDim2.new(0, 0, 1, -15)
-HeaderMask.BackgroundColor3 = CurrentTheme.HEADER
-HeaderMask.BackgroundTransparency = 0.1
-HeaderMask.BorderSizePixel = 0
-HeaderMask.Parent = Header
-
 local Title = Instance.new("TextLabel")
-Title.Size = UDim2.new(1, -10, 1, -10)
-Title.Position = UDim2.new(0, 5, 0, 5)
+Title.Size = UDim2.new(1, -10, 1, 0)
+Title.Position = UDim2.new(0, 10, 0, 0)
 Title.BackgroundTransparency = 1
-Title.Text = "██████╗  █████╗ ██████╗ ██████╗ ██╗   ██╗\n██╔══██╗██╔══██╗██╔══██╗██╔══██╗╚██╗ ██╔╝\n██████╔╝███████║██████╔╝██████╔╝ ╚████╔╝ \n██╔═══╝ ██╔══██║██╔══██╗██╔══██╗  ╚██╔╝  \n██║     ██║  ██║██║  ██║██║  ██║   ██║   \n╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝   "
+Title.Text = "PREMIUM PARRY"
 Title.TextColor3 = CurrentTheme.ACCENT
-Title.Font = Enum.Font.Code
-Title.TextSize = 9
-Title.TextXAlignment = Enum.TextXAlignment.Center
+Title.Font = Enum.Font.GothamBlack
+Title.TextSize = 18
+Title.TextXAlignment = Enum.TextXAlignment.Left
 Title.Parent = Header
 
 local CloseBtn = Instance.new("TextButton")
@@ -194,13 +308,12 @@ CloseBtn.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
 CloseBtn.Text = "X"
 CloseBtn.TextColor3 = Color3.new(1,1,1)
 CloseBtn.Font = Enum.Font.GothamBold
-CloseBtn.TextSize = 12
 CloseBtn.Parent = Header
 Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(0, 6)
 
 local TabContainer = Instance.new("Frame")
 TabContainer.Size = UDim2.new(1, -20, 0, 35)
-TabContainer.Position = UDim2.new(0, 10, 0, 115)
+TabContainer.Position = UDim2.new(0, 10, 0, 70)
 TabContainer.BackgroundTransparency = 1
 TabContainer.Parent = Window
 
@@ -209,127 +322,26 @@ TabLayout.FillDirection = Enum.FillDirection.Horizontal
 TabLayout.Padding = UDim.new(0, 5)
 TabLayout.Parent = TabContainer
 
-local Pages = Instance.new("ScrollingFrame")
-Pages.Size = UDim2.new(1, -20, 1, -170)
-Pages.Position = UDim2.new(0, 10, 0, 160)
+local Pages = Instance.new("Frame")
+Pages.Size = UDim2.new(1, -20, 1, -120)
+Pages.Position = UDim2.new(0, 10, 0, 110)
 Pages.BackgroundTransparency = 1
-Pages.BorderSizePixel = 0
-Pages.ScrollBarThickness = 2
-Pages.ScrollBarImageColor3 = CurrentTheme.ACCENT
-Pages.CanvasSize = UDim2.new(0, 0, 0, 0)
-Pages.AutomaticCanvasSize = Enum.AutomaticSize.Y
 Pages.Parent = Window
-
-local ThemePanel = Instance.new("ScrollingFrame")
-ThemePanel.Size = UDim2.new(0, 170, 0, 320)
-ThemePanel.Position = UDim2.new(0, -180, 0, 80) 
-ThemePanel.BackgroundColor3 = CurrentTheme.BG
-ThemePanel.BackgroundTransparency = 0.1
-ThemePanel.Visible = false
-ThemePanel.BorderSizePixel = 0
-ThemePanel.ScrollBarThickness = 2
-ThemePanel.ScrollBarImageColor3 = CurrentTheme.ACCENT
-ThemePanel.CanvasSize = UDim2.new(0, 0, 0, 0)
-ThemePanel.AutomaticCanvasSize = Enum.AutomaticSize.Y
-ThemePanel.Parent = Window
-Instance.new("UICorner", ThemePanel).CornerRadius = UDim.new(0, 10)
-local PanelStroke = Instance.new("UIStroke", ThemePanel)
-PanelStroke.Color = CurrentTheme.ACCENT
-PanelStroke.Thickness = 1
-PanelStroke.Transparency = 0.4
-
-local ThemeList = Instance.new("UIListLayout")
-ThemeList.Padding = UDim.new(0, 8)
-ThemeList.HorizontalAlignment = Enum.HorizontalAlignment.Center
-ThemeList.Parent = ThemePanel
-
-local ThemePad = Instance.new("UIPadding")
-ThemePad.PaddingTop = UDim.new(0, 10)
-ThemePad.PaddingBottom = UDim.new(0, 10)
-ThemePad.Parent = ThemePanel
-
-local function CreateThemeButton(themeName, themeData)
-    local Btn = Instance.new("TextButton")
-    Btn.Size = UDim2.new(1, -20, 0, 45)
-    Btn.BackgroundColor3 = themeData.BG
-    Btn.BackgroundTransparency = 0.3
-    Btn.Text = ""
-    Btn.Parent = ThemePanel
-    Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 6)
-    
-    local Preview = Instance.new("Frame")
-    Preview.Size = UDim2.new(0, 28, 0, 28)
-    Preview.Position = UDim2.new(0, 8, 0.5, -14)
-    Preview.BackgroundColor3 = themeData.ACCENT
-    Preview.Parent = Btn
-    Instance.new("UICorner", Preview).CornerRadius = UDim.new(0, 4)
-    
-    local Label = Instance.new("TextLabel")
-    Label.Size = UDim2.new(1, -45, 1, 0)
-    Label.Position = UDim2.new(0, 40, 0, 0)
-    Label.BackgroundTransparency = 1
-    Label.Text = themeName
-    Label.TextColor3 = themeData.TEXT
-    Label.Font = Enum.Font.GothamBold
-    Label.TextSize = 11
-    Label.TextXAlignment = Enum.TextXAlignment.Left
-    Label.Parent = Btn
-    
-    Btn.Activated:Connect(function()
-        PlayClick()
-        CurrentThemeName = themeName
-        CurrentTheme = themeData
-        if ApplyTheme then ApplyTheme() end
-        ThemePanel.Visible = false 
-    end)
-end
-
-for name, data in pairs(THEMES) do
-    CreateThemeButton(name, data)
-end
-
-local dragging, dragStart, startPos = false, nil, nil
-Header.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        dragging = true; dragStart = input.Position; startPos = Window.Position
-        input.Changed:Connect(function()
-            if input.UserInputState == Enum.UserInputState.End then dragging = false end
-        end)
-    end
-end)
-UserInputService.InputChanged:Connect(function(input)
-    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-        local delta = input.Position - dragStart
-        Window.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-    end
-end)
-
-ToggleBtn.Activated:Connect(function()
-    PlayClick()
-    Window.Visible = not Window.Visible
-    ThemePanel.Visible = false
-    if Window.Visible then
-        Window.Size = UDim2.new(0, 320, 0, 0)
-        TweenService:Create(Window, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Size = UDim2.new(0, 320, 0, 560)}):Play()
-    end
-end)
-CloseBtn.Activated:Connect(function() PlayClick(); Window.Visible = false; ThemePanel.Visible = false end)
 
 -- ============================================================
 -- [ UI ХЕЛПЕРЫ ]
 -- ============================================================
 local PagesList, TabsList = {}, {}
 
-local function CreateTab(name)
+local function CreateTab(name, icon)
     local Page = Instance.new("Frame")
-    Page.Size = UDim2.new(1, 0, 0, 0)
-    Page.AutomaticSize = Enum.AutomaticSize.Y
+    Page.Size = UDim2.new(1, 0, 1, 0)
     Page.BackgroundTransparency = 1
     Page.Visible = false
     Page.Parent = Pages
     
     local Layout = Instance.new("UIListLayout")
-    Layout.Padding = UDim.new(0, 12)
+    Layout.Padding = UDim.new(0, 10)
     Layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
     Layout.Parent = Page
     
@@ -337,7 +349,7 @@ local function CreateTab(name)
     TabBtn.Size = UDim2.new(0.33, -4, 1, 0)
     TabBtn.BackgroundColor3 = CurrentTheme.OFF
     TabBtn.BackgroundTransparency = 0.3
-    TabBtn.Text = name
+    TabBtn.Text = icon .. " " .. name
     TabBtn.TextColor3 = CurrentTheme.TEXT
     TabBtn.Font = Enum.Font.GothamBold
     TabBtn.TextSize = 11
@@ -347,7 +359,7 @@ local function CreateTab(name)
     table.insert(PagesList, Page)
     table.insert(TabsList, {Btn = TabBtn, Page = Page})
     
-    TabBtn.Activated:Connect(function()
+    TabBtn.MouseButton1Click:Connect(function()
         PlayClick()
         for _, t in ipairs(TabsList) do
             t.Page.Visible = false
@@ -360,104 +372,60 @@ local function CreateTab(name)
     return Page
 end
 
-local function CreateAsciiButton(parent, asciiText, initialState, callback)
-    local Container = Instance.new("Frame")
-    Container.Size = UDim2.new(1, 0, 0, 85)
-    Container.BackgroundTransparency = 1
-    Container.Parent = parent
-    
-    local Btn = Instance.new("TextButton")
-    Btn.Size = UDim2.new(1, 0, 1, 0)
-    Btn.BackgroundColor3 = initialState and CurrentTheme.ACCENT or CurrentTheme.OFF
-    Btn.BackgroundTransparency = initialState and 0.2 or 0.4
-    Btn.Text = asciiText
-    Btn.TextColor3 = initialState and CurrentTheme.BG or CurrentTheme.TEXT
-    Btn.Font = Enum.Font.Code
-    Btn.TextSize = 8
-    Btn.Parent = Container
-    Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 8)
-    
-    table.insert(UI_Elements, {btn = Btn, type = "ascii", state = initialState})
-
-    local isClicking = false
-    Btn.Activated:Connect(function()
-        if isClicking then return end
-        isClicking = true; PlayClick()
-        initialState = not initialState
-        callback(initialState)
-        for _, el in ipairs(UI_Elements) do
-            if el.btn == Btn then el.state = initialState end
-        end
-        TweenService:Create(Btn, TweenInfo.new(0.2), {
-            BackgroundColor3 = initialState and CurrentTheme.ACCENT or CurrentTheme.OFF,
-            BackgroundTransparency = initialState and 0.2 or 0.4,
-            TextColor3 = initialState and CurrentTheme.BG or CurrentTheme.TEXT
-        }):Play()
-        task.wait(0.2); isClicking = false
-    end)
-end
-
-local function CreateSwitch(parent, text, initialState, callback)
+local function CreateToggle(parent, yPos, text, stateKey, callback)
     local Container = Instance.new("Frame")
     Container.Size = UDim2.new(1, 0, 0, 35)
+    Container.Position = UDim2.new(0, 0, 0, yPos)
     Container.BackgroundTransparency = 1
     Container.Parent = parent
-    
+
     local Label = Instance.new("TextLabel")
     Label.Size = UDim2.new(1, -50, 1, 0)
     Label.BackgroundTransparency = 1
     Label.Text = text
     Label.TextColor3 = CurrentTheme.TEXT
-    Label.Font = Enum.Font.GothamMedium
+    Label.Font = Enum.Font.GothamBold
     Label.TextSize = 13
     Label.TextXAlignment = Enum.TextXAlignment.Left
     Label.Parent = Container
     table.insert(UI_Elements, {btn = Label, type = "label"})
-    
+
     local SwitchBg = Instance.new("Frame")
     SwitchBg.Size = UDim2.new(0, 40, 0, 22)
     SwitchBg.Position = UDim2.new(1, -40, 0.5, -11)
-    SwitchBg.BackgroundColor3 = initialState and CurrentTheme.ACCENT or CurrentTheme.OFF
+    SwitchBg.BackgroundColor3 = STATE[stateKey] and CurrentTheme.ACCENT or CurrentTheme.OFF
     SwitchBg.Parent = Container
     Instance.new("UICorner", SwitchBg).CornerRadius = UDim.new(1, 0)
-    table.insert(UI_Elements, {btn = SwitchBg, type = "switch", state = initialState})
+    table.insert(UI_Elements, {btn = SwitchBg, type = "switch", state = STATE[stateKey]})
     
-    local Circle = Instance.new("Frame")
-    Circle.Size = UDim2.new(0, 18, 0, 18)
-    Circle.Position = initialState and UDim2.new(1, -20, 0, 2) or UDim2.new(0, 2, 0, 2)
-    Circle.BackgroundColor3 = Color3.new(1,1,1)
-    Circle.Parent = SwitchBg
-    Instance.new("UICorner", Circle).CornerRadius = UDim.new(1, 0)
-    
-    local isClicking = false
-    local ClickArea = Instance.new("TextButton")
-    ClickArea.Size = UDim2.new(1, 0, 1, 0)
-    ClickArea.BackgroundTransparency = 1
-    ClickArea.Text = ""
-    ClickArea.Parent = Container
-    
-    ClickArea.Activated:Connect(function()
-        if isClicking then return end
-        isClicking = true; PlayClick()
-        initialState = not initialState
-        callback(initialState)
-        for _, el in ipairs(UI_Elements) do
-            if el.btn == SwitchBg then el.state = initialState end
-        end
-        TweenService:Create(SwitchBg, TweenInfo.new(0.25, Enum.EasingStyle.Quad), {
-            BackgroundColor3 = initialState and CurrentTheme.ACCENT or CurrentTheme.OFF
-        }):Play()
-        TweenService:Create(Circle, TweenInfo.new(0.25, Enum.EasingStyle.Quad), {
-            Position = initialState and UDim2.new(1, -20, 0, 2) or UDim2.new(0, 2, 0, 2)
-        }):Play()
-        task.wait(0.2); isClicking = false
+    local Knob = Instance.new("Frame")
+    Knob.Size = UDim2.new(0, 18, 0, 18)
+    Knob.Position = STATE[stateKey] and UDim2.new(1, -20, 0.5, -9) or UDim2.new(0, 2, 0.5, -9)
+    Knob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    Knob.Parent = SwitchBg
+    Instance.new("UICorner", Knob).CornerRadius = UDim.new(1, 0)
+
+    local Hitbox = Instance.new("TextButton")
+    Hitbox.Size = UDim2.new(1, 0, 1, 0)
+    Hitbox.BackgroundTransparency = 1
+    Hitbox.Text = ""
+    Hitbox.Parent = Container
+
+    Hitbox.MouseButton1Click:Connect(function()
+        PlayClick()
+        STATE[stateKey] = not STATE[stateKey]
+        SwitchBg.BackgroundColor3 = STATE[stateKey] and CurrentTheme.ACCENT or CurrentTheme.OFF
+        local targetPos = STATE[stateKey] and UDim2.new(1, -20, 0.5, -9) or UDim2.new(0, 2, 0.5, -9)
+        TweenService:Create(Knob, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {Position = targetPos}):Play()
+        if callback then callback(STATE[stateKey]) end
     end)
 end
 
-local function CreateButton(parent, text, callback)
+local function CreateButton(parent, yPos, text, callback, color)
     local Btn = Instance.new("TextButton")
     Btn.Size = UDim2.new(1, 0, 0, 35)
-    Btn.BackgroundColor3 = CurrentTheme.OFF
+    Btn.Position = UDim2.new(0, 0, 0, yPos)
+    Btn.BackgroundColor3 = color or CurrentTheme.OFF
     Btn.BackgroundTransparency = 0.3
     Btn.Text = text
     Btn.TextColor3 = CurrentTheme.TEXT
@@ -466,105 +434,54 @@ local function CreateButton(parent, text, callback)
     Btn.Parent = parent
     Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 6)
     table.insert(UI_Elements, {btn = Btn, type = "button"})
-    
-    Btn.Activated:Connect(function()
+    Btn.MouseButton1Click:Connect(function()
         PlayClick()
-        callback(Btn)
+        Btn.BackgroundTransparency = 0
+        task.wait(0.1)
+        Btn.BackgroundTransparency = 0.3
+        callback()
     end)
-    return Btn
-end
-
-local function CreateColorPicker(parent, text, currentColor, callback)
-    local Container = Instance.new("Frame")
-    Container.Size = UDim2.new(1, 0, 0, 55)
-    Container.BackgroundTransparency = 1
-    Container.Parent = parent
-
-    local Label = Instance.new("TextLabel")
-    Label.Size = UDim2.new(1, 0, 0, 20)
-    Label.BackgroundTransparency = 1
-    Label.Text = text
-    Label.TextColor3 = CurrentTheme.TEXT
-    Label.Font = Enum.Font.GothamMedium
-    Label.TextSize = 12
-    Label.TextXAlignment = Enum.TextXAlignment.Left
-    Label.Parent = Container
-    table.insert(UI_Elements, {btn = Label, type = "label"})
-
-    local Colors = {
-        Color3.fromRGB(0, 255, 50), Color3.fromRGB(0, 255, 200), Color3.fromRGB(0, 150, 255), Color3.fromRGB(150, 0, 255),
-        Color3.fromRGB(255, 0, 200), Color3.fromRGB(255, 50, 50), Color3.fromRGB(255, 200, 0), Color3.fromRGB(255, 255, 255)
-    }
-
-    local StartX = 0
-    for _, c in ipairs(Colors) do
-        local ColorBtn = Instance.new("TextButton")
-        ColorBtn.Size = UDim2.new(0, 20, 0, 20)
-        ColorBtn.Position = UDim2.new(0, StartX, 0, 25)
-        ColorBtn.BackgroundColor3 = c
-        ColorBtn.Text = ""
-        ColorBtn.Parent = Container
-        Instance.new("UICorner", ColorBtn).CornerRadius = UDim.new(0, 4)
-        
-        local Stroke = Instance.new("UIStroke", ColorBtn)
-        Stroke.Color = (c == currentColor) and CurrentTheme.ACCENT or Color3.new(0,0,0)
-        Stroke.Thickness = (c == currentColor) and 2 or 1
-        Stroke.Transparency = (c == currentColor) and 0 or 0.5
-
-        ColorBtn.Activated:Connect(function()
-            PlayClick(); callback(c)
-            for _, other in ipairs(Container:GetChildren()) do
-                if other:IsA("TextButton") then
-                    local s = other:FindFirstChild("UIStroke")
-                    if s then s.Color = Color3.new(0,0,0); s.Thickness = 1; s.Transparency = 0.5 end
-                end
-            end
-            Stroke.Color = CurrentTheme.ACCENT; Stroke.Thickness = 2; Stroke.Transparency = 0
-        end)
-        StartX = StartX + 24
-    end
 end
 
 -- ============================================================
 -- [ СТРАНИЦЫ ]
 -- ============================================================
-local MainPage = CreateTab("Main")
-local ParryAscii = [[
-██████╗  █████╗ ██████╗ ██████╗ ██╗   ██╗
-██╔══██╗██╔══██╗██╔══██╗██╔══██╗╚██╗ ██╔╝
-██████╔╝███████║██████╔╝██████╔╝ ╚████╔╝ 
-██╔═══╝ ██╔══██║██╔══██╗██╔══██╗  ╚██╔╝  
-██║     ██║  ██║██║  ██║██║  ██║   ██║   
-╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝   
-]]
-CreateAsciiButton(MainPage, ParryAscii, STATE.Enabled, function(v) STATE.Enabled = v end)
-CreateSwitch(MainPage, "3D Sphere", STATE.ShowVisuals, function(v) 
-    STATE.ShowVisuals = v
+local MainPage = CreateTab("MAIN", "🎯")
+CreateToggle(MainPage, 0, "Auto Parry (Master)", "Enabled")
+CreateToggle(MainPage, 40, "3D Sphere Visual", "ShowVisuals", function(v)
     OuterSphere.Transparency = v and 0.65 or 1
-    InnerSphere.Transparency = (v and not STATE.HideInner) and 0.8 or 1
+    InnerSphere.Transparency = v and 0.7 or 1
 end)
-
-CreateSwitch(MainPage, "Camera Lock (Ball)", STATE.CameraLock, function(v) 
-    STATE.CameraLock = v
-    if not v and Camera then
-        Camera.CameraType = Enum.CameraType.Custom
-    end
+CreateToggle(MainPage, 80, "Camera Lock (Ball)", "CameraLock", function(v)
+    if not v then Camera.CameraType = Enum.CameraType.Custom end
 end)
+CreateButton(MainPage, 130, "Apply Visuals", function()
+    print(">>> [BB] Visuals applied.")
+end, Color3.fromRGB(60, 180, 100))
 
-local VisPage = CreateTab("Visual")
-CreateSwitch(VisPage, "Anti-Lag (Boost)", STATE.AntiLag, function(v) STATE.AntiLag = v end)
-CreateSwitch(VisPage, "Hide Inner Core", STATE.HideInner, function(v) 
-    STATE.HideInner = v
-    InnerSphere.Transparency = (v or not STATE.ShowVisuals) and 1 or 0.8
+local VisPage = CreateTab("VISUAL", "🎨")
+CreateToggle(VisPage, 0, "Anti-Lag (FPS)", "AntiLag")
+CreateToggle(VisPage, 40, "Night Mode (Sphere)", "NightModeSphere")
+CreateToggle(VisPage, 80, "Night Map (Env)", "NightMap", function(v)
+    STATE.NightMap = v; SetNightMap(v)
 end)
-CreateSwitch(VisPage, "Static Sphere (No Pulse)", STATE.StaticSphere, function(v) STATE.StaticSphere = v end)
-CreateSwitch(VisPage, "Night Mode (Cyberpunk Sphere)", STATE.NightModeSphere, function(v) STATE.NightModeSphere = v end)
-CreateColorPicker(VisPage, "Outer Sphere Color", STATE.OuterColor, function(c) STATE.OuterColor = c end)
-CreateColorPicker(VisPage, "Inner Core Color", STATE.InnerColor, function(c) STATE.InnerColor = c end)
-CreateButton(VisPage, "Change UI Theme", function() ThemePanel.Visible = not ThemePanel.Visible end)
+CreateToggle(VisPage, 120, "Static Sphere", "StaticSphere")
 
--- 3. Other Page
-local OtherPage = CreateTab("Other")
+local function ChangeTheme()
+    if CurrentThemeName == "Premium Dark" then CurrentThemeName = "Cyber Neon"
+    elseif CurrentThemeName == "Cyber Neon" then CurrentThemeName = "Crimson Void"
+    else CurrentThemeName = "Premium Dark" end
+    CurrentTheme = THEMES[CurrentThemeName]
+    if ApplyTheme then ApplyTheme() end
+end
+CreateButton(VisPage, 170, "Change UI Theme", ChangeTheme, Color3.fromRGB(100, 50, 200))
+
+-- ============================================================
+-- [ СИСТЕМА ПРОФИЛЕЙ ]
+-- ============================================================
+local OtherPage = CreateTab("OTHER", "⚙️")
+local PROFILE_FOLDER = "BB_Profiles"
+pcall(function() if makefolder and not isfolder(PROFILE_FOLDER) then makefolder(PROFILE_FOLDER) end end)
 
 local ProfileTextBox = Instance.new("TextBox")
 ProfileTextBox.Size = UDim2.new(1, 0, 0, 35)
@@ -575,34 +492,33 @@ ProfileTextBox.Text = ""
 ProfileTextBox.TextColor3 = CurrentTheme.TEXT
 ProfileTextBox.Font = Enum.Font.GothamMedium
 ProfileTextBox.TextSize = 12
-ProfileTextBox.ClearTextOnFocus = false
 ProfileTextBox.Parent = OtherPage
 Instance.new("UICorner", ProfileTextBox).CornerRadius = UDim.new(0, 6)
 table.insert(UI_Elements, {btn = ProfileTextBox, type = "textbox"})
 
-local function SaveProfileToFile(pName)
+local function SaveProfile()
+    local pName = ProfileTextBox.Text ~= "" and ProfileTextBox.Text or "Default"
     local data = {
         Theme = CurrentThemeName, Enabled = STATE.Enabled, ShowVisuals = STATE.ShowVisuals,
         AntiLag = STATE.AntiLag, HideInner = STATE.HideInner, StaticSphere = STATE.StaticSphere,
         NightModeSphere = STATE.NightModeSphere, NightMap = STATE.NightMap,
-        OuterColor = tostring(STATE.OuterColor), InnerColor = tostring(STATE.InnerColor)
+        OuterColor = tostring(STATE.OuterColor), InnerColor = tostring(STATE.InnerColor),
+        CameraLock = STATE.CameraLock
     }
-    local success = pcall(function()
-        writefile("BB_Profile_" .. pName .. ".json", HttpService:JSONEncode(data))
-    end)
-    if success then print(">>> [BB] Профиль '"..pName.."' сохранен!") 
-    else print(">>> [BB] Ошибка сохранения.") end
+    local success = pcall(function() writefile(PROFILE_FOLDER .. "/" .. pName .. ".json", HttpService:JSONEncode(data)) end)
+    if success then print(">>> [BB] Profile saved: "..pName) end
+    if _G.BB_RefreshProfiles then _G.BB_RefreshProfiles() end
 end
 
-local function LoadProfileFromFile(pName, showMsg)
+local function LoadProfile(pName)
     local success, data = pcall(function()
-        if isfile and isfile("BB_Profile_" .. pName .. ".json") then
-            return HttpService:JSONDecode(readfile("BB_Profile_" .. pName .. ".json"))
+        if isfile and isfile(PROFILE_FOLDER .. "/" .. pName .. ".json") then
+            return HttpService:JSONDecode(readfile(PROFILE_FOLDER .. "/" .. pName .. ".json"))
         end
     end)
     if success and data then
-        CurrentThemeName = data.Theme or "Dark Metal"
-        CurrentTheme = THEMES[CurrentThemeName] or THEMES["Dark Metal"]
+        CurrentThemeName = data.Theme or "Premium Dark"
+        CurrentTheme = THEMES[CurrentThemeName] or THEMES["Premium Dark"]
         STATE.Enabled = data.Enabled ~= false
         STATE.ShowVisuals = data.ShowVisuals ~= false
         STATE.AntiLag = data.AntiLag == true
@@ -610,228 +526,116 @@ local function LoadProfileFromFile(pName, showMsg)
         STATE.StaticSphere = data.StaticSphere == true
         STATE.NightModeSphere = data.NightModeSphere == true
         STATE.NightMap = data.NightMap == true
+        STATE.CameraLock = data.CameraLock == true
         if ApplyTheme then ApplyTheme() end
-        if showMsg then print(">>> [BB] Профиль '"..pName.."' загружен!") end
-    else
-        if showMsg then print(">>> [BB] Профиль не найден.") end
+        print(">>> [BB] Profile loaded: "..pName)
     end
 end
 
-local SaveBtn = CreateButton(OtherPage, "Save Profile", function()
-    local pName = ProfileTextBox.Text ~= "" and ProfileTextBox.Text or "Default"
-    SaveProfileToFile(pName)
-    if RefreshProfileList then RefreshProfileList() end
-end)
-
-local ProfileHeaderRow = Instance.new("Frame")
-ProfileHeaderRow.Size = UDim2.new(1, 0, 0, 25)
-ProfileHeaderRow.BackgroundTransparency = 1
-ProfileHeaderRow.Parent = OtherPage
-
-local ProfileHeaderLabel = Instance.new("TextLabel")
-ProfileHeaderLabel.Size = UDim2.new(1, -60, 1, 0)
-ProfileHeaderLabel.BackgroundTransparency = 1
-ProfileHeaderLabel.Text = "Saved Profiles"
-ProfileHeaderLabel.TextColor3 = CurrentTheme.TEXT
-ProfileHeaderLabel.Font = Enum.Font.GothamBold
-ProfileHeaderLabel.TextSize = 12
-ProfileHeaderLabel.TextXAlignment = Enum.TextXAlignment.Left
-ProfileHeaderLabel.Parent = ProfileHeaderRow
-table.insert(UI_Elements, {btn = ProfileHeaderLabel, type = "label"})
-
-local RefreshBtn = Instance.new("TextButton")
-RefreshBtn.Size = UDim2.new(0, 55, 1, 0)
-RefreshBtn.Position = UDim2.new(1, -55, 0, 0)
-RefreshBtn.BackgroundColor3 = CurrentTheme.OFF
-RefreshBtn.Text = "Refresh"
-RefreshBtn.TextColor3 = CurrentTheme.TEXT
-RefreshBtn.Font = Enum.Font.GothamBold
-RefreshBtn.TextSize = 10
-RefreshBtn.Parent = ProfileHeaderRow
-Instance.new("UICorner", RefreshBtn).CornerRadius = UDim.new(0, 5)
-table.insert(UI_Elements, {btn = RefreshBtn, type = "button"})
+CreateButton(OtherPage, 40, "Save / Overwrite Profile", SaveProfile, Color3.fromRGB(60, 180, 100))
 
 local ProfileListFrame = Instance.new("ScrollingFrame")
-ProfileListFrame.Size = UDim2.new(1, 0, 0, 180)
+ProfileListFrame.Size = UDim2.new(1, 0, 0, 160)
+ProfileListFrame.Position = UDim2.new(0, 0, 0, 80)
 ProfileListFrame.BackgroundColor3 = CurrentTheme.OFF
 ProfileListFrame.BackgroundTransparency = 0.7
 ProfileListFrame.BorderSizePixel = 0
 ProfileListFrame.ScrollBarThickness = 2
-ProfileListFrame.ScrollBarImageColor3 = CurrentTheme.ACCENT
 ProfileListFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
 ProfileListFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
 ProfileListFrame.Parent = OtherPage
 Instance.new("UICorner", ProfileListFrame).CornerRadius = UDim.new(0, 6)
 table.insert(UI_Elements, {btn = ProfileListFrame, type = "listframe"})
 
-local ListPadding = Instance.new("UIPadding")
-ListPadding.PaddingTop = UDim.new(0, 4)
-ListPadding.PaddingBottom = UDim.new(0, 4)
-ListPadding.PaddingLeft = UDim.new(0, 4)
-ListPadding.PaddingRight = UDim.new(0, 4)
-ListPadding.Parent = ProfileListFrame
-
 local ListLayout = Instance.new("UIListLayout")
 ListLayout.Padding = UDim.new(0, 4)
-ListLayout.SortOrder = Enum.SortOrder.LayoutOrder
 ListLayout.Parent = ProfileListFrame
 
-RefreshProfileList = function()
+_G.BB_RefreshProfiles = function()
     for _, child in ipairs(ProfileListFrame:GetChildren()) do
         if child:IsA("Frame") then child:Destroy() end
     end
     
+    local autoName = ""
+    pcall(function() if isfile and isfile("BB_AutoLoad.txt") then autoName = readfile("BB_AutoLoad.txt") end end)
+
     local files = {}
     pcall(function()
         if listfiles then
-            for _, f in ipairs(listfiles("")) do
-                local match = f:match("BB_Profile_(.+)%.json")
+            for _, f in ipairs(listfiles(PROFILE_FOLDER)) do
+                local match = f:match("(.+)%.json")
                 if match then table.insert(files, match) end
             end
         end
     end)
     
-    local autoloadName = ""
-    pcall(function()
-        if isfile and isfile("BB_AutoLoad.txt") then
-            autoloadName = readfile("BB_AutoLoad.txt")
-        end
-    end)
-    
     if #files == 0 then
         local empty = Instance.new("TextLabel")
-        empty.Size = UDim2.new(1, 0, 0, 30)
+        empty.Size = UDim2.new(1, 0, 0, 25)
         empty.BackgroundTransparency = 1
-        empty.Text = "Нет сохраненных профилей"
+        empty.Text = "No profiles saved"
         empty.TextColor3 = CurrentTheme.TEXT
         empty.Font = Enum.Font.Gotham
         empty.TextSize = 11
-        empty.TextTransparency = 0.5
         empty.Parent = ProfileListFrame
         return
     end
-    
+
+    table.sort(files)
+    if autoName ~= "" then
+        for i, v in ipairs(files) do
+            if v == autoName then
+                table.remove(files, i)
+                table.insert(files, 1, v)
+                break
+            end
+        end
+    end
+
     for _, name in ipairs(files) do
-        local isAuto = (name == autoloadName)
+        local isAuto = (name == autoName)
         local row = Instance.new("Frame")
-        row.Size = UDim2.new(1, 0, 0, 28)
+        row.Size = UDim2.new(1, 0, 0, 25)
         row.BackgroundTransparency = 1
         row.Parent = ProfileListFrame
-        
+
         local loadBtn = Instance.new("TextButton")
-        loadBtn.Size = UDim2.new(0.42, -2, 1, 0)
+        loadBtn.Size = UDim2.new(0.6, -2, 1, 0)
         loadBtn.BackgroundColor3 = isAuto and CurrentTheme.ACCENT or CurrentTheme.OFF
-        loadBtn.Text = (isAuto and "* " or "") .. name
+        loadBtn.Text = (isAuto and "★ " or "") .. name
         loadBtn.TextColor3 = isAuto and CurrentTheme.BG or CurrentTheme.TEXT
         loadBtn.Font = Enum.Font.GothamBold
         loadBtn.TextSize = 10
         loadBtn.Parent = row
         Instance.new("UICorner", loadBtn).CornerRadius = UDim.new(0, 4)
-        loadBtn.Activated:Connect(function()
-            PlayClick()
-            ProfileTextBox.Text = name
-            LoadProfileFromFile(name, true)
-        end)
-        
+        loadBtn.MouseButton1Click:Connect(function() PlayClick(); LoadProfile(name) end)
+
         local autoBtn = Instance.new("TextButton")
-        autoBtn.Size = UDim2.new(0.34, -2, 1, 0)
-        autoBtn.Position = UDim2.new(0.42, 2, 0, 0)
-        autoBtn.BackgroundColor3 = isAuto and Color3.fromRGB(100, 200, 100) or CurrentTheme.OFF
-        autoBtn.Text = isAuto and "AUTO" or "SET AUTO"
+        autoBtn.Size = UDim2.new(0.4, -2, 1, 0)
+        autoBtn.Position = UDim2.new(0.6, 2, 0, 0)
+        autoBtn.BackgroundColor3 = isAuto and Color3.fromRGB(60, 180, 100) or CurrentTheme.OFF
+        autoBtn.Text = isAuto and "✓ AUTO" or "SET AUTO"
         autoBtn.TextColor3 = isAuto and Color3.new(0,0,0) or CurrentTheme.TEXT
         autoBtn.Font = Enum.Font.GothamBold
         autoBtn.TextSize = 9
         autoBtn.Parent = row
         Instance.new("UICorner", autoBtn).CornerRadius = UDim.new(0, 4)
-        autoBtn.Activated:Connect(function()
+        autoBtn.MouseButton1Click:Connect(function()
             PlayClick()
-            if isAuto then
-                pcall(function() if isfile("BB_AutoLoad.txt") then delfile("BB_AutoLoad.txt") end end)
-                print(">>> [BB] Auto-Load отключен")
-            else
-                pcall(function() writefile("BB_AutoLoad.txt", name) end)
-                print(">>> [BB] Auto-Load: "..name)
-            end
-            RefreshProfileList()
-        end)
-        
-        local delBtn = Instance.new("TextButton")
-        delBtn.Size = UDim2.new(0.24, -2, 1, 0)
-        delBtn.Position = UDim2.new(0.76, 2, 0, 0)
-        delBtn.BackgroundColor3 = Color3.fromRGB(160, 40, 40)
-        delBtn.Text = "DEL"
-        delBtn.TextColor3 = Color3.new(1,1,1)
-        delBtn.Font = Enum.Font.GothamBold
-        delBtn.TextSize = 9
-        delBtn.Parent = row
-        Instance.new("UICorner", delBtn).CornerRadius = UDim.new(0, 4)
-        delBtn.Activated:Connect(function()
-            PlayClick()
-            pcall(function() delfile("BB_Profile_"..name..".json") end)
-            pcall(function()
-                if isfile("BB_AutoLoad.txt") and readfile("BB_AutoLoad.txt") == name then
-                    delfile("BB_AutoLoad.txt")
-                end
-            end)
-            print(">>> [BB] Удален профиль: "..name)
-            RefreshProfileList()
+            if isAuto then pcall(function() delfile("BB_AutoLoad.txt") end)
+            else pcall(function() writefile("BB_AutoLoad.txt", name) end) end
+            _G.BB_RefreshProfiles()
         end)
     end
 end
 
-RefreshBtn.Activated:Connect(function()
-    PlayClick()
-    RefreshProfileList()
-end)
-
+task.spawn(function() task.wait(1); _G.BB_RefreshProfiles() end)
 task.spawn(function()
-    task.wait(0.5)
-    RefreshProfileList()
-end)
-
-task.spawn(function()
-    task.wait(1)
+    task.wait(1.5)
     pcall(function()
-        if isfile and isfile("BB_AutoLoad.txt") then
-            local autoName = readfile("BB_AutoLoad.txt")
-            LoadProfileFromFile(autoName, false)
-            print(">>> [BB] Авто-загрузка профиля: "..autoName)
-        end
+        if isfile and isfile("BB_AutoLoad.txt") then LoadProfile(readfile("BB_AutoLoad.txt")) end
     end)
 end)
-
--- ============================================================
--- [ ПАНЕЛЬ ОТЛАДКИ ]
--- ============================================================
-local DebugGui = Instance.new("ScreenGui")
-DebugGui.Name = "BB_Debug"
-DebugGui.ResetOnSpawn = false
-DebugGui.DisplayOrder = 1000 
-DebugGui.Parent = PGui
-
-local DebugFrame = Instance.new("Frame")
-DebugFrame.Size = UDim2.new(0, 210, 0, 120)
-DebugFrame.Position = UDim2.new(0, 10, 0, 60)
-DebugFrame.BackgroundColor3 = CurrentTheme.BG
-DebugFrame.BackgroundTransparency = 0.2
-DebugFrame.Parent = DebugGui
-Instance.new("UICorner", DebugFrame).CornerRadius = UDim.new(0, 8)
-local DebugStroke = Instance.new("UIStroke", DebugFrame)
-DebugStroke.Color = CurrentTheme.ACCENT
-DebugStroke.Thickness = 1
-DebugStroke.Transparency = 0.3
-
-local DebugLabel = Instance.new("TextLabel")
-DebugLabel.Size = UDim2.new(1, -15, 1, -15)
-DebugLabel.Position = UDim2.new(0, 10, 0, 10)
-DebugLabel.BackgroundTransparency = 1
-DebugLabel.TextColor3 = STATE.InnerColor
-DebugLabel.Font = Enum.Font.Code
-DebugLabel.TextSize = 12
-DebugLabel.TextXAlignment = Enum.TextXAlignment.Left
-DebugLabel.TextYAlignment = Enum.TextYAlignment.Top
-DebugLabel.Text = "Ожидание..."
-DebugLabel.Parent = DebugFrame
 
 -- ============================================================
 -- [ ПРИМЕНЕНИЕ ТЕМЫ ]
@@ -839,18 +643,10 @@ DebugLabel.Parent = DebugFrame
 ApplyTheme = function()
     Window.BackgroundColor3 = CurrentTheme.BG
     Header.BackgroundColor3 = CurrentTheme.HEADER
-    HeaderMask.BackgroundColor3 = CurrentTheme.HEADER
     WinStroke.Color = CurrentTheme.ACCENT
     Title.TextColor3 = CurrentTheme.ACCENT
     BtnStroke.Color = CurrentTheme.ACCENT
     ToggleBtn.TextColor3 = CurrentTheme.ACCENT
-    ThemePanel.BackgroundColor3 = CurrentTheme.BG
-    PanelStroke.Color = CurrentTheme.ACCENT
-    DebugFrame.BackgroundColor3 = CurrentTheme.BG
-    DebugStroke.Color = CurrentTheme.ACCENT
-    Pages.ScrollBarImageColor3 = CurrentTheme.ACCENT
-    ThemePanel.ScrollBarImageColor3 = CurrentTheme.ACCENT
-    ProfileListFrame.ScrollBarImageColor3 = CurrentTheme.ACCENT
     
     for _, t in ipairs(TabsList) do
         if t.Page.Visible then
@@ -864,13 +660,10 @@ ApplyTheme = function()
         if el.type == "label" then el.btn.TextColor3 = CurrentTheme.TEXT
         elseif el.type == "button" then el.btn.BackgroundColor3 = CurrentTheme.OFF; el.btn.TextColor3 = CurrentTheme.TEXT
         elseif el.type == "switch" then el.btn.BackgroundColor3 = el.state and CurrentTheme.ACCENT or CurrentTheme.OFF
-        elseif el.type == "ascii" then el.btn.BackgroundColor3 = el.state and CurrentTheme.ACCENT or CurrentTheme.OFF; el.btn.TextColor3 = el.state and CurrentTheme.BG or CurrentTheme.TEXT
         elseif el.type == "textbox" then el.btn.BackgroundColor3 = CurrentTheme.OFF; el.btn.TextColor3 = CurrentTheme.TEXT
         elseif el.type == "listframe" then el.btn.BackgroundColor3 = CurrentTheme.OFF
         end
     end
-    
-    if RefreshProfileList then RefreshProfileList() end
 end
 
 TabsList[1].Page.Visible = true
@@ -878,8 +671,70 @@ TabsList[1].Btn.BackgroundColor3 = CurrentTheme.ACCENT
 TabsList[1].Btn.TextColor3 = CurrentTheme.BG
 
 -- ============================================================
--- [ ЛОГИКА ЯДРА ]
+-- [ ПЕРЕТАСКИВАНИЕ ]
 -- ============================================================
+local dragging, dragStart, startPos = false, nil, nil
+Header.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true; dragStart = input.Position; startPos = Window.Position
+    end
+end)
+UserInputService.InputChanged:Connect(function(input)
+    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        local delta = input.Position - dragStart
+        Window.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = false
+    end
+end)
+
+ToggleBtn.MouseButton1Click:Connect(function()
+    PlayClick()
+    Window.Visible = not Window.Visible
+    if Window.Visible then
+        Window.Size = UDim2.new(0, 320, 0, 0)
+        TweenService:Create(Window, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Size = UDim2.new(0, 320, 0, 500)}):Play()
+    end
+end)
+CloseBtn.MouseButton1Click:Connect(function() PlayClick(); Window.Visible = false end)
+
+-- ============================================================
+-- [ ЛОГИКА ПАРИРОВАНИЯ ]
+-- ============================================================
+local function TriggerParry()
+    local now = tick()
+    if now - STATE.LastParry < CONFIG.COOLDOWN then return end
+    STATE.LastParry = now
+
+    if not STATE.BlockButton or not STATE.BlockButton.Parent then
+        STATE.BlockButton = FindBlockButton()
+    end
+
+    if STATE.BlockButton and getconnections then
+        local success = pcall(function()
+            local connections = getconnections(STATE.BlockButton.Activated)
+            for _, c in ipairs(connections) do
+                if c.Fire then c:Fire() end
+            end
+        end)
+        if success then return end
+    end
+
+    if STATE.Remote then
+        pcall(function() STATE.Remote:FireServer() end)
+        return
+    end
+
+    pcall(function()
+        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.F, false, game)
+        task.wait(0.02)
+        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.F, false, game)
+    end)
+end
+
 local function GetBall()
     if STATE.Ball and STATE.Ball.Parent then return STATE.Ball end
     local bf = Workspace:FindFirstChild("Balls")
@@ -905,46 +760,14 @@ local function IsTargetingMe(ball)
     return LP.Character and LP.Character:FindFirstChild("Highlight") ~= nil
 end
 
-local function GetZone(speed)
-    local Z = CONFIG.ZONE
-    if speed <= Z.MIN_SPEED then return Z.MIN_DIST end
-    if speed <= Z.MID_SPEED then
-        local a = (speed - Z.MIN_SPEED) / (Z.MID_SPEED - Z.MIN_SPEED)
-        return Z.MIN_DIST + (Z.MID_DIST - Z.MIN_DIST) * a
-    end
-    if speed <= Z.MAX_SPEED then
-        local a = (speed - Z.MID_SPEED) / (Z.MAX_SPEED - Z.MID_SPEED)
-        return Z.MID_DIST + (Z.MAX_DIST - Z.MID_DIST) * a
-    end
-    return Z.MAX_DIST
-end
-
-local function getDistanceToSegment(p, a, b)
-    local ab = b - a
-    local ap = p - a
-    local abLenSq = ab:Dot(ab)
-    if abLenSq == 0 then return (p - a).Magnitude end
-    local t = clamp(ap:Dot(ab) / abLenSq, 0, 1)
-    local closest = a + ab * t
-    return (p - closest).Magnitude
-end
-
 local PulseTime = 0
 
--- РАБОЧИЙ Camera Lock
+-- ЛОК КАМЕРЫ
 RunService.RenderStepped:Connect(function()
-    pcall(function()
-        if STATE.CameraLock then
-            local ball = STATE.Ball
-            if ball and ball.Parent then
-                local cam = Workspace.CurrentCamera
-                if cam then
-                    cam.CameraType = Enum.CameraType.Scriptable
-                    cam.CFrame = CFrame.lookAt(cam.CFrame.Position, ball.Position)
-                end
-            end
-        end
-    end)
+    if STATE.CameraLock and STATE.Ball and STATE.Ball.Parent then
+        Camera.CameraType = Enum.CameraType.Scriptable
+        Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, STATE.Ball.Position)
+    end
 end)
 
 RunService.Heartbeat:Connect(function(dt)
@@ -952,7 +775,7 @@ RunService.Heartbeat:Connect(function(dt)
         STATE.Frames = STATE.Frames + 1
         local render = true
         if STATE.AntiLag and (STATE.Frames % 3 ~= 0) then render = false end
-        
+
         local char = LP.Character
         local hrp = char and char:FindFirstChild("HumanoidRootPart")
         if not hrp or (char:FindFirstChild("Humanoid") and char.Humanoid.Health <= 0) then
@@ -961,136 +784,94 @@ RunService.Heartbeat:Connect(function(dt)
         end
 
         local ball = GetBall()
-        local dist, zone, speed = 0, CONFIG.ZONE.MIN_DIST, 0
+        local dist = 0
+        local speed = 0
         local timeToImpact = 999
         local targetColor = STATE.OuterColor
-        local status = "Safe"
 
         if ball then
             local bp = ball.Position
             dist = (hrp.Position - bp).Magnitude
-            
+
             if STATE.Ball ~= ball then
                 STATE.Ball = ball
                 STATE.PrevBallPos = bp
                 STATE.IsArmed = true
             end
-            
-            if dist > CONFIG.ZONE.MAX_DIST * 1.5 then STATE.IsArmed = true end
-            
-            local approachSpeed = 0
+
+            if dist > 80 then STATE.IsArmed = true end
+
             local bv = ball.AssemblyLinearVelocity
             if bv.Magnitude > 1 then
                 speed = bv.Magnitude
                 local dirToMe = (hrp.Position - bp).Unit
-                approachSpeed = bv:Dot(dirToMe)
+                local approachSpeed = bv:Dot(dirToMe)
+                if approachSpeed > 1 then timeToImpact = dist / approachSpeed end
             elseif STATE.PrevBallPos and dt > 0 then
                 local moveVec = bp - STATE.PrevBallPos
                 speed = moveVec.Magnitude / dt
                 if speed > 1 then
                     local dirToMe = (hrp.Position - bp).Unit
-                    approachSpeed = moveVec.Unit:Dot(dirToMe) * speed
+                    local approachSpeed = moveVec.Unit:Dot(dirToMe) * speed
+                    if approachSpeed > 1 then timeToImpact = dist / approachSpeed end
                 end
             end
-            
-            if approachSpeed > 1 then timeToImpact = dist / approachSpeed end
 
             if IsTargetingMe(ball) then
-                zone = GetZone(speed)
-                
-                local inZone = dist <= zone
-                local hitTrajectory = false
-                if STATE.PrevBallPos then
-                    hitTrajectory = getDistanceToSegment(hrp.Position, STATE.PrevBallPos, bp) <= zone
-                end
-                
-                local predictedHit = false
-                if bv.Magnitude > 50 then
-                    local predictedPos = bp + bv * 0.1
-                    if (hrp.Position - predictedPos).Magnitude <= zone then predictedHit = true end
-                end
-                
-                local timePredict = timeToImpact <= CONFIG.SYSTEM.PING_BUFFER
-                
-                if inZone or hitTrajectory or predictedHit or timePredict then
-                    status = "DANGER!"
-                    targetColor = CONFIG.VISUALS.DANGER_COLOR
-                    
-                    if STATE.Enabled and STATE.IsArmed and (tick() - STATE.LastParry > CONFIG.SYSTEM.PARRY_COOLDOWN) then
-                        pcall(function()
-                            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.F, false, game)
-                            task.wait(0.05)
-                            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.F, false, game)
-                        end)
-                        if STATE.Remote then pcall(function() STATE.Remote:FireServer() end) end
-                        STATE.LastParry = tick()
+                if dist <= CONFIG.CLOSE_DIST or timeToImpact <= CONFIG.PING_SAFE then
+                    targetColor = Color3.fromRGB(255, 50, 50)
+                    if STATE.Enabled then
+                        TriggerParry()
                         STATE.IsArmed = false
                     end
                 else
-                    status = "Incoming"
+                    targetColor = Color3.fromRGB(255, 200, 0)
                 end
             else
-                status = "Other Target"
+                targetColor = Color3.fromRGB(0, 255, 100)
             end
             STATE.PrevBallPos = bp
         else
             STATE.IsArmed = true
             STATE.PrevBallPos = nil
-            zone = CONFIG.ZONE.MIN_DIST 
         end
 
         if render and STATE.ShowVisuals and OuterSphere and InnerSphere then
-            if not STATE.StaticSphere then
-                PulseTime = PulseTime + (dt * CONFIG.VISUALS.PULSE_SPEED)
-            end
+            PulseTime = PulseTime + (dt * 2.5)
             
-            local targetSize = math.max(zone * 2, CONFIG.ZONE.MIN_DIST * 2)
+            local targetSize = math.max(dist * 1.5, 40)
             local currentSize = OuterSphere.Size.X
-            if currentSize < 5 then currentSize = targetSize end
-            
             local newSize = currentSize + (targetSize - currentSize) * math.exp(-10 * dt)
             local finalSize = STATE.StaticSphere and newSize or (newSize * (1 + math.sin(PulseTime) * 0.02))
-            
+
             OuterSphere.Size = Vector3.new(finalSize, finalSize, finalSize)
-            OuterSphere.CFrame = CFrame.new(hrp.Position + Vector3.new(0, CONFIG.VISUALS.Y_OFFSET, 0))
+            OuterSphere.CFrame = CFrame.new(hrp.Position + Vector3.new(0, -0.5, 0))
             
             if STATE.NightModeSphere then
                 OuterSphere.Material = Enum.Material.Neon
                 OuterSphere.Transparency = 0.5
                 InnerSphere.Transparency = 0.2
-                if targetColor ~= CONFIG.VISUALS.DANGER_COLOR then
+                if targetColor ~= Color3.fromRGB(255, 50, 50) then
                     targetColor = Color3.fromRGB(20, 0, 30)
                 end
             else
                 OuterSphere.Material = Enum.Material.ForceField
                 OuterSphere.Transparency = 0.65
-                InnerSphere.Transparency = STATE.HideInner and 1 or 0.8
+                InnerSphere.Transparency = STATE.HideInner and 1 or 0.7
             end
 
-            OuterSphere.Color = OuterSphere.Color:Lerp(targetColor, clamp(10 * dt, 0, 1))
+            OuterSphere.Color = OuterSphere.Color:Lerp(targetColor, math.clamp(10 * dt, 0, 1))
             
-            if targetColor == CONFIG.VISUALS.DANGER_COLOR then
-                InnerSphere.Color = InnerSphere.Color:Lerp(CONFIG.VISUALS.DANGER_COLOR, clamp(10 * dt, 0, 1))
+            if targetColor == Color3.fromRGB(255, 50, 50) then
+                InnerSphere.Color = InnerSphere.Color:Lerp(Color3.fromRGB(255, 50, 50), math.clamp(10 * dt, 0, 1))
             else
                 local finalInner = STATE.NightModeSphere and Color3.fromRGB(255, 0, 255) or STATE.InnerColor
-                InnerSphere.Color = InnerSphere.Color:Lerp(finalInner, clamp(10 * dt, 0, 1))
+                InnerSphere.Color = InnerSphere.Color:Lerp(finalInner, math.clamp(10 * dt, 0, 1))
             end
             
             InnerSphere.CFrame = OuterSphere.CFrame * CFrame.Angles(PulseTime, PulseTime, 0)
-            -- УВЕЛИЧЕННОЕ ЯДРО (45%)
+            -- УВЕЛИЧЕНО НА 15% (0.2 * 1.15 = 0.23)
             InnerSphere.Size = Vector3.new(finalSize * 0.23, finalSize * 0.23, finalSize * 0.23)
-        end
-        
-        if DebugLabel and DebugLabel.Parent then
-            DebugLabel.Text = string.format(
-                "Speed: %.0f\nTime: %s\nStatus: %s\nDist: %.1f\nArmed: %s",
-                speed, (timeToImpact > 900 and "N/A" or string.format("%.2fs", timeToImpact)), status, dist, tostring(STATE.IsArmed)
-            )
-            if status == "DANGER!" then
-                DebugLabel.TextColor3 = CONFIG.VISUALS.DANGER_COLOR
-            else
-                DebugLabel.TextColor3 = STATE.InnerColor
-            end
         end
     end)
 end)
@@ -1099,11 +880,10 @@ LP.CharacterAdded:Connect(function()
     STATE.IsArmed = true
     STATE.PrevBallPos = nil
     STATE.Ball = nil
-    if OuterSphere then OuterSphere.Size = Vector3.new(40,40,40) end
-    
     STATE.CameraLock = false
-    local cam = Workspace.CurrentCamera
-    if cam then cam.CameraType = Enum.CameraType.Custom end
+    if Camera.CameraType == Enum.CameraType.Scriptable then
+        Camera.CameraType = Enum.CameraType.Custom
+    end
 end)
 
-print(">>> [BB] Скрипт успешно загружен.")
+print(">>> [BB] PREMIUM EDITION LOADED SUCCESSFULLY!")
