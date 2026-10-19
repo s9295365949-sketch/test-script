@@ -1,29 +1,32 @@
 --[[
     ╔═══════════════════════════════════════════════════════════════════════╗
-    ║   BLADE BALL — STEALTH UI SPHERE (ANTI-BAN)                           ║
-    ║   • Сфера рисуется в PlayerGui (сервер её НЕ ВИДИТ)                   ║
-    ║   • Авто-поиск RemoteEvent для парирования (без VirtualInputManager)  ║
-    ║   • Человеческая задержка реакции (имитация живого игрока)            ║
-    ║   • Красивый светящийся интерфейс вместо 3D-модели                    ║
+    ║   BLADE BALL — STEALTH 3D SPHERE (EARLY PARRY)                        ║
+    ║   • Сфера в 3D, но привязана к Camera (сервер её НЕ ВИДИТ)            ║
+    ║   • Увеличенный радиус парирования (срабатывает заранее)              ║
+    ║   • Высокая прозрачность (не мешает обзору)                           ║
     ╚═══════════════════════════════════════════════════════════════════════╝
 ]]
 
 local CFG = {
-    -- ─── Настройки парирования ─────────────────────────────
-    MIN_PARRY_DIAMETER  = 20,        -- Мин. диаметр (на низкой скорости мяча)
-    MAX_PARRY_DIAMETER  = 35,        -- Макс. диаметр (на высокой скорости)
+    -- ─── Настройки парирования (УВЕЛИЧЕНЫ) ─────────────────
+    MIN_PARRY_DIAMETER  = 35,        -- Мин. диаметр (срабатывает заранее)
+    MAX_PARRY_DIAMETER  = 55,        -- Макс. диаметр (для очень быстрых мячей)
     MIN_SPEED_THRESH    = 50,        
     MAX_SPEED_THRESH    = 200,       
     PARRY_COOLDOWN      = 0.2,       
 
-    -- ─── Визуал ────────────────────────────────────────────
-    MAX_RADIUS          = 25,        -- Максимальный радиус сферы (50 диаметр)
+    -- ─── Визуал сферы ──────────────────────────────────────
+    MAX_RADIUS          = 25,        -- Максимальный радиус (50 диаметр)
+    NEAR_TRANSPARENCY   = 0.65,      -- Прозрачность в близи (было 0.6)
+    FAR_TRANSPARENCY    = 0.85,      -- Прозрачность в далеке (было 0.7, теперь почти невидима)
     Y_OFFSET            = -0.5,      -- Высота сферы (пояс)
-    PIXELS_PER_STUD     = 12,        -- Масштаб интерфейса (настрой под свое разрешение)
-    
-    -- ─── Безопасность ──────────────────────────────────────
-    HUMAN_DELAY_MIN     = 0.04,      -- Мин. задержка реакции (сек)
-    HUMAN_DELAY_MAX     = 0.12,      -- Макс. задержка реакции (сек)
+
+    -- ─── Безопасность и Предиктивка ────────────────────────
+    HUMAN_DELAY_MIN     = 0.02,      -- Задержка реакции (сделали меньше, чтобы не опаздывать)
+    HUMAN_DELAY_MAX     = 0.08,      
+    PREDICT_FRAMES      = 3,         -- Увеличено для раннего срабатывания
+    MIN_AHEAD           = 0.10,      -- Увеличено
+    MAX_AHEAD           = 0.30,      -- Увеличено
 
     -- ─── Цвета ─────────────────────────────────────────────
     COLOR_INSIDE  = Color3.fromRGB(255, 30, 30),    -- Красный (опасность)
@@ -35,43 +38,41 @@ local RunService        = game:GetService("RunService")
 local Workspace         = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local VirtualInputManager = game:GetService("VirtualInputManager")
+local Stats             = game:GetService("Stats")
 
 local LocalPlayer = Players.LocalPlayer
 local Character   = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 local HRP         = Character:WaitForChild("HumanoidRootPart", 10)
 
--- ============================================================
--- 1. БЕЗОПАСНАЯ СФЕРА (В ИНТЕРФЕЙСЕ)
--- ============================================================
-local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "ParryVisual"
-screenGui.ResetOnSpawn = false
-screenGui.IgnoreGuiInset = true
-screenGui.DisplayOrder = 999
-screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
-
-local sphereGui = Instance.new("Frame")
-sphereGui.Name = "Sphere"
-sphereGui.AnchorPoint = Vector2.new(0.5, 0.5)
-sphereGui.BackgroundTransparency = 0.5
-sphereGui.BackgroundColor3 = CFG.COLOR_OUTSIDE
-sphereGui.BorderSizePixel = 0
-sphereGui.Parent = screenGui
-
--- Делаем круг идеально ровным
-local uicorner = Instance.new("UICorner")
-uicorner.CornerRadius = UDim.new(0.5, 0)
-uicorner.Parent = sphereGui
-
--- Свечение по краям (обводка)
-local uistroke = Instance.new("UIStroke")
-uistroke.Color = CFG.COLOR_OUTSIDE
-uistroke.Thickness = 3
-uistroke.Transparency = 0.2
-uistroke.Parent = sphereGui
+-- Кэш пинга
+local pingCache = 0.05
+task.spawn(function()
+    while task.wait(1) do
+        local ok, p = pcall(function() return Stats.Network.ServerStatsItem["Data Ping"]:GetValue() / 1000 end)
+        if ok and p and p > 0 and p < 1 then pingCache = p end
+    end
+end)
 
 -- ============================================================
--- 2. ПОИСК REMOTE ДЛЯ ПАРИРОВАНИЯ (Без VIM)
+-- 1. 3D СФЕРА (Привязана к Камере = Локальная)
+-- ============================================================
+local sphere = Instance.new("Part")
+sphere.Name         = "StealthSphere"
+sphere.Shape        = Enum.PartType.Ball
+sphere.Anchored     = true
+sphere.CanCollide   = false
+sphere.CanTouch     = false
+sphere.CanQuery     = false
+sphere.CastShadow   = false
+sphere.Material     = Enum.Material.ForceField
+sphere.Color        = CFG.COLOR_OUTSIDE
+sphere.Transparency = CFG.FAR_TRANSPARENCY
+sphere.Size         = Vector3.new(CFG.MAX_RADIUS * 2, CFG.MAX_RADIUS * 2, CFG.MAX_RADIUS * 2)
+-- ВАЖНО: Родитель - Camera. Сервер и другие игроки её не видят!
+sphere.Parent       = Workspace.CurrentCamera 
+
+-- ============================================================
+-- 2. ПОИСК REMOTE ДЛЯ ПАРИРОВАНИЯ
 -- ============================================================
 local parryRemote = nil
 local function findParryRemote()
@@ -94,23 +95,16 @@ local function fireParry()
     local now = tick()
     if now - lastParry >= CFG.PARRY_COOLDOWN then
         lastParry = now
-        
-        -- Имитация человеческой реакции
         task.spawn(function()
             local delay = CFG.HUMAN_DELAY_MIN + math.random() * (CFG.HUMAN_DELAY_MAX - CFG.HUMAN_DELAY_MIN)
             task.wait(delay)
             
             if parryRemote then
-                -- Безопасный вызов RemoteEvent
                 pcall(function()
-                    if parryRemote:IsA("RemoteEvent") then
-                        parryRemote:FireServer()
-                    else
-                        parryRemote:InvokeServer()
-                    end
+                    if parryRemote:IsA("RemoteEvent") then parryRemote:FireServer()
+                    else parryRemote:InvokeServer() end
                 end)
             else
-                -- Fallback: эмуляция F (если Remote не найден)
                 pcall(function()
                     VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.F, false, game)
                     task.wait(math.random(20, 50) / 1000)
@@ -135,9 +129,6 @@ local function findBall()
     for _, o in ipairs(Workspace:GetChildren()) do
         if o:IsA("BasePart") and o:GetAttribute("realBall") then return o end
     end
-    for _, o in ipairs(Workspace:GetChildren()) do
-        if o:IsA("BasePart") and o.Name:lower() == "ball" then return o end
-    end
 end
 cachedBall = findBall()
 
@@ -151,81 +142,101 @@ Workspace.ChildRemoved:Connect(function(o)
 end)
 
 -- ============================================================
--- 4. ГЛАВНЫЙ ЦИКЛ (RenderStepped для UI)
+-- 4. ГЛАВНЫЙ ЦИКЛ (Heartbeat = максимально часто)
 -- ============================================================
 local currentRadius = CFG.MAX_RADIUS
+local currentColor = CFG.COLOR_OUTSIDE
 
-RunService.RenderStepped:Connect(function()
+local function damp(cur, tgt, lambda, dt) return tgt + (cur - tgt) * math.exp(-lambda * dt) end
+local function clamp01(x) return math.clamp(x, 0, 1) end
+
+RunService.Heartbeat:Connect(function(dt)
     if not Character or not Character.Parent then Character = LocalPlayer.Character end
     if not HRP or not HRP.Parent then HRP = Character and Character:FindFirstChild("HumanoidRootPart") end
     if not HRP then 
-        sphereGui.Visible = false
+        sphere.Transparency = 1
         return 
     end
 
     local humanoid = Character:FindFirstChildOfClass("Humanoid")
     if not humanoid or humanoid.Health <= 0 then
-        sphereGui.Visible = false
+        sphere.Transparency = 1
         return
     end
-    sphereGui.Visible = true
 
     if not cachedBall or not cachedBall.Parent then cachedBall = findBall() end
     local ball = cachedBall
     local hrpPos = HRP.Position
-    local cam = Workspace.CurrentCamera
 
     local targetRadius = CFG.MAX_RADIUS
     local targetColor = CFG.COLOR_OUTSIDE
+    local targetTransparency = CFG.FAR_TRANSPARENCY
+    local doParry = false
 
     if ball then
         local dist = (hrpPos - ball.Position).Magnitude
-        local speed = ball.AssemblyLinearVelocity.Magnitude
+        local bv = ball.AssemblyLinearVelocity
+        if bv.Magnitude < 0.5 then bv = ball.Velocity end
+        local speed = bv.Magnitude
         
-        -- Адаптивный диаметр парирования
-        local speedFactor = math.clamp((speed - CFG.MIN_SPEED_THRESH) / (CFG.MAX_SPEED_THRESH - CFG.MIN_SPEED_THRESH), 0, 1)
+        local approach = 0
+        if speed > 0.5 then
+            approach = bv:Dot((hrpPos - ball.Position).Unit)
+        end
+
+        -- Динамический радиус парирования (35 - 55)
+        local speedFactor = clamp01((speed - CFG.MIN_SPEED_THRESH) / (CFG.MAX_SPEED_THRESH - CFG.MIN_SPEED_THRESH))
         local parryDiameter = CFG.MIN_PARRY_DIAMETER + (CFG.MAX_PARRY_DIAMETER - CFG.MIN_PARRY_DIAMETER) * speedFactor
         local parryRadius = parryDiameter / 2
 
         -- Проверка цели
         local targeting = false
-        local tVal = ball:GetAttribute("target") or ball:GetAttribute("Target") or ball:GetAttribute("targetPlayer")
+        local tVal = ball:GetAttribute("target") or ball:GetAttribute("Target")
         if tVal and (tVal == LocalPlayer.Name or tostring(tVal) == LocalPlayer.Name or tVal == LocalPlayer) then
             targeting = true
         elseif Character:FindFirstChild("Highlight") then
             targeting = true
-        elseif speed > 5 and ball.AssemblyLinearVelocity:Dot((hrpPos - ball.Position).Unit) > 10 and dist < 40 then
+        elseif speed > 5 and approach > 10 and dist < 50 then
             targeting = true
         end
 
         if targeting then
             targetRadius = math.clamp(dist, parryRadius, CFG.MAX_RADIUS)
             
+            -- Прозрачность: ближе = плотнее, дальше = прозрачнее
+            local u = clamp01((dist - parryRadius) / (CFG.MAX_RADIUS - parryRadius))
+            targetTransparency = CFG.NEAR_TRANSPARENCY + (CFG.FAR_TRANSPARENCY - CFG.NEAR_TRANSPARENCY) * u
+
             if dist <= parryRadius then
                 targetColor = CFG.COLOR_INSIDE
-                fireParry()
+                targetTransparency = CFG.NEAR_TRANSPARENCY -- Вспышка плотности при опасности
+                doParry = true
+            end
+            
+            -- Предиктивка (срабатывает еще ДО того, как мяч зайдет в зону)
+            if not doParry and approach > 0 then
+                local horizon = math.clamp(pingCache + CFG.PREDICT_FRAMES / 60, CFG.MIN_AHEAD, CFG.MAX_AHEAD)
+                if (dist - parryRadius) / approach <= horizon then 
+                    doParry = true 
+                    targetColor = CFG.COLOR_INSIDE
+                end
             end
         end
     end
 
-    -- Плавное изменение радиуса
-    currentRadius = currentRadius + (targetRadius - currentRadius) * 0.2
-    
-    -- Перевод 3D позиции в 2D экран
-    local worldPos = hrpPos + Vector3.new(0, CFG.Y_OFFSET, 0)
-    local screenPos, onScreen = cam:WorldToViewportPoint(worldPos)
-    
-    if onScreen then
-        sphereGui.Position = UDim2.new(0, screenPos.X, 0, screenPos.Y)
-        
-        -- Перевод стабсов в пиксели
-        local pixelSize = (currentRadius * 2) * CFG.PIXELS_PER_STUD
-        sphereGui.Size = UDim2.new(0, pixelSize, 0, pixelSize)
+    if doParry then
+        fireParry()
     end
+
+    -- Сглаживание визуала
+    currentRadius = damp(currentRadius, targetRadius, 14, dt)
+    currentColor = currentColor:Lerp(targetColor, 0.2)
     
-    -- Плавная смена цвета
-    sphereGui.BackgroundColor3 = sphereGui.BackgroundColor3:Lerp(targetColor, 0.2)
-    uistroke.Color = sphereGui.BackgroundColor3
+    -- Применяем к 3D-сфере
+    sphere.Size = Vector3.new(currentRadius * 2, currentRadius * 2, currentRadius * 2)
+    sphere.Color = currentColor
+    sphere.Transparency = damp(sphere.Transparency, targetTransparency, 10, dt)
+    sphere.CFrame = CFrame.new(hrpPos + Vector3.new(0, CFG.Y_OFFSET, 0))
 end)
 
-print("[Stealth] Активировано! Сфера в UI. Метод ввода: " .. (parryRemote and ("Remote (" .. parryRemote.Name .. ")") or "F (fallback)"))
+print("[Stealth 3D] Активировано! Радиус парирования: 17.5 - 27.5 studs.")
