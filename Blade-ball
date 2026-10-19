@@ -1,13 +1,17 @@
 --[[
     ╔═══════════════════════════════════════════════════════════════════════════╗
-    ║   [ PREMIUM EDITION v14.0 | CAMERA LOCK & GLASS UI ]                      ║
-    ║   • Захват камеры на мяч (Camera Lock)                                    ║
-    ║   • Увеличенное неоновое ядро                                             ║
-    ║   • Анти-спам парирование                                                 ║
+    ║   ██████╗  █████╗ ██████╗ ██████╗ ██╗   ██╗    ██████╗  ██████╗           ║
+    ║   ██╔══██╗██╔══██╗██╔══██╗██╔══██╗╚██╗ ██╔╝    ██╔══██╗██╔═══██╗          ║
+    ║   ██████╔╝███████║██████╔╝██████╔╝ ╚████╔╝     ██████╔╝██║   ██║          ║
+    ║   ██╔═══╝ ██╔══██║██╔══██╗██╔══██╗  ╚██╔╝      ██╔═══╝ ██║   ██║          ║
+    ║   ██║     ██║  ██║██║  ██║██║  ██║   ██║       ██║     ╚██████╔╝          ║
+    ║   ╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝       ╚═╝      ╚═════╝           ║
+    ║                                                                           ║
+    ║   [ PREMIUM EDITION | ULTIMATE PARRY & VISUALS + CAMERA LOCK ]            ║
     ╚═══════════════════════════════════════════════════════════════════════════╝
 ]]
 
-print(">>> [BB] Запуск Premium Edition v14.0...")
+print(">>> [BB] Запуск Premium Edition...")
 
 local Players           = game:GetService("Players")
 local RunService        = game:GetService("RunService")
@@ -15,19 +19,22 @@ local Workspace         = game:GetService("Workspace")
 local TweenService      = game:GetService("TweenService")
 local UserInputService  = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local HttpService       = game:GetService("HttpService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 
 local LP = Players.LocalPlayer
 local PGui = LP:WaitForChild("PlayerGui", 10)
-local Camera = Workspace.CurrentCamera
+local Camera = Workspace.CurrentCamera -- ДОБАВЛЕНО: Ссылка на камеру
 
 if not PGui then return end
 
+-- Очистка старых версий
 for _, v in ipairs(PGui:GetChildren()) do
     if v.Name:match("^BB_") then v:Destroy() end
 end
 if Workspace:FindFirstChild("AuraVisual") then Workspace.AuraVisual:Destroy() end
 
+-- Кастомный clamp (защита от вылетов на старых экзекуторах)
 local function clamp(val, min, max)
     if val < min then return min end
     if val > max then return max end
@@ -38,7 +45,7 @@ end
 -- [ КОНФИГУРАЦИЯ И СОСТОЯНИЕ ]
 -- ============================================================
 local CONFIG = {
-    CLOSE_DIST = 25,
+    CLOSE_DIST = 25, -- Если мяч ближе 25 стабсов, спамим
     COOLDOWN = 0.1,
     PING_SAFE = 0.15
 }
@@ -47,7 +54,7 @@ local STATE = {
     Enabled = true,
     ShowVisuals = true,
     AntiLag = false,
-    CameraLock = false, -- НОВОЕ: Лок камеры
+    CameraLock = false, -- ДОБАВЛЕНО: Флаг лока камеры
     IsArmed = true,
     LastParry = 0,
     Ball = nil,
@@ -66,7 +73,7 @@ local CurrentThemeName = "Premium Dark"
 local CurrentTheme = THEMES[CurrentThemeName]
 
 -- ============================================================
--- [ ПОИСК REMOTE И КНОПКИ ]
+-- [ ПОИСК REMOTE И КНОПКИ БЛОКА ]
 -- ============================================================
 task.spawn(function()
     for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
@@ -91,7 +98,7 @@ local function FindBlockButton()
 end
 
 -- ============================================================
--- [ 3D СФЕРА ]
+-- [ 3D СФЕРА (ВИЗУАЛ) ]
 -- ============================================================
 local OuterSphere = Instance.new("Part")
 OuterSphere.Name = "AuraVisual"
@@ -106,6 +113,7 @@ OuterSphere.Transparency = 0.65
 OuterSphere.Size = Vector3.new(40, 40, 40)
 OuterSphere.Parent = Workspace
 
+-- УВЕЛИЧЕННОЕ ЯДРО
 local InnerSphere = Instance.new("Part")
 InnerSphere.Shape = Enum.PartType.Ball
 InnerSphere.Anchored = true
@@ -115,11 +123,11 @@ InnerSphere.CastShadow = false
 InnerSphere.Material = Enum.Material.Neon
 InnerSphere.Color = Color3.fromRGB(0, 255, 200)
 InnerSphere.Transparency = 0.7
-InnerSphere.Size = Vector3.new(20, 20, 20)
+InnerSphere.Size = Vector3.new(20, 20, 20) -- Стартовый размер больше
 InnerSphere.Parent = OuterSphere
 
 -- ============================================================
--- [ UI ФРЕЙМВОРК ]
+-- [ UI ФРЕЙМВОРК (СТЕКЛО) ]
 -- ============================================================
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "BB_Premium_UI"
@@ -127,6 +135,7 @@ ScreenGui.ResetOnSpawn = false
 ScreenGui.DisplayOrder = 999
 ScreenGui.Parent = PGui
 
+-- Кнопка вызова
 local ToggleBtn = Instance.new("TextButton")
 ToggleBtn.Size = UDim2.new(0, 45, 0, 45)
 ToggleBtn.Position = UDim2.new(1, -60, 0.5, -22)
@@ -142,9 +151,10 @@ local BtnStroke = Instance.new("UIStroke", ToggleBtn)
 BtnStroke.Color = CurrentTheme.ACCENT
 BtnStroke.Thickness = 2
 
+-- Главное окно
 local Window = Instance.new("Frame")
-Window.Size = UDim2.new(0, 300, 0, 420) -- Сделали чуть выше
-Window.Position = UDim2.new(0.5, -150, 0.5, -210)
+Window.Size = UDim2.new(0, 300, 0, 400)
+Window.Position = UDim2.new(0.5, -150, 0.5, -200)
 Window.BackgroundColor3 = CurrentTheme.BG
 Window.BackgroundTransparency = 0.1
 Window.Visible = false
@@ -155,6 +165,7 @@ WinStroke.Color = CurrentTheme.ACCENT
 WinStroke.Thickness = 1.5
 WinStroke.Transparency = 0.4
 
+-- Шапка
 local Header = Instance.new("Frame")
 Header.Size = UDim2.new(1, 0, 0, 60)
 Header.BackgroundColor3 = CurrentTheme.HEADER
@@ -183,6 +194,7 @@ CloseBtn.Font = Enum.Font.GothamBold
 CloseBtn.Parent = Header
 Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(0, 6)
 
+-- Вкладки
 local TabContainer = Instance.new("Frame")
 TabContainer.Size = UDim2.new(1, -20, 0, 35)
 TabContainer.Position = UDim2.new(0, 10, 0, 70)
@@ -319,16 +331,21 @@ CreateToggle(MainPage, 40, "3D Sphere Visual", "ShowVisuals", function(v)
     InnerSphere.Transparency = v and 0.7 or 1
 end)
 
--- НОВЫЙ ТУМБЛЕР: ЛОК КАМЕРЫ
+-- ДОБАВЛЕНО: Тумблер лока камеры
 CreateToggle(MainPage, 80, "Camera Lock (Ball)", "CameraLock", function(v)
     if not v then
-        -- Возвращаем управление камерой игроку
-        Camera.CameraType = Enum.CameraType.Custom
+        Camera.CameraType = Enum.CameraType.Custom -- Возвращаем управление, если выключили
     end
 end)
 
+-- Сдвинул кнопку Apply Visuals чуть ниже, чтобы не накладывалась
+CreateButton(MainPage, 130, "Apply Visuals", function()
+    print(">>> [BB] Настройки визуала применены.")
+end, Color3.fromRGB(60, 180, 100))
+
 local VisPage = CreateTab("VISUAL")
 CreateToggle(VisPage, 0, "Anti-Lag (FPS Boost)", "AntiLag")
+CreateToggle(VisPage, 40, "Night Mode (Cyberpunk)", "NightMode")
 
 local function ChangeTheme()
     if CurrentThemeName == "Premium Dark" then CurrentThemeName = "Cyberpunk"
@@ -344,10 +361,10 @@ local function ChangeTheme()
     ToggleBtn.TextColor3 = CurrentTheme.ACCENT
 end
 
-CreateButton(VisPage, 50, "Change UI Theme", ChangeTheme, Color3.fromRGB(100, 50, 200))
+CreateButton(VisPage, 90, "Change UI Theme", ChangeTheme, Color3.fromRGB(100, 50, 200))
 
 -- ============================================================
--- [ ПЕРЕТАСКИВАНИЕ ]
+-- [ ПЕРЕТАСКИВАНИЕ И ОТКРЫТИЕ ]
 -- ============================================================
 local dragging, dragStart, startPos = false, nil, nil
 Header.InputBegan:Connect(function(input)
@@ -371,7 +388,7 @@ ToggleBtn.MouseButton1Click:Connect(function()
     Window.Visible = not Window.Visible
     if Window.Visible then
         Window.Size = UDim2.new(0, 300, 0, 0)
-        TweenService:Create(Window, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Size = UDim2.new(0, 300, 0, 420)}):Play()
+        TweenService:Create(Window, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Size = UDim2.new(0, 300, 0, 400)}):Play()
     end
 end)
 CloseBtn.MouseButton1Click:Connect(function() Window.Visible = false end)
@@ -388,6 +405,7 @@ local function TriggerParry()
     if now - STATE.LastParry < CONFIG.COOLDOWN then return end
     STATE.LastParry = now
 
+    -- 1. getconnections (Самый быстрый)
     if not STATE.BlockButton or not STATE.BlockButton.Parent then
         STATE.BlockButton = FindBlockButton()
     end
@@ -406,11 +424,13 @@ local function TriggerParry()
         if success then return end
     end
 
+    -- 2. RemoteEvent
     if STATE.Remote then
         pcall(function() STATE.Remote:FireServer() end)
         return
     end
 
+    -- 3. VirtualInputManager (Резерв)
     pcall(function()
         VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.F, false, game)
         task.wait(0.02)
@@ -445,12 +465,11 @@ end
 
 local PulseTime = 0
 
--- ЛОК КАМЕРЫ (Обновляется каждый кадр)
+-- ДОБАВЛЕНО: Цикл обновления камеры (отдельно от Heartbeat, чтобы не дёргалась)
 RunService.RenderStepped:Connect(function()
     if STATE.CameraLock and STATE.Ball and STATE.Ball.Parent then
-        -- Меняем тип камеры на Scriptable, чтобы игра не сбрасывала поворот
+        -- Переводим камеру в режим скрипта и смотрим на мяч
         Camera.CameraType = Enum.CameraType.Scriptable
-        -- Направляем камеру из текущей позиции прямо на мяч
         Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, STATE.Ball.Position)
     end
 end)
@@ -486,6 +505,7 @@ RunService.Heartbeat:Connect(function(dt)
 
             if dist > 80 then STATE.IsArmed = true end
 
+            -- Вычисление скорости
             local bv = ball.AssemblyLinearVelocity
             if bv.Magnitude > 1 then
                 speed = bv.Magnitude
@@ -503,6 +523,7 @@ RunService.Heartbeat:Connect(function(dt)
             end
 
             if IsTargetingMe(ball) then
+                -- ЛОГИКА АНТИ-СПАМА В БЛИЖНЕМ БОЮ
                 if dist <= CONFIG.CLOSE_DIST or timeToImpact <= CONFIG.PING_SAFE then
                     targetColor = Color3.fromRGB(255, 50, 50)
                     if STATE.Enabled then
@@ -510,10 +531,10 @@ RunService.Heartbeat:Connect(function(dt)
                         STATE.IsArmed = false
                     end
                 else
-                    targetColor = Color3.fromRGB(255, 200, 0)
+                    targetColor = Color3.fromRGB(255, 200, 0) -- Желтый (готовность)
                 end
             else
-                targetColor = Color3.fromRGB(0, 255, 100)
+                targetColor = Color3.fromRGB(0, 255, 100) -- Зеленый (безопасно)
             end
             STATE.PrevBallPos = bp
         else
@@ -521,6 +542,7 @@ RunService.Heartbeat:Connect(function(dt)
             STATE.PrevBallPos = nil
         end
 
+        -- Визуал сферы
         if render and STATE.ShowVisuals and OuterSphere and InnerSphere then
             PulseTime = PulseTime + (dt * 2.5)
             
@@ -533,7 +555,7 @@ RunService.Heartbeat:Connect(function(dt)
             OuterSphere.CFrame = CFrame.new(hrp.Position + Vector3.new(0, -0.5, 0))
             OuterSphere.Color = OuterSphere.Color:Lerp(targetColor, math.clamp(10 * dt, 0, 1))
 
-            -- Увеличенное ядро (45%)
+            -- УВЕЛИЧЕННОЕ ЯДРО (45% от размера сферы)
             InnerSphere.CFrame = OuterSphere.CFrame * CFrame.Angles(PulseTime, PulseTime, 0)
             InnerSphere.Size = Vector3.new(finalSize * 0.45, finalSize * 0.45, finalSize * 0.45)
             InnerSphere.Color = OuterSphere.Color
@@ -545,11 +567,9 @@ LP.CharacterAdded:Connect(function()
     STATE.IsArmed = true
     STATE.PrevBallPos = nil
     STATE.Ball = nil
-    -- При респавне возвращаем камеру
-    if Camera.CameraType == Enum.CameraType.Scriptable then
-        Camera.CameraType = Enum.CameraType.Custom
-    end
+    -- ДОБАВЛЕНО: Сбрасываем лок камеры при смерти
     STATE.CameraLock = false
+    Camera.CameraType = Enum.CameraType.Custom
 end)
 
-print(">>> [BB] Premium Edition v14.0 Loaded. Camera Lock Added.")
+print(">>> [BB] Premium Edition Loaded. Ready to parry!")
