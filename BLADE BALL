@@ -12,6 +12,7 @@
     ║   COOLDOWN: 0.12s → 0.18s                                                 ║
     ║   Wrapped: pcall-safe execution                                           ║
     ╚═══════════════════════════════════════════════════════════════════════════╝
+--[[
     ╔═══════════════════════════════════════════════════════════════════════════╗
     ║                                                                           ║
     ║   ██████╗  █████╗ ██████╗ ██████╗ ██╗   ██╗    ██████╗  ██████╗           ║
@@ -21,16 +22,981 @@
     ║   ██║     ██║  ██║██║  ██║██║  ██║   ██║       ██║     ╚██████╔╝          ║
     ║   ╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝       ╚═╝      ╚═════╝           ║
     ║                                                                           ║
-    ║   [ CANDY EDITION | v15.1 | ONE PARRY PER BALL ]                          ║
+    ║   [ CANDY EDITION | v15.0 | ULTRA-FAST PARRY ]                            ║
     ║   • 12 Premium Themes (6 Dark / 6 Light)                                  ║
     ║   • Human Delay: 0.10 - 0.15s (x1.5 Faster)                               ║
-    ║   • COOLDOWN: 0.21s                                                       ║
-    ║   • 1 Parry = 1 Ball (No Spam)                                            ║
     ║   • Anti-Close Spam & Predictive Hit                                      ║
     ║   • Camera Lock & Profile Manager                                         ║
     ║   • Smart Debug HUD & Right Ctrl Toggle                                   ║
     ╚═══════════════════════════════════════════════════════════════════════════╝
 ]]
+
+-- ============================================================
+-- [ 1. СЕРВИСЫ ]
+-- ============================================================
+local CoreGui           = game:GetService("CoreGui")
+local Players           = game:GetService("Players")
+local RunService        = game:GetService("RunService")
+local Workspace         = game:GetService("Workspace")
+local TweenService      = game:GetService("TweenService")
+local UserInputService  = game:GetService("UserInputService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local HttpService       = game:GetService("HttpService")
+local Lighting          = game:GetService("Lighting")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui   = LocalPlayer:WaitForChild("PlayerGui", 10)
+local Camera      = Workspace.CurrentCamera
+
+-- Очистка старых версий
+for _, v in ipairs(PlayerGui:GetChildren()) do
+    if v.Name:match("^BB_") then v:Destroy() end
+end
+if Workspace:FindFirstChild("AuraVisual") then Workspace.AuraVisual:Destroy() end
+
+-- ============================================================
+-- [ 2. КОНФИГУРАЦИЯ И СОСТОЯНИЕ ]
+-- ============================================================
+local CONFIG = {
+    -- Логика парирования
+    CLOSE_DIST       = 45,     -- Дистанция "ближнего боя" (спам)
+    COOLDOWN         = 0.21,   -- Кулдаун между парированиями (исправлено: 0.18 -> 0.21)
+    PING_SAFE        = 0.35,   -- Компенсация пинга (350мс)
+    PREDICT_TIME     = 0.15,   -- Предсказание позиции мяча (150мс)
+    
+    -- Человеческая задержка (x1.5 быстрее)
+    HUMAN_DELAY_MIN  = 0.10,   -- Мин. задержка (100 мс)
+    HUMAN_DELAY_MAX  = 0.15,   -- Макс. задержка (150 мс)
+    
+    -- Визуал сферы
+    SPHERE_MIN       = 40,     -- Мин. диаметр сферы
+    SPHERE_MAX       = 90,     -- Макс. диаметр сферы
+    CORE_RATIO       = 0.23,   -- Размер ядра (23% от сферы)
+}
+
+local STATE = {
+    -- Флаги
+    Enabled = true,
+    ShowVisuals = true,
+    AntiLag = false,
+    HideInner = false,
+    StaticSphere = false,
+    NightModeSphere = false,
+    NightMap = false,
+    CameraLock = false,
+    
+    -- Визуал
+    OuterColor = Color3.fromRGB(0, 255, 50),
+    InnerColor = Color3.fromRGB(0, 255, 200),
+    
+    -- Логика
+    IsArmed = true,
+    LastParry = 0,
+    Ball = nil,
+    PrevBallPos = nil,
+    Frames = 0,
+    Remote = nil,
+    ParryMethod = "N/A"
+}
+
+-- ============================================================
+-- [ 3. ТЕМЫ ОФОРМЛЕНИЯ ]
+-- ============================================================
+local THEMES = {
+    -- ═══ 6 DARK THEMES ═══
+    ["Premium Dark"]   = { BG = Color3.fromRGB(15, 16, 20),  HEADER = Color3.fromRGB(22, 24, 30),  ACCENT = Color3.fromRGB(0, 200, 255), TEXT = Color3.fromRGB(240, 240, 240), OFF = Color3.fromRGB(40, 44, 52) },
+    ["Cyber Neon"]     = { BG = Color3.fromRGB(20, 5, 25),   HEADER = Color3.fromRGB(35, 10, 45),  ACCENT = Color3.fromRGB(255, 0, 200), TEXT = Color3.fromRGB(255, 200, 255), OFF = Color3.fromRGB(60, 20, 70) },
+    ["Crimson Void"]   = { BG = Color3.fromRGB(25, 5, 5),    HEADER = Color3.fromRGB(45, 10, 10),  ACCENT = Color3.fromRGB(255, 60, 60), TEXT = Color3.fromRGB(255, 200, 200), OFF = Color3.fromRGB(70, 15, 15) },
+    ["Dark Metal"]     = { BG = Color3.fromRGB(15, 16, 20),  HEADER = Color3.fromRGB(22, 24, 30),  ACCENT = Color3.fromRGB(180, 180, 190), TEXT = Color3.fromRGB(240, 240, 240), OFF = Color3.fromRGB(40, 44, 52) },
+    ["Obsidian Night"] = { BG = Color3.fromRGB(10, 10, 15),  HEADER = Color3.fromRGB(18, 18, 25),  ACCENT = Color3.fromRGB(150, 100, 255), TEXT = Color3.fromRGB(220, 210, 255), OFF = Color3.fromRGB(35, 30, 50) },
+    ["Midnight Ocean"] = { BG = Color3.fromRGB(5, 15, 30),   HEADER = Color3.fromRGB(10, 25, 45),  ACCENT = Color3.fromRGB(0, 255, 200), TEXT = Color3.fromRGB(200, 240, 255), OFF = Color3.fromRGB(20, 40, 60) },
+    
+    -- ═══ 6 LIGHT THEMES ═══
+    ["Light Emerald"]  = { BG = Color3.fromRGB(240, 245, 240), HEADER = Color3.fromRGB(220, 235, 220), ACCENT = Color3.fromRGB(0, 180, 100), TEXT = Color3.fromRGB(20, 40, 20), OFF = Color3.fromRGB(200, 215, 200) },
+    ["Pearl Elegance"] = { BG = Color3.fromRGB(250, 248, 245), HEADER = Color3.fromRGB(240, 235, 230), ACCENT = Color3.fromRGB(200, 150, 50), TEXT = Color3.fromRGB(40, 30, 20), OFF = Color3.fromRGB(220, 215, 210) },
+    ["Arctic Frost"]   = { BG = Color3.fromRGB(230, 245, 255), HEADER = Color3.fromRGB(210, 230, 255), ACCENT = Color3.fromRGB(50, 150, 255), TEXT = Color3.fromRGB(20, 40, 60), OFF = Color3.fromRGB(190, 210, 230) },
+    ["Sunset Blossom"] = { BG = Color3.fromRGB(255, 240, 245), HEADER = Color3.fromRGB(250, 225, 235), ACCENT = Color3.fromRGB(255, 100, 150), TEXT = Color3.fromRGB(60, 20, 30), OFF = Color3.fromRGB(230, 210, 220) },
+    ["Cloudy Silver"]  = { BG = Color3.fromRGB(245, 245, 250), HEADER = Color3.fromRGB(230, 230, 240), ACCENT = Color3.fromRGB(100, 100, 120), TEXT = Color3.fromRGB(30, 30, 40), OFF = Color3.fromRGB(210, 210, 220) },
+    ["Amber Glow"]     = { BG = Color3.fromRGB(255, 250, 235), HEADER = Color3.fromRGB(250, 240, 210), ACCENT = Color3.fromRGB(230, 150, 0), TEXT = Color3.fromRGB(50, 40, 10), OFF = Color3.fromRGB(225, 215, 195) }
+}
+
+local CurrentThemeName = "Premium Dark"
+local CurrentTheme     = THEMES[CurrentThemeName]
+
+-- ============================================================
+-- [ 4. УТИЛИТЫ ]
+-- ============================================================
+local function clamp(val, min, max)
+    if val < min then return min end
+    if val > max then return max end
+    return val
+end
+
+-- ============================================================
+-- [ 5. КРАСИВЫЙ ЭКРАН ЗАГРУЗКИ ]
+-- ============================================================
+local function ShowLoader()
+    local LoaderGui = Instance.new("ScreenGui")
+    LoaderGui.Name = "BB_Loader"
+    LoaderGui.ResetOnSpawn = false
+    LoaderGui.IgnoreGuiInset = true
+    LoaderGui.DisplayOrder = 10000
+    LoaderGui.Parent = PlayerGui
+
+    local Bg = Instance.new("Frame")
+    Bg.Size = UDim2.new(1, 0, 1, 0)
+    Bg.BackgroundColor3 = Color3.fromRGB(10, 10, 12)
+    Bg.Parent = LoaderGui
+
+    local Logo = Instance.new("TextLabel")
+    Logo.Size = UDim2.new(1, 0, 0, 100)
+    Logo.Position = UDim2.new(0, 0, 0.5, -60)
+    Logo.BackgroundTransparency = 1
+    Logo.Text = "BLADE BALL\nPREMIUM"
+    Logo.TextColor3 = Color3.fromRGB(0, 200, 255)
+    Logo.Font = Enum.Font.GothamBlack
+    Logo.TextSize = 30
+    Logo.Parent = Bg
+
+    local BarBg = Instance.new("Frame")
+    BarBg.Size = UDim2.new(0, 300, 0, 6)
+    BarBg.Position = UDim2.new(0.5, -150, 0.5, 60)
+    BarBg.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
+    BarBg.Parent = Bg
+    Instance.new("UICorner", BarBg).CornerRadius = UDim.new(1, 0)
+
+    local BarFill = Instance.new("Frame")
+    BarFill.Size = UDim2.new(0, 0, 1, 0)
+    BarFill.BackgroundColor3 = Color3.fromRGB(0, 200, 255)
+    BarFill.Parent = BarBg
+    Instance.new("UICorner", BarFill).CornerRadius = UDim.new(1, 0)
+
+    local StatusText = Instance.new("TextLabel")
+    StatusText.Size = UDim2.new(1, 0, 0, 20)
+    StatusText.Position = UDim2.new(0, 0, 0.5, 80)
+    StatusText.BackgroundTransparency = 1
+    StatusText.Text = "Инициализация..."
+    StatusText.TextColor3 = Color3.fromRGB(150, 150, 150)
+    StatusText.Font = Enum.Font.GothamMedium
+    StatusText.TextSize = 12
+    StatusText.Parent = Bg
+
+    task.spawn(function()
+        local steps = {
+            {text = "Загрузка модулей...",   time = 0.4},
+            {text = "Поиск скрытых событий...", time = 0.6},
+            {text = "Применение конфигурации...", time = 0.4},
+            {text = "Готово!",               time = 0.3}
+        }
+        for i, step in ipairs(steps) do
+            StatusText.Text = step.text
+            TweenService:Create(BarFill, TweenInfo.new(step.time, Enum.EasingStyle.Quad), {
+                Size = UDim2.new(i / #steps, 0, 1, 0)
+            }):Play()
+            task.wait(step.time)
+        end
+        
+        task.wait(0.3)
+        TweenService:Create(Bg, TweenInfo.new(0.5), {BackgroundTransparency = 1}):Play()
+        TweenService:Create(Logo, TweenInfo.new(0.5), {TextTransparency = 1}):Play()
+        TweenService:Create(BarBg, TweenInfo.new(0.5), {BackgroundTransparency = 1}):Play()
+        TweenService:Create(BarFill, TweenInfo.new(0.5), {BackgroundTransparency = 1}):Play()
+        TweenService:Create(StatusText, TweenInfo.new(0.5), {TextTransparency = 1}):Play()
+        
+        task.wait(0.5)
+        LoaderGui:Destroy()
+    end)
+end
+
+ShowLoader()
+
+-- ============================================================
+-- [ 6. ПОИСК REMOTE И КНОПКИ ]
+-- ============================================================
+task.spawn(function()
+    for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
+        if obj:IsA("RemoteEvent") and (obj.Name:lower():find("parry") or obj.Name:lower():find("block") or obj.Name:lower():find("attempt")) then
+            STATE.Remote = obj
+            break
+        end
+    end
+end)
+
+local function FindBlockButton()
+    for _, gui in ipairs(PlayerGui:GetDescendants()) do
+        if gui:IsA("TextButton") or gui:IsA("ImageButton") then
+            local name = gui.Name:lower()
+            if name:find("block") or name:find("parry") or name:find("shield") then
+                return gui
+            end
+        end
+    end
+    return nil
+end
+
+-- ============================================================
+-- [ 7. 3D СФЕРА (КУПОЛ + ЯДРО) ]
+-- ============================================================
+local OuterSphere = Instance.new("Part")
+OuterSphere.Name = "AuraVisual"
+OuterSphere.Shape = Enum.PartType.Ball
+OuterSphere.Anchored = true
+OuterSphere.CanCollide = false
+OuterSphere.CanQuery = false
+OuterSphere.CastShadow = false
+OuterSphere.Material = Enum.Material.ForceField
+OuterSphere.Color = STATE.OuterColor
+OuterSphere.Transparency = 0.65
+OuterSphere.Size = Vector3.new(40, 40, 40)
+OuterSphere.Parent = Workspace
+
+local InnerSphere = Instance.new("Part")
+InnerSphere.Shape = Enum.PartType.Ball
+InnerSphere.Anchored = true
+InnerSphere.CanCollide = false
+InnerSphere.CanQuery = false
+InnerSphere.CastShadow = false
+InnerSphere.Material = Enum.Material.Neon
+InnerSphere.Color = STATE.InnerColor
+InnerSphere.Transparency = 0.7
+InnerSphere.Size = Vector3.new(9.2, 9.2, 9.2) -- 40 * 0.23 = 9.2
+InnerSphere.Parent = OuterSphere
+
+-- ============================================================
+-- [ 8. НОЧЬ НА КАРТЕ ]
+-- ============================================================
+local originalLighting = {}
+local createdAtmosphere = nil
+
+local function SetNightMap(enabled)
+    if enabled then
+        originalLighting = {
+            ClockTime = Lighting.ClockTime, Brightness = Lighting.Brightness,
+            Ambient = Lighting.Ambient, OutdoorAmbient = Lighting.OutdoorAmbient,
+            FogEnd = Lighting.FogEnd, FogColor = Lighting.FogColor,
+        }
+        Lighting.ClockTime = 0; Lighting.Brightness = 0.5
+        Lighting.Ambient = Color3.fromRGB(20, 20, 30)
+        Lighting.OutdoorAmbient = Color3.fromRGB(30, 30, 40)
+        Lighting.FogEnd = 500; Lighting.FogColor = Color3.fromRGB(10, 10, 20)
+        if not Lighting:FindFirstChildOfClass("Atmosphere") then
+            local atm = Instance.new("Atmosphere")
+            atm.Density = 0.4; atm.Color = Color3.fromRGB(50, 50, 80)
+            atm.Decay = Color3.fromRGB(20, 20, 40)
+            atm.Parent = Lighting; createdAtmosphere = atm
+        end
+    else
+        if originalLighting.ClockTime then
+            Lighting.ClockTime = originalLighting.ClockTime
+            Lighting.Brightness = originalLighting.Brightness
+            Lighting.Ambient = originalLighting.Ambient
+            Lighting.OutdoorAmbient = originalLighting.OutdoorAmbient
+            Lighting.FogEnd = originalLighting.FogEnd
+            Lighting.FogColor = originalLighting.FogColor
+        end
+        if createdAtmosphere then createdAtmosphere:Destroy(); createdAtmosphere = nil end
+    end
+end
+
+-- ============================================================
+-- [ 9. UI ФРЕЙМВОРК ]
+-- ============================================================
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "BB_UI"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.DisplayOrder = 999
+ScreenGui.Parent = PlayerGui
+
+local UI_Elements = {}
+local ApplyTheme
+
+local ClickSound = Instance.new("Sound")
+ClickSound.SoundId = "rbxassetid://6895079853"
+ClickSound.Volume = 0.3
+ClickSound.Parent = ScreenGui
+local function PlayClick() pcall(function() ClickSound:Play() end) end
+
+-- ─── Кнопка вызова ───────────────────────────────────────
+local ToggleBtn = Instance.new("TextButton")
+ToggleBtn.Size = UDim2.new(0, 45, 0, 45)
+ToggleBtn.Position = UDim2.new(1, -60, 0.5, -22)
+ToggleBtn.BackgroundColor3 = CurrentTheme.BG
+ToggleBtn.BackgroundTransparency = 0.2
+ToggleBtn.Text = "BB"
+ToggleBtn.TextSize = 16
+ToggleBtn.TextColor3 = CurrentTheme.ACCENT
+ToggleBtn.Font = Enum.Font.GothamBlack
+ToggleBtn.Parent = ScreenGui
+Instance.new("UICorner", ToggleBtn).CornerRadius = UDim.new(1, 0)
+local BtnStroke = Instance.new("UIStroke", ToggleBtn)
+BtnStroke.Color = CurrentTheme.ACCENT
+BtnStroke.Thickness = 1.5
+BtnStroke.Transparency = 0.2
+
+-- ─── Главное окно ────────────────────────────────────────
+local Window = Instance.new("Frame")
+Window.Size = UDim2.new(0, 320, 0, 500)
+Window.Position = UDim2.new(0.5, -160, 0.5, -250)
+Window.BackgroundColor3 = CurrentTheme.BG
+Window.BackgroundTransparency = 0.1
+Window.Visible = false
+Window.Parent = ScreenGui
+Instance.new("UICorner", Window).CornerRadius = UDim.new(0, 12)
+local WinStroke = Instance.new("UIStroke", Window)
+WinStroke.Color = CurrentTheme.ACCENT
+WinStroke.Thickness = 1.5
+WinStroke.Transparency = 0.4
+
+-- ─── Шапка ───────────────────────────────────────────────
+local Header = Instance.new("Frame")
+Header.Size = UDim2.new(1, 0, 0, 60)
+Header.BackgroundColor3 = CurrentTheme.HEADER
+Header.BackgroundTransparency = 0.1
+Header.Parent = Window
+Instance.new("UICorner", Header).CornerRadius = UDim.new(0, 12)
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, -10, 1, 0)
+Title.Position = UDim2.new(0, 10, 0, 0)
+Title.BackgroundTransparency = 1
+Title.Text = "PREMIUM PARRY"
+Title.TextColor3 = CurrentTheme.ACCENT
+Title.Font = Enum.Font.GothamBlack
+Title.TextSize = 18
+Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.Parent = Header
+
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Size = UDim2.new(0, 25, 0, 25)
+CloseBtn.Position = UDim2.new(1, -32, 0, 8)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
+CloseBtn.Text = "X"
+CloseBtn.TextColor3 = Color3.new(1,1,1)
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.Parent = Header
+Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(0, 6)
+
+-- ─── Вкладки ────────────────────────────────────────────
+local TabContainer = Instance.new("Frame")
+TabContainer.Size = UDim2.new(1, -20, 0, 35)
+TabContainer.Position = UDim2.new(0, 10, 0, 70)
+TabContainer.BackgroundTransparency = 1
+TabContainer.Parent = Window
+
+local TabLayout = Instance.new("UIListLayout")
+TabLayout.FillDirection = Enum.FillDirection.Horizontal
+TabLayout.Padding = UDim.new(0, 5)
+TabLayout.Parent = TabContainer
+
+local Pages = Instance.new("Frame")
+Pages.Size = UDim2.new(1, -20, 1, -120)
+Pages.Position = UDim2.new(0, 10, 0, 110)
+Pages.BackgroundTransparency = 1
+Pages.Parent = Window
+
+-- ============================================================
+-- [ 10. UI КОМПОНЕНТЫ ]
+-- ============================================================
+local PagesList, TabsList = {}, {}
+
+local function CreateTab(name, icon)
+    local Page = Instance.new("Frame")
+    Page.Size = UDim2.new(1, 0, 1, 0)
+    Page.BackgroundTransparency = 1
+    Page.Visible = false
+    Page.Parent = Pages
+    
+    local Layout = Instance.new("UIListLayout")
+    Layout.Padding = UDim.new(0, 10)
+    Layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    Layout.Parent = Page
+    
+    local TabBtn = Instance.new("TextButton")
+    TabBtn.Size = UDim2.new(0.33, -4, 1, 0)
+    TabBtn.BackgroundColor3 = CurrentTheme.OFF
+    TabBtn.BackgroundTransparency = 0.3
+    TabBtn.Text = icon .. " " .. name
+    TabBtn.TextColor3 = CurrentTheme.TEXT
+    TabBtn.Font = Enum.Font.GothamBold
+    TabBtn.TextSize = 11
+    TabBtn.Parent = TabContainer
+    Instance.new("UICorner", TabBtn).CornerRadius = UDim.new(0, 6)
+    
+    table.insert(PagesList, Page)
+    table.insert(TabsList, {Btn = TabBtn, Page = Page})
+    
+    TabBtn.MouseButton1Click:Connect(function()
+        PlayClick()
+        for _, t in ipairs(TabsList) do
+            t.Page.Visible = false
+            TweenService:Create(t.Btn, TweenInfo.new(0.2), {BackgroundColor3 = CurrentTheme.OFF, TextColor3 = CurrentTheme.TEXT}):Play()
+        end
+        Page.Visible = true
+        TweenService:Create(TabBtn, TweenInfo.new(0.2), {BackgroundColor3 = CurrentTheme.ACCENT, TextColor3 = CurrentTheme.BG}):Play()
+    end)
+    
+    return Page
+end
+
+local function CreateToggle(parent, yPos, text, stateKey, callback)
+    local Container = Instance.new("Frame")
+    Container.Size = UDim2.new(1, 0, 0, 35)
+    Container.Position = UDim2.new(0, 0, 0, yPos)
+    Container.BackgroundTransparency = 1
+    Container.Parent = parent
+
+    local Label = Instance.new("TextLabel")
+    Label.Size = UDim2.new(1, -50, 1, 0)
+    Label.BackgroundTransparency = 1
+    Label.Text = text
+    Label.TextColor3 = CurrentTheme.TEXT
+    Label.Font = Enum.Font.GothamBold
+    Label.TextSize = 13
+    Label.TextXAlignment = Enum.TextXAlignment.Left
+    Label.Parent = Container
+    table.insert(UI_Elements, {btn = Label, type = "label"})
+
+    local SwitchBg = Instance.new("Frame")
+    SwitchBg.Size = UDim2.new(0, 40, 0, 22)
+    SwitchBg.Position = UDim2.new(1, -40, 0.5, -11)
+    SwitchBg.BackgroundColor3 = STATE[stateKey] and CurrentTheme.ACCENT or CurrentTheme.OFF
+    SwitchBg.Parent = Container
+    Instance.new("UICorner", SwitchBg).CornerRadius = UDim.new(1, 0)
+    table.insert(UI_Elements, {btn = SwitchBg, type = "switch", state = STATE[stateKey]})
+    
+    local Knob = Instance.new("Frame")
+    Knob.Size = UDim2.new(0, 18, 0, 18)
+    Knob.Position = STATE[stateKey] and UDim2.new(1, -20, 0.5, -9) or UDim2.new(0, 2, 0.5, -9)
+    Knob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    Knob.Parent = SwitchBg
+    Instance.new("UICorner", Knob).CornerRadius = UDim.new(1, 0)
+
+    local Hitbox = Instance.new("TextButton")
+    Hitbox.Size = UDim2.new(1, 0, 1, 0)
+    Hitbox.BackgroundTransparency = 1
+    Hitbox.Text = ""
+    Hitbox.Parent = Container
+
+    Hitbox.MouseButton1Click:Connect(function()
+        PlayClick()
+        STATE[stateKey] = not STATE[stateKey]
+        SwitchBg.BackgroundColor3 = STATE[stateKey] and CurrentTheme.ACCENT or CurrentTheme.OFF
+        local targetPos = STATE[stateKey] and UDim2.new(1, -20, 0.5, -9) or UDim2.new(0, 2, 0.5, -9)
+        TweenService:Create(Knob, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {Position = targetPos}):Play()
+        if callback then callback(STATE[stateKey]) end
+    end)
+end
+
+local function CreateButton(parent, yPos, text, callback, color)
+    local Btn = Instance.new("TextButton")
+    Btn.Size = UDim2.new(1, 0, 0, 35)
+    Btn.Position = UDim2.new(0, 0, 0, yPos)
+    Btn.BackgroundColor3 = color or CurrentTheme.OFF
+    Btn.BackgroundTransparency = 0.3
+    Btn.Text = text
+    Btn.TextColor3 = CurrentTheme.TEXT
+    Btn.Font = Enum.Font.GothamBold
+    Btn.TextSize = 12
+    Btn.Parent = parent
+    Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 6)
+    table.insert(UI_Elements, {btn = Btn, type = "button"})
+    Btn.MouseButton1Click:Connect(function()
+        PlayClick()
+        Btn.BackgroundTransparency = 0
+        task.wait(0.1)
+        Btn.BackgroundTransparency = 0.3
+        callback()
+    end)
+end
+
+-- ============================================================
+-- [ 11. СТРАНИЦЫ МЕНЮ ]
+-- ============================================================
+local MainPage = CreateTab("MAIN", "🎯")
+CreateToggle(MainPage, 0, "Auto Parry (Master)", "Enabled")
+CreateToggle(MainPage, 40, "3D Sphere Visual", "ShowVisuals", function(v)
+    OuterSphere.Transparency = v and 0.65 or 1
+    InnerSphere.Transparency = v and 0.7 or 1
+end)
+CreateToggle(MainPage, 80, "Camera Lock (Ball)", "CameraLock", function(v)
+    if not v then Camera.CameraType = Enum.CameraType.Custom end
+end)
+CreateButton(MainPage, 130, "Apply Visuals", function()
+    print(">>> [BB] Visuals applied.")
+end, Color3.fromRGB(60, 180, 100))
+
+local VisPage = CreateTab("VISUAL", "🎨")
+CreateToggle(VisPage, 0, "Anti-Lag (FPS)", "AntiLag")
+CreateToggle(VisPage, 40, "Night Mode (Sphere)", "NightModeSphere")
+CreateToggle(VisPage, 80, "Night Map (Env)", "NightMap", function(v)
+    STATE.NightMap = v; SetNightMap(v)
+end)
+CreateToggle(VisPage, 120, "Static Sphere", "StaticSphere")
+
+local ThemeLabel = Instance.new("TextLabel")
+ThemeLabel.Size = UDim2.new(1, 0, 0, 20)
+ThemeLabel.Position = UDim2.new(0, 0, 0, 160)
+ThemeLabel.BackgroundTransparency = 1
+ThemeLabel.Text = "Выберите тему (6 Dark / 6 Light):"
+ThemeLabel.TextColor3 = CurrentTheme.TEXT
+ThemeLabel.Font = Enum.Font.GothamBold
+ThemeLabel.TextSize = 12
+ThemeLabel.TextXAlignment = Enum.TextXAlignment.Left
+ThemeLabel.Parent = VisPage
+table.insert(UI_Elements, {btn = ThemeLabel, type = "label"})
+
+local ThemeScroll = Instance.new("ScrollingFrame")
+ThemeScroll.Size = UDim2.new(1, 0, 0, 180)
+ThemeScroll.Position = UDim2.new(0, 0, 0, 185)
+ThemeScroll.BackgroundColor3 = CurrentTheme.OFF
+ThemeScroll.BackgroundTransparency = 0.7
+ThemeScroll.BorderSizePixel = 0
+ThemeScroll.ScrollBarThickness = 2
+ThemeScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+ThemeScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+ThemeScroll.Parent = VisPage
+Instance.new("UICorner", ThemeScroll).CornerRadius = UDim.new(0, 6)
+table.insert(UI_Elements, {btn = ThemeScroll, type = "listframe"})
+
+local ThemeLayout = Instance.new("UIListLayout")
+ThemeLayout.Padding = UDim.new(0, 4)
+ThemeLayout.SortOrder = Enum.SortOrder.Name
+ThemeLayout.Parent = ThemeScroll
+
+for name, data in pairs(THEMES) do
+    local Btn = Instance.new("TextButton")
+    Btn.Size = UDim2.new(0.95, 0, 0, 28)
+    Btn.BackgroundColor3 = data.BG
+    Btn.BackgroundTransparency = 0.3
+    Btn.Text = ""
+    Btn.Parent = ThemeScroll
+    Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 4)
+    
+    local Preview = Instance.new("Frame")
+    Preview.Size = UDim2.new(0, 18, 0, 18)
+    Preview.Position = UDim2.new(0, 5, 0.5, -9)
+    Preview.BackgroundColor3 = data.ACCENT
+    Preview.Parent = Btn
+    Instance.new("UICorner", Preview).CornerRadius = UDim.new(0, 3)
+    
+    local Label = Instance.new("TextLabel")
+    Label.Size = UDim2.new(1, -30, 1, 0)
+    Label.Position = UDim2.new(0, 28, 0, 0)
+    Label.BackgroundTransparency = 1
+    Label.Text = name
+    Label.TextColor3 = data.TEXT
+    Label.Font = Enum.Font.GothamBold
+    Label.TextSize = 11
+    Label.TextXAlignment = Enum.TextXAlignment.Left
+    Label.Parent = Btn
+    
+    Btn.MouseButton1Click:Connect(function()
+        PlayClick()
+        CurrentThemeName = name
+        CurrentTheme = data
+        if ApplyTheme then ApplyTheme() end
+    end)
+end
+
+-- ============================================================
+-- [ 12. СИСТЕМА ПРОФИЛЕЙ ]
+-- ============================================================
+local OtherPage = CreateTab("OTHER", "⚙️")
+local PROFILE_FOLDER = "BB_Profiles"
+pcall(function() if makefolder and not isfolder(PROFILE_FOLDER) then makefolder(PROFILE_FOLDER) end end)
+
+local ProfileTextBox = Instance.new("TextBox")
+ProfileTextBox.Size = UDim2.new(1, 0, 0, 35)
+ProfileTextBox.BackgroundColor3 = CurrentTheme.OFF
+ProfileTextBox.BackgroundTransparency = 0.3
+ProfileTextBox.PlaceholderText = "Profile Name..."
+ProfileTextBox.Text = ""
+ProfileTextBox.TextColor3 = CurrentTheme.TEXT
+ProfileTextBox.Font = Enum.Font.GothamMedium
+ProfileTextBox.TextSize = 12
+ProfileTextBox.Parent = OtherPage
+Instance.new("UICorner", ProfileTextBox).CornerRadius = UDim.new(0, 6)
+table.insert(UI_Elements, {btn = ProfileTextBox, type = "textbox"})
+
+local function SaveProfile()
+    local pName = ProfileTextBox.Text ~= "" and ProfileTextBox.Text or "Default"
+    local data = {
+        Theme = CurrentThemeName, Enabled = STATE.Enabled, ShowVisuals = STATE.ShowVisuals,
+        AntiLag = STATE.AntiLag, HideInner = STATE.HideInner, StaticSphere = STATE.StaticSphere,
+        NightModeSphere = STATE.NightModeSphere, NightMap = STATE.NightMap,
+        OuterColor = tostring(STATE.OuterColor), InnerColor = tostring(STATE.InnerColor),
+        CameraLock = STATE.CameraLock
+    }
+    local success = pcall(function() writefile(PROFILE_FOLDER .. "/" .. pName .. ".json", HttpService:JSONEncode(data)) end)
+    if success then print(">>> [BB] Profile saved: "..pName) end
+    if _G.BB_RefreshProfiles then _G.BB_RefreshProfiles() end
+end
+
+local function LoadProfile(pName)
+    local success, data = pcall(function()
+        if isfile and isfile(PROFILE_FOLDER .. "/" .. pName .. ".json") then
+            return HttpService:JSONDecode(readfile(PROFILE_FOLDER .. "/" .. pName .. ".json"))
+        end
+    end)
+    if success and data then
+        CurrentThemeName = data.Theme or "Premium Dark"
+        CurrentTheme = THEMES[CurrentThemeName] or THEMES["Premium Dark"]
+        STATE.Enabled = data.Enabled ~= false
+        STATE.ShowVisuals = data.ShowVisuals ~= false
+        STATE.AntiLag = data.AntiLag == true
+        STATE.HideInner = data.HideInner == true
+        STATE.StaticSphere = data.StaticSphere == true
+        STATE.NightModeSphere = data.NightModeSphere == true
+        STATE.NightMap = data.NightMap == true
+        STATE.CameraLock = data.CameraLock == true
+        if ApplyTheme then ApplyTheme() end
+        print(">>> [BB] Profile loaded: "..pName)
+    end
+end
+
+CreateButton(OtherPage, 40, "Save / Overwrite Profile", SaveProfile, Color3.fromRGB(60, 180, 100))
+
+local ProfileListFrame = Instance.new("ScrollingFrame")
+ProfileListFrame.Size = UDim2.new(1, 0, 0, 160)
+ProfileListFrame.Position = UDim2.new(0, 0, 0, 80)
+ProfileListFrame.BackgroundColor3 = CurrentTheme.OFF
+ProfileListFrame.BackgroundTransparency = 0.7
+ProfileListFrame.BorderSizePixel = 0
+ProfileListFrame.ScrollBarThickness = 2
+ProfileListFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+ProfileListFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
+ProfileListFrame.Parent = OtherPage
+Instance.new("UICorner", ProfileListFrame).CornerRadius = UDim.new(0, 6)
+table.insert(UI_Elements, {btn = ProfileListFrame, type = "listframe"})
+
+local ListLayout = Instance.new("UIListLayout")
+ListLayout.Padding = UDim.new(0, 4)
+ListLayout.Parent = ProfileListFrame
+
+_G.BB_RefreshProfiles = function()
+    for _, child in ipairs(ProfileListFrame:GetChildren()) do
+        if child:IsA("Frame") then child:Destroy() end
+    end
+    
+    local autoName = ""
+    pcall(function() if isfile and isfile("BB_AutoLoad.txt") then autoName = readfile("BB_AutoLoad.txt") end end)
+
+    local files = {}
+    pcall(function()
+        if listfiles then
+            for _, f in ipairs(listfiles(PROFILE_FOLDER)) do
+                local match = f:match("(.+)%.json")
+                if match then table.insert(files, match) end
+            end
+        end
+    end)
+    
+    if #files == 0 then
+        local empty = Instance.new("TextLabel")
+        empty.Size = UDim2.new(1, 0, 0, 25)
+        empty.BackgroundTransparency = 1
+        empty.Text = "No profiles saved"
+        empty.TextColor3 = CurrentTheme.TEXT
+        empty.Font = Enum.Font.Gotham
+        empty.TextSize = 11
+        empty.Parent = ProfileListFrame
+        return
+    end
+
+    table.sort(files)
+    if autoName ~= "" then
+        for i, v in ipairs(files) do
+            if v == autoName then
+                table.remove(files, i)
+                table.insert(files, 1, v)
+                break
+            end
+        end
+    end
+
+    for _, name in ipairs(files) do
+        local isAuto = (name == autoName)
+        local row = Instance.new("Frame")
+        row.Size = UDim2.new(1, 0, 0, 25)
+        row.BackgroundTransparency = 1
+        row.Parent = ProfileListFrame
+
+        local loadBtn = Instance.new("TextButton")
+        loadBtn.Size = UDim2.new(0.6, -2, 1, 0)
+        loadBtn.BackgroundColor3 = isAuto and CurrentTheme.ACCENT or CurrentTheme.OFF
+        loadBtn.Text = (isAuto and "★ " or "") .. name
+        loadBtn.TextColor3 = isAuto and CurrentTheme.BG or CurrentTheme.TEXT
+        loadBtn.Font = Enum.Font.GothamBold
+        loadBtn.TextSize = 10
+        loadBtn.Parent = row
+        Instance.new("UICorner", loadBtn).CornerRadius = UDim.new(0, 4)
+        loadBtn.MouseButton1Click:Connect(function() PlayClick(); LoadProfile(name) end)
+
+        local autoBtn = Instance.new("TextButton")
+        autoBtn.Size = UDim2.new(0.4, -2, 1, 0)
+        autoBtn.Position = UDim2.new(0.6, 2, 0, 0)
+        autoBtn.BackgroundColor3 = isAuto and Color3.fromRGB(60, 180, 100) or CurrentTheme.OFF
+        autoBtn.Text = isAuto and "✓ AUTO" or "SET AUTO"
+        autoBtn.TextColor3 = isAuto and Color3.new(0,0,0) or CurrentTheme.TEXT
+        autoBtn.Font = Enum.Font.GothamBold
+        autoBtn.TextSize = 9
+        autoBtn.Parent = row
+        Instance.new("UICorner", autoBtn).CornerRadius = UDim.new(0, 4)
+        autoBtn.MouseButton1Click:Connect(function()
+            PlayClick()
+            if isAuto then pcall(function() delfile("BB_AutoLoad.txt") end)
+            else pcall(function() writefile("BB_AutoLoad.txt", name) end) end
+            _G.BB_RefreshProfiles()
+        end)
+    end
+end
+
+task.spawn(function() task.wait(1); _G.BB_RefreshProfiles() end)
+task.spawn(function()
+    task.wait(1.5)
+    pcall(function()
+        if isfile and isfile("BB_AutoLoad.txt") then LoadProfile(readfile("BB_AutoLoad.txt")) end
+    end)
+end)
+
+-- ============================================================
+-- [ 13. КРАСИВАЯ ПАНЕЛЬ ОТЛАДКИ ]
+-- ============================================================
+local DebugGui = Instance.new("ScreenGui")
+DebugGui.Name = "BB_Debug"
+DebugGui.ResetOnSpawn = false
+DebugGui.DisplayOrder = 1000
+DebugGui.Parent = PlayerGui
+
+local DebugFrame = Instance.new("Frame")
+DebugFrame.Size = UDim2.new(0, 240, 0, 172)
+DebugFrame.Position = UDim2.new(0, 15, 0, 15)
+DebugFrame.BackgroundColor3 = CurrentTheme.BG
+DebugFrame.BackgroundTransparency = 0.15
+DebugFrame.BorderSizePixel = 0
+DebugFrame.Parent = DebugGui
+Instance.new("UICorner", DebugFrame).CornerRadius = UDim.new(0, 10)
+
+local DebugStroke = Instance.new("UIStroke", DebugFrame)
+DebugStroke.Color = CurrentTheme.ACCENT
+DebugStroke.Thickness = 1.5
+DebugStroke.Transparency = 0.3
+
+local debugHeader = Instance.new("TextLabel")
+debugHeader.Size = UDim2.new(1, -20, 0, 22)
+debugHeader.Position = UDim2.new(0, 12, 0, 5)
+debugHeader.BackgroundTransparency = 1
+debugHeader.Text = "◈ PARRY STATS"
+debugHeader.TextColor3 = CurrentTheme.ACCENT
+debugHeader.Font = Enum.Font.GothamBlack
+debugHeader.TextSize = 12
+debugHeader.TextXAlignment = Enum.TextXAlignment.Left
+debugHeader.Parent = DebugFrame
+
+local accentLine = Instance.new("Frame")
+accentLine.Size = UDim2.new(1, -24, 0, 1)
+accentLine.Position = UDim2.new(0, 12, 0, 28)
+accentLine.BackgroundColor3 = CurrentTheme.ACCENT
+accentLine.BorderSizePixel = 0
+accentLine.BackgroundTransparency = 0.5
+accentLine.Parent = DebugFrame
+
+local debugLabels = {}
+local rowData = {
+    {"Status", "Safe", 34},
+    {"Speed", "0", 55},
+    {"Time", "N/A", 76},
+    {"Distance", "0.0", 97},
+    {"Armed", "true", 118},
+    {"Parry", "N/A", 139},
+}
+
+for _, row in ipairs(rowData) do
+    local keyLabel = Instance.new("TextLabel")
+    keyLabel.Size = UDim2.new(0.45, 0, 0, 16)
+    keyLabel.Position = UDim2.new(0, 14, 0, row[3])
+    keyLabel.BackgroundTransparency = 1
+    keyLabel.Text = row[1]
+    keyLabel.TextColor3 = Color3.fromRGB(140, 140, 150)
+    keyLabel.Font = Enum.Font.GothamBold
+    keyLabel.TextSize = 11
+    keyLabel.TextXAlignment = Enum.TextXAlignment.Left
+    keyLabel.Parent = DebugFrame
+
+    local valLabel = Instance.new("TextLabel")
+    valLabel.Size = UDim2.new(0.55, -14, 0, 16)
+    valLabel.Position = UDim2.new(0.45, 0, 0, row[3])
+    valLabel.BackgroundTransparency = 1
+    valLabel.Text = row[2]
+    valLabel.TextColor3 = Color3.fromRGB(240, 240, 240)
+    valLabel.Font = Enum.Font.Code
+    valLabel.TextSize = 11
+    valLabel.TextXAlignment = Enum.TextXAlignment.Right
+    valLabel.Parent = DebugFrame
+
+    debugLabels[row[1]] = valLabel
+end
+
+-- ============================================================
+-- [ 14. ПРИМЕНЕНИЕ ТЕМЫ ]
+-- ============================================================
+ApplyTheme = function()
+    Window.BackgroundColor3 = CurrentTheme.BG
+    Header.BackgroundColor3 = CurrentTheme.HEADER
+    WinStroke.Color = CurrentTheme.ACCENT
+    Title.TextColor3 = CurrentTheme.ACCENT
+    BtnStroke.Color = CurrentTheme.ACCENT
+    ToggleBtn.TextColor3 = CurrentTheme.ACCENT
+    
+    DebugFrame.BackgroundColor3 = CurrentTheme.BG
+    DebugStroke.Color = CurrentTheme.ACCENT
+    debugHeader.TextColor3 = CurrentTheme.ACCENT
+    accentLine.BackgroundColor3 = CurrentTheme.ACCENT
+    
+    for _, t in ipairs(TabsList) do
+        if t.Page.Visible then
+            t.Btn.BackgroundColor3 = CurrentTheme.ACCENT; t.Btn.TextColor3 = CurrentTheme.BG
+        else
+            t.Btn.BackgroundColor3 = CurrentTheme.OFF; t.Btn.TextColor3 = CurrentTheme.TEXT
+        end
+    end
+    
+    for _, el in ipairs(UI_Elements) do
+        if el.type == "label" then el.btn.TextColor3 = CurrentTheme.TEXT
+        elseif el.type == "button" then el.btn.BackgroundColor3 = CurrentTheme.OFF; el.btn.TextColor3 = CurrentTheme.TEXT
+        elseif el.type == "switch" then el.btn.BackgroundColor3 = el.state and CurrentTheme.ACCENT or CurrentTheme.OFF
+        elseif el.type == "textbox" then el.btn.BackgroundColor3 = CurrentTheme.OFF; el.btn.TextColor3 = CurrentTheme.TEXT
+        elseif el.type == "listframe" then el.btn.BackgroundColor3 = CurrentTheme.OFF
+        end
+    end
+end
+
+TabsList[1].Page.Visible = true
+TabsList[1].Btn.BackgroundColor3 = CurrentTheme.ACCENT
+TabsList[1].Btn.TextColor3 = CurrentTheme.BG
+
+-- ============================================================
+-- [ 15. ПЕРЕТАСКИВАНИЕ И УПРАВЛЕНИЕ ]
+-- ============================================================
+local dragging, dragStart, startPos = false, nil, nil
+Header.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true; dragStart = input.Position; startPos = Window.Position
+    end
+end)
+UserInputService.InputChanged:Connect(function(input)
+    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        local delta = input.Position - dragStart
+        Window.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = false
+    end
+end)
+
+local function OpenToggle()
+    PlayClick()
+    Window.Visible = not Window.Visible
+    if Window.Visible then
+        Window.Size = UDim2.new(0, 320, 0, 0)
+        TweenService:Create(Window, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Size = UDim2.new(0, 320, 0, 500)}):Play()
+    end
+end
+
+ToggleBtn.MouseButton1Click:Connect(OpenToggle)
+CloseBtn.MouseButton1Click:Connect(function() PlayClick(); Window.Visible = false end)
+
+UserInputService.InputBegan:Connect(function(input, gpe)
+    if gpe then return end
+    if input.KeyCode == Enum.KeyCode.RightControl then
+        OpenToggle()
+    end
+end)
+
+-- ============================================================
+-- [ 16. ЛОГИКА ПАРИРОВАНИЯ (HUMAN DELAY 0.10-0.15s) ]
+-- ============================================================
+local function TriggerParry()
+    local now = tick()
+    -- Защита от спама (COOLDOWN = 0.21)
+    if now - STATE.LastParry < CONFIG.COOLDOWN then return end
+    STATE.LastParry = now
+
+    task.spawn(function()
+        -- 1. ИМИТАЦИЯ ЧЕЛОВЕЧЕСКОЙ РЕАКЦИИ (x1.5 быстрее)
+        local delay = math.random(CONFIG.HUMAN_DELAY_MIN * 1000, CONFIG.HUMAN_DELAY_MAX * 1000) / 1000
+        task.wait(delay)
+
+        -- 2. ВЫПОЛНЕНИЕ ПАРИРОВАНИЯ
+        if not STATE.BlockButton or not STATE.BlockButton.Parent then
+            STATE.BlockButton = FindBlockButton()
+        end
+
+        if STATE.BlockButton and getconnections then
+            local success = pcall(function()
+                local connections = getconnections(STATE.BlockButton.Activated)
+                for _, c in ipairs(connections) do
+                    if c.Fire then c:Fire() end
+                end
+            end)
+            if success then 
+                STATE.ParryMethod = "Button"
+                return 
+            end
+        end
+
+        if STATE.Remote then
+            pcall(function() STATE.Remote:FireServer() end)
+            STATE.ParryMethod = "Remote"
+            return
+        end
+
+        pcall(function()
+            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.F, false, game)
+            task.wait(0.02)
+            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.F, false, game)
+        end)
+        STATE.ParryMethod = "VIM"
+    end)
+end
+
+local function GetBall()
+    if STATE.Ball and STATE.Ball.Parent then return STATE.Ball end
+    local bf = Workspace:FindFirstChild("Balls")
+    if bf then
+        for _, o in ipairs(bf:GetChildren()) do
+            if o:IsA("BasePart") then STATE.Ball = o; return o end
+        end
+    end
+    return nil
+end
+
+local function IsTargetingMe(ball)
+    if not ball then return false end
+    local attrs = {"target", "Target", "targetPlayer", "TargetPlayer"}
+    for _, a in ipairs(attrs) do
+        local v = ball:GetAttribute(a)
+        if v then
+            if v == LocalPlayer or v == LocalPlayer.Name or v == LocalPlayer.UserId or v == LocalPlayer.Character or tostring(v) == LocalPlayer.Name then
+                return true
+            else return false end
+        end
+    end
+    return LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Highlight") ~= nil
+end
+
+local PulseTime = 0
+
+-- Лок камеры (RenderStepped)
+RunService.RenderStepped:Connect(function()
+    if STATE.CameraLock and STATE.Ball and STATE.Ball.Parent then
+        Camera.CameraType = Enum.CameraType.Scriptable
+        Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, STATE.Ball.Position)
+    end
+end)
 
 -- Главный цикл (Heartbeat)
 RunService.Heartbeat:Connect(function(dt)
@@ -57,61 +1023,45 @@ RunService.Heartbeat:Connect(function(dt)
             local bp = ball.Position
             dist = (hrp.Position - bp).Magnitude
 
-            -- Первый раз видим этот объект мяча
             if STATE.Ball ~= ball then
                 STATE.Ball = ball
                 STATE.PrevBallPos = bp
                 STATE.IsArmed = true
-                STATE.ParriedBall = nil
             end
+
+            if dist > 80 then STATE.IsArmed = true end
 
             local bv = ball.AssemblyLinearVelocity
-            local isTargeting = IsTargetingMe(ball)
-
-            -- Скорость сближения (положительная = летит в нас)
-            local approachSpeed = 0
-            if bv.Magnitude > 1 then
-                approachSpeed = bv:Dot((hrp.Position - bp).Unit)
-            end
-
-            -- ⚡ УМНЫЙ СБРОС ЛОКА:
-            -- мяч далеко / уже не в нас / отлетает после парирования → можно парировать снова
-            if dist > 80 or not isTargeting or approachSpeed < -2 then
-                STATE.ParriedBall = nil
-                STATE.IsArmed = true
-            end
-
-            -- Скорость и время до удара
             if bv.Magnitude > 1 then
                 speed = bv.Magnitude
+                local dirToMe = (hrp.Position - bp).Unit
+                local approachSpeed = bv:Dot(dirToMe)
                 if approachSpeed > 1 then timeToImpact = dist / approachSpeed end
             elseif STATE.PrevBallPos and dt > 0 then
                 local moveVec = bp - STATE.PrevBallPos
                 speed = moveVec.Magnitude / dt
                 if speed > 1 then
                     local dirToMe = (hrp.Position - bp).Unit
-                    local moveApproach = moveVec.Unit:Dot(dirToMe) * speed
-                    if moveApproach > 1 then timeToImpact = dist / moveApproach end
+                    local approachSpeed = moveVec.Unit:Dot(dirToMe) * speed
+                    if approachSpeed > 1 then timeToImpact = dist / approachSpeed end
                 end
             end
 
-            if isTargeting then
+            if IsTargetingMe(ball) then
                 local predictedHit = false
                 if speed > 1 then
                     local predictedPos = bp + bv * CONFIG.PREDICT_TIME
-                    if (hrp.Position - predictedPos).Magnitude <= CONFIG.CLOSE_DIST then
-                        predictedHit = true
+                    if (hrp.Position - predictedPos).Magnitude <= CONFIG.CLOSE_DIST then 
+                        predictedHit = true 
                     end
                 end
 
                 if dist <= CONFIG.CLOSE_DIST or timeToImpact <= CONFIG.PING_SAFE or predictedHit then
                     targetColor = Color3.fromRGB(255, 50, 50)
                     status = "DANGER!"
-                    -- ⚡ 1 нажатие на 1 мяч (внутри одной атаки спама нет)
-                    if STATE.Enabled and STATE.ParriedBall ~= ball then
-                        STATE.ParriedBall = ball
-                        STATE.IsArmed = false
+                    if STATE.Enabled then
                         TriggerParry()
+                        STATE.IsArmed = false
                     end
                 else
                     targetColor = Color3.fromRGB(255, 200, 0)
@@ -125,7 +1075,6 @@ RunService.Heartbeat:Connect(function(dt)
         else
             STATE.IsArmed = true
             STATE.PrevBallPos = nil
-            STATE.ParriedBall = nil
         end
 
         -- Визуал сферы (макс. 90)
@@ -189,3 +1138,16 @@ RunService.Heartbeat:Connect(function(dt)
         end
     end)
 end)
+
+-- Сброс при респавне
+LocalPlayer.CharacterAdded:Connect(function()
+    STATE.IsArmed = true
+    STATE.PrevBallPos = nil
+    STATE.Ball = nil
+    STATE.CameraLock = false
+    if Camera.CameraType == Enum.CameraType.Scriptable then
+        Camera.CameraType = Enum.CameraType.Custom
+    end
+end)
+
+print(">>> [BB] CANDY EDITION v15.0 LOADED! (COOLDOWN: 0.21s, Human Delay: 0.10-0.15s)")
