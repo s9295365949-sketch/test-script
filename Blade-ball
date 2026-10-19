@@ -1,9 +1,9 @@
 --[[
     ╔═══════════════════════════════════════════════════════════════════════╗
-    ║   BLADE BALL — 3D SPHERE (0.35s PERFECT TRIGGER)                      ║
-    ║   • Сфера в Workspace (3D)                                            ║
-    ║   • Безопасный метод (CAS + Remote)                                   ║
-    ║   • Нажатие за 0.35 сек до удара (учет пинга 80мс + анимация 50мс)    ║
+    ║   BLADE BALL — SPHERE COLLISION TRIGGER (GENIUS IDEA)                 ║
+    ║   • Сфера вокруг тебя + сфера вокруг мяча                             ║
+    ║   • Парирование срабатывает при КАСАНИИ сфер                           ║
+    ║   • Сфера в Workspace (3D), безопасный метод (CAS + Remote)           ║
     ╚═══════════════════════════════════════════════════════════════════════╝
 ]]
 
@@ -21,19 +21,19 @@ local PlayerGui = LocalPlayer:WaitForChild("PlayerGui", 10)
 if PlayerGui:FindFirstChild("BBDebug") then PlayerGui.BBDebug:Destroy() end
 if PlayerGui:FindFirstChild("BBMenu") then PlayerGui.BBMenu:Destroy() end
 if Workspace:FindFirstChild("VisualEffect") then Workspace.VisualEffect:Destroy() end
+if Workspace:FindFirstChild("BallEffect") then Workspace.BallEffect:Destroy() end
 
 local CFG = {
-    PARRY_RADIUS        = 25,        -- Радиус срабатывания
-    MAX_RADIUS          = 35,        -- Размер сферы
+    PARRY_RADIUS        = 25,        -- Радиус ТВОЕЙ сферы
+    BALL_RADIUS         = 3,         -- Радиус сферы МЯЧА
+    BUFFER_DIST         = 5,         -- Отступ (запас на пинг и анимацию в стабсах)
+    
     PARRY_COOLDOWN      = 0.25,      
     PARRY_ENABLED       = true,
     SPHERE_VISIBLE      = true,      
     Y_OFFSET            = -0.5,
     COLOR_INSIDE        = Color3.fromRGB(255, 30, 30),
     COLOR_OUTSIDE       = Color3.fromRGB(30, 255, 50),
-    
-    -- НАЖИМАЕМ ЗА 0.35 СЕК ДО УДАРА (запас на пинг и анимацию)
-    PREDICT_TIME        = 0.35,      
 }
 
 -- 1. REMOTE
@@ -48,9 +48,9 @@ task.spawn(function()
     end
 end)
 
--- 2. СФЕРА В WORKSPACE (3D)
+-- 2. СФЕРА ИГРОКА
 local sphere = Instance.new("Part")
-sphere.Name = "VisualEffect" 
+sphere.Name = "VisualEffect"
 sphere.Shape = Enum.PartType.Ball
 sphere.Anchored = true
 sphere.CanCollide = false
@@ -61,10 +61,26 @@ sphere.Massless = true
 sphere.Material = Enum.Material.ForceField
 sphere.Color = CFG.COLOR_OUTSIDE
 sphere.Transparency = 1
-sphere.Size = Vector3.new(CFG.MAX_RADIUS * 2, CFG.MAX_RADIUS * 2, CFG.MAX_RADIUS * 2)
+sphere.Size = Vector3.new(CFG.PARRY_RADIUS * 2, CFG.PARRY_RADIUS * 2, CFG.PARRY_RADIUS * 2)
 sphere.Parent = Workspace
 
--- 3. ОТЛАДЧИК
+-- 3. СФЕРА МЯЧА
+local ballSphere = Instance.new("Part")
+ballSphere.Name = "BallEffect"
+ballSphere.Shape = Enum.PartType.Ball
+ballSphere.Anchored = true
+ballSphere.CanCollide = false
+ballSphere.CanTouch = false
+ballSphere.CanQuery = false
+ballSphere.CastShadow = false
+ballSphere.Massless = true
+ballSphere.Material = Enum.Material.Neon
+ballSphere.Color = Color3.fromRGB(255, 255, 255)
+ballSphere.Transparency = 1
+ballSphere.Size = Vector3.new(CFG.BALL_RADIUS * 2, CFG.BALL_RADIUS * 2, CFG.BALL_RADIUS * 2)
+ballSphere.Parent = Workspace
+
+-- 4. ОТЛАДЧИК
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "BBDebug"
 screenGui.ResetOnSpawn = false
@@ -83,7 +99,7 @@ debugText.TextYAlignment = Enum.TextYAlignment.Top
 debugText.Text = "Ожидание..."
 debugText.Parent = screenGui
 
--- 4. МЕНЮ
+-- 5. МЕНЮ
 local menuGui = Instance.new("ScreenGui")
 menuGui.Name = "BBMenu"
 menuGui.ResetOnSpawn = false
@@ -160,7 +176,7 @@ menuBtn.MouseButton1Click:Connect(function()
 end)
 closeBtn.MouseButton1Click:Connect(function() menuFrame.Visible = false end)
 
--- 5. ПОИСК МЯЧА
+-- 6. ПОИСК МЯЧА
 local cachedBall = nil
 local function findBall()
     local bf = Workspace:FindFirstChild("Balls")
@@ -176,7 +192,7 @@ Workspace.ChildAdded:Connect(function(o)
     end
 end)
 
--- 6. ПАРИРОВАНИЕ
+-- 7. ПАРИРОВАНИЕ
 local lastParry = 0
 local lastAction = "None"
 local isArmed = true
@@ -204,10 +220,10 @@ local function executeParry()
     isArmed = false
 end
 
--- 7. ЦИКЛ
+-- 8. ЦИКЛ
 local lastBall = nil
 local prevPos = nil
-local currentDiameter = CFG.MAX_RADIUS * 2
+local currentDiameter = CFG.PARRY_RADIUS * 2
 local currentColor = CFG.COLOR_OUTSIDE
 
 RunService.Heartbeat:Connect(function(dt)
@@ -219,6 +235,7 @@ RunService.Heartbeat:Connect(function(dt)
         local humanoid = char:FindFirstChildOfClass("Humanoid")
         if not humanoid or humanoid.Health <= 0 then
             sphere.Transparency = 1
+            ballSphere.Transparency = 1
             return
         end
 
@@ -228,9 +245,8 @@ RunService.Heartbeat:Connect(function(dt)
         
         local dbg_ball = "NO"
         local dbg_dist = 0
-        local dbg_time = 999
         local dbg_status = "Safe"
-        local targetDiameter = CFG.MAX_RADIUS * 2
+        local targetDiameter = CFG.PARRY_RADIUS * 2
         local targetColor = CFG.COLOR_OUTSIDE
 
         if ball then
@@ -240,7 +256,7 @@ RunService.Heartbeat:Connect(function(dt)
             dbg_dist = dist
 
             -- Перезаряжаем скрипт
-            if dist > CFG.PARRY_RADIUS * 2.5 then
+            if dist > (CFG.PARRY_RADIUS + CFG.BALL_RADIUS) * 2 then
                 isArmed = true
             end
 
@@ -275,17 +291,16 @@ RunService.Heartbeat:Connect(function(dt)
             end
 
             if isTargetingMe then
-                if approachSpeed > 1 then
-                    dbg_time = dist / approachSpeed
-                end
-
                 dbg_status = "Incoming!"
                 
-                local targetRadius = math.clamp(dist, CFG.PARRY_RADIUS, CFG.MAX_RADIUS)
+                -- ОБНОВЛЯЕМ ВИЗУАЛ (Сфера сжимается, если мяч близко)
+                local targetRadius = math.clamp(dist, CFG.PARRY_RADIUS, CFG.PARRY_RADIUS + 10)
                 targetDiameter = targetRadius * 2
                 
-                -- СРАБАТЫВАНИЕ ЗА 0.35 СЕК
-                if dbg_time <= CFG.PREDICT_TIME or dist <= CFG.PARRY_RADIUS then
+                -- ГЛАВНАЯ МАТЕМАТИКА: Радиус игрока + Радиус мяча + Буфер на пинг
+                local collisionDist = CFG.PARRY_RADIUS + CFG.BALL_RADIUS + CFG.BUFFER_DIST
+                
+                if dist <= collisionDist then
                     executeParry()
                     if not isArmed then
                         dbg_status = "PARRY!"
@@ -294,22 +309,30 @@ RunService.Heartbeat:Connect(function(dt)
                 end
             end
             prevPos = bp
+            
+            -- Двигаем сферу мяча
+            ballSphere.CFrame = CFrame.new(bp)
         else
             isArmed = true
         end
 
-        debugText.Text = string.format("Ball: %s\nDist: %.1f\nTime: %s\nArmed: %s\nStatus: %s\nMethod: %s", 
-            dbg_ball, dbg_dist, (dbg_time > 900 and "N/A" or string.format("%.2fs", dbg_time)), tostring(isArmed), dbg_status, lastAction)
+        debugText.Text = string.format("Ball: %s\nDist: %.1f\nArmed: %s\nStatus: %s\nMethod: %s", 
+            dbg_ball, dbg_dist, tostring(isArmed), dbg_status, lastAction)
 
+        -- Визуал
         if CFG.SPHERE_VISIBLE then
             currentDiameter = currentDiameter + (targetDiameter - currentDiameter) * math.exp(-14 * dt)
             currentColor = currentColor:Lerp(targetColor, math.clamp(14 * dt, 0, 1))
+            
             sphere.CFrame = CFrame.new(hrpPos.X, hrpPos.Y + CFG.Y_OFFSET, hrpPos.Z)
             sphere.Size = Vector3.new(currentDiameter, currentDiameter, currentDiameter)
             sphere.Transparency = 0.7
             sphere.Color = currentColor
+
+            ballSphere.Transparency = 0.5
         else
             sphere.Transparency = 1
+            ballSphere.Transparency = 1
         end
     end)
 end)
