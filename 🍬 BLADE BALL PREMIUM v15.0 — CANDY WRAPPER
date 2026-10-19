@@ -1,21 +1,21 @@
 --[[
     ╔═══════════════════════════════════════════════════════════════════════════╗
     ║                                                                           ║
-    ║   ██████╗  █████╗ ██████╗ ██████╗ ██╗   ██╗    ██████╗  ██████╗           ║
-    ║   ██╔══██╗██╔══██╗██╔══██╗██╔══██╗╚██╗ ██╔╝    ██╔══██╗██╔═══██╗          ║
-    ║   ██████╔╝███████║██████╔╝██████╔╝ ╚████╔╝     ██████╔╝██║   ██║          ║
-    ║   ██╔═══╝ ██╔══██║██╔══██╗██╔══██╗  ╚██╔╝      ██╔═══╝ ██║   ██║          ║
-    ║   ██║     ██║  ██║██║  ██║██║  ██║   ██║       ██║     ╚██████╔╝          ║
-    ║   ╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝       ╚═╝      ╚═════╝           ║
+    ║   ██████╗ █████╗ ███╗   ██╗██████╗ ██╗   ██╗                              ║
+    ║  ██╔════╝██╔══██╗████╗  ██║██╔══██╗╚██╗ ██╔╝                              ║
+    ║  ██║     ███████║██╔██╗ ██║██║  ██║ ╚████╔╝                               ║
+    ║  ██║     ██╔══██║██║╚██╗██║██║  ██║  ╚██╔╝                                ║
+    ║  ╚██████╗██║  ██║██║ ╚████║██████╔╝   ██║                                 ║
+    ║   ╚═════╝╚═╝  ╚═╝╚═╝  ╚═══╝╚═════╝    ╚═╝                                 ║
     ║                                                                           ║
-    ║   [ CANDY EDITION | v15.0 | ULTRA-FAST PARRY ]                            ║
-    ║   • 12 Premium Themes (6 Dark / 6 Light)                                  ║
-    ║   • Human Delay: 0.10 - 0.15s (x1.5 Faster)                               ║
-    ║   • Anti-Close Spam & Predictive Hit                                      ║
-    ║   • Camera Lock & Profile Manager                                         ║
-    ║   • Smart Debug HUD & Right Ctrl Toggle                                   ║
+    ║   [ CANDY WRAPPER | v15.0 | ULTRA-FAST PARRY ]                            ║
+    ║   COOLDOWN: 0.12s → 0.21s                                                 ║
+    ║   Wrapped: pcall-safe execution                                           ║
     ╚═══════════════════════════════════════════════════════════════════════════╝
 ]]
+
+local CANDY_VERSION = "v15.0"
+local function CandyMain()
 
 -- ============================================================
 -- [ 1. СЕРВИСЫ ]
@@ -45,24 +45,18 @@ if Workspace:FindFirstChild("AuraVisual") then Workspace.AuraVisual:Destroy() en
 -- [ 2. КОНФИГУРАЦИЯ И СОСТОЯНИЕ ]
 -- ============================================================
 local CONFIG = {
-    -- Логика парирования
-    CLOSE_DIST       = 45,     -- Дистанция "ближнего боя" (спам)
-    COOLDOWN         = 0.12,   -- Кулдаун между парированиями
-    PING_SAFE        = 0.35,   -- Компенсация пинга (350мс)
-    PREDICT_TIME     = 0.15,   -- Предсказание позиции мяча (150мс)
-    
-    -- Человеческая задержка (x1.5 быстрее)
-    HUMAN_DELAY_MIN  = 0.10,   -- Мин. задержка (100 мс)
-    HUMAN_DELAY_MAX  = 0.15,   -- Макс. задержка (150 мс)
-    
-    -- Визуал сферы
-    SPHERE_MIN       = 40,     -- Мин. диаметр сферы
-    SPHERE_MAX       = 90,     -- Макс. диаметр сферы
-    CORE_RATIO       = 0.23,   -- Размер ядра (23% от сферы)
+    CLOSE_DIST       = 45,
+    COOLDOWN         = 0.21,   -- ← изменено с 0.12 на 0.21
+    PING_SAFE        = 0.35,
+    PREDICT_TIME     = 0.15,
+    HUMAN_DELAY_MIN  = 0.10,
+    HUMAN_DELAY_MAX  = 0.15,
+    SPHERE_MIN       = 40,
+    SPHERE_MAX       = 90,
+    CORE_RATIO       = 0.23,
 }
 
 local STATE = {
-    -- Флаги
     Enabled = true,
     ShowVisuals = true,
     AntiLag = false,
@@ -71,12 +65,8 @@ local STATE = {
     NightModeSphere = false,
     NightMap = false,
     CameraLock = false,
-    
-    -- Визуал
     OuterColor = Color3.fromRGB(0, 255, 50),
     InnerColor = Color3.fromRGB(0, 255, 200),
-    
-    -- Логика
     IsArmed = true,
     LastParry = 0,
     Ball = nil,
@@ -90,15 +80,12 @@ local STATE = {
 -- [ 3. ТЕМЫ ОФОРМЛЕНИЯ ]
 -- ============================================================
 local THEMES = {
-    -- ═══ 6 DARK THEMES ═══
     ["Premium Dark"]   = { BG = Color3.fromRGB(15, 16, 20),  HEADER = Color3.fromRGB(22, 24, 30),  ACCENT = Color3.fromRGB(0, 200, 255), TEXT = Color3.fromRGB(240, 240, 240), OFF = Color3.fromRGB(40, 44, 52) },
     ["Cyber Neon"]     = { BG = Color3.fromRGB(20, 5, 25),   HEADER = Color3.fromRGB(35, 10, 45),  ACCENT = Color3.fromRGB(255, 0, 200), TEXT = Color3.fromRGB(255, 200, 255), OFF = Color3.fromRGB(60, 20, 70) },
     ["Crimson Void"]   = { BG = Color3.fromRGB(25, 5, 5),    HEADER = Color3.fromRGB(45, 10, 10),  ACCENT = Color3.fromRGB(255, 60, 60), TEXT = Color3.fromRGB(255, 200, 200), OFF = Color3.fromRGB(70, 15, 15) },
     ["Dark Metal"]     = { BG = Color3.fromRGB(15, 16, 20),  HEADER = Color3.fromRGB(22, 24, 30),  ACCENT = Color3.fromRGB(180, 180, 190), TEXT = Color3.fromRGB(240, 240, 240), OFF = Color3.fromRGB(40, 44, 52) },
     ["Obsidian Night"] = { BG = Color3.fromRGB(10, 10, 15),  HEADER = Color3.fromRGB(18, 18, 25),  ACCENT = Color3.fromRGB(150, 100, 255), TEXT = Color3.fromRGB(220, 210, 255), OFF = Color3.fromRGB(35, 30, 50) },
     ["Midnight Ocean"] = { BG = Color3.fromRGB(5, 15, 30),   HEADER = Color3.fromRGB(10, 25, 45),  ACCENT = Color3.fromRGB(0, 255, 200), TEXT = Color3.fromRGB(200, 240, 255), OFF = Color3.fromRGB(20, 40, 60) },
-    
-    -- ═══ 6 LIGHT THEMES ═══
     ["Light Emerald"]  = { BG = Color3.fromRGB(240, 245, 240), HEADER = Color3.fromRGB(220, 235, 220), ACCENT = Color3.fromRGB(0, 180, 100), TEXT = Color3.fromRGB(20, 40, 20), OFF = Color3.fromRGB(200, 215, 200) },
     ["Pearl Elegance"] = { BG = Color3.fromRGB(250, 248, 245), HEADER = Color3.fromRGB(240, 235, 230), ACCENT = Color3.fromRGB(200, 150, 50), TEXT = Color3.fromRGB(40, 30, 20), OFF = Color3.fromRGB(220, 215, 210) },
     ["Arctic Frost"]   = { BG = Color3.fromRGB(230, 245, 255), HEADER = Color3.fromRGB(210, 230, 255), ACCENT = Color3.fromRGB(50, 150, 255), TEXT = Color3.fromRGB(20, 40, 60), OFF = Color3.fromRGB(190, 210, 230) },
@@ -182,14 +169,12 @@ local function ShowLoader()
             }):Play()
             task.wait(step.time)
         end
-        
         task.wait(0.3)
         TweenService:Create(Bg, TweenInfo.new(0.5), {BackgroundTransparency = 1}):Play()
         TweenService:Create(Logo, TweenInfo.new(0.5), {TextTransparency = 1}):Play()
         TweenService:Create(BarBg, TweenInfo.new(0.5), {BackgroundTransparency = 1}):Play()
         TweenService:Create(BarFill, TweenInfo.new(0.5), {BackgroundTransparency = 1}):Play()
         TweenService:Create(StatusText, TweenInfo.new(0.5), {TextTransparency = 1}):Play()
-        
         task.wait(0.5)
         LoaderGui:Destroy()
     end)
@@ -246,7 +231,7 @@ InnerSphere.CastShadow = false
 InnerSphere.Material = Enum.Material.Neon
 InnerSphere.Color = STATE.InnerColor
 InnerSphere.Transparency = 0.7
-InnerSphere.Size = Vector3.new(9.2, 9.2, 9.2) -- 40 * 0.23 = 9.2
+InnerSphere.Size = Vector3.new(9.2, 9.2, 9.2)
 InnerSphere.Parent = OuterSphere
 
 -- ============================================================
@@ -303,7 +288,6 @@ ClickSound.Volume = 0.3
 ClickSound.Parent = ScreenGui
 local function PlayClick() pcall(function() ClickSound:Play() end) end
 
--- ─── Кнопка вызова ───────────────────────────────────────
 local ToggleBtn = Instance.new("TextButton")
 ToggleBtn.Size = UDim2.new(0, 45, 0, 45)
 ToggleBtn.Position = UDim2.new(1, -60, 0.5, -22)
@@ -320,7 +304,6 @@ BtnStroke.Color = CurrentTheme.ACCENT
 BtnStroke.Thickness = 1.5
 BtnStroke.Transparency = 0.2
 
--- ─── Главное окно ────────────────────────────────────────
 local Window = Instance.new("Frame")
 Window.Size = UDim2.new(0, 320, 0, 500)
 Window.Position = UDim2.new(0.5, -160, 0.5, -250)
@@ -334,7 +317,6 @@ WinStroke.Color = CurrentTheme.ACCENT
 WinStroke.Thickness = 1.5
 WinStroke.Transparency = 0.4
 
--- ─── Шапка ───────────────────────────────────────────────
 local Header = Instance.new("Frame")
 Header.Size = UDim2.new(1, 0, 0, 60)
 Header.BackgroundColor3 = CurrentTheme.HEADER
@@ -363,7 +345,6 @@ CloseBtn.Font = Enum.Font.GothamBold
 CloseBtn.Parent = Header
 Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(0, 6)
 
--- ─── Вкладки ────────────────────────────────────────────
 local TabContainer = Instance.new("Frame")
 TabContainer.Size = UDim2.new(1, -20, 0, 35)
 TabContainer.Position = UDim2.new(0, 10, 0, 70)
@@ -392,12 +373,12 @@ local function CreateTab(name, icon)
     Page.BackgroundTransparency = 1
     Page.Visible = false
     Page.Parent = Pages
-    
+
     local Layout = Instance.new("UIListLayout")
     Layout.Padding = UDim.new(0, 10)
     Layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
     Layout.Parent = Page
-    
+
     local TabBtn = Instance.new("TextButton")
     TabBtn.Size = UDim2.new(0.33, -4, 1, 0)
     TabBtn.BackgroundColor3 = CurrentTheme.OFF
@@ -408,10 +389,10 @@ local function CreateTab(name, icon)
     TabBtn.TextSize = 11
     TabBtn.Parent = TabContainer
     Instance.new("UICorner", TabBtn).CornerRadius = UDim.new(0, 6)
-    
+
     table.insert(PagesList, Page)
     table.insert(TabsList, {Btn = TabBtn, Page = Page})
-    
+
     TabBtn.MouseButton1Click:Connect(function()
         PlayClick()
         for _, t in ipairs(TabsList) do
@@ -421,7 +402,7 @@ local function CreateTab(name, icon)
         Page.Visible = true
         TweenService:Create(TabBtn, TweenInfo.new(0.2), {BackgroundColor3 = CurrentTheme.ACCENT, TextColor3 = CurrentTheme.BG}):Play()
     end)
-    
+
     return Page
 end
 
@@ -450,7 +431,7 @@ local function CreateToggle(parent, yPos, text, stateKey, callback)
     SwitchBg.Parent = Container
     Instance.new("UICorner", SwitchBg).CornerRadius = UDim.new(1, 0)
     table.insert(UI_Elements, {btn = SwitchBg, type = "switch", state = STATE[stateKey]})
-    
+
     local Knob = Instance.new("Frame")
     Knob.Size = UDim2.new(0, 18, 0, 18)
     Knob.Position = STATE[stateKey] and UDim2.new(1, -20, 0.5, -9) or UDim2.new(0, 2, 0.5, -9)
@@ -558,14 +539,14 @@ for name, data in pairs(THEMES) do
     Btn.Text = ""
     Btn.Parent = ThemeScroll
     Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 4)
-    
+
     local Preview = Instance.new("Frame")
     Preview.Size = UDim2.new(0, 18, 0, 18)
     Preview.Position = UDim2.new(0, 5, 0.5, -9)
     Preview.BackgroundColor3 = data.ACCENT
     Preview.Parent = Btn
     Instance.new("UICorner", Preview).CornerRadius = UDim.new(0, 3)
-    
+
     local Label = Instance.new("TextLabel")
     Label.Size = UDim2.new(1, -30, 1, 0)
     Label.Position = UDim2.new(0, 28, 0, 0)
@@ -576,7 +557,7 @@ for name, data in pairs(THEMES) do
     Label.TextSize = 11
     Label.TextXAlignment = Enum.TextXAlignment.Left
     Label.Parent = Btn
-    
+
     Btn.MouseButton1Click:Connect(function()
         PlayClick()
         CurrentThemeName = name
@@ -664,7 +645,7 @@ _G.BB_RefreshProfiles = function()
     for _, child in ipairs(ProfileListFrame:GetChildren()) do
         if child:IsA("Frame") then child:Destroy() end
     end
-    
+
     local autoName = ""
     pcall(function() if isfile and isfile("BB_AutoLoad.txt") then autoName = readfile("BB_AutoLoad.txt") end end)
 
@@ -677,7 +658,7 @@ _G.BB_RefreshProfiles = function()
             end
         end
     end)
-    
+
     if #files == 0 then
         local empty = Instance.new("TextLabel")
         empty.Size = UDim2.new(1, 0, 0, 25)
@@ -834,12 +815,12 @@ ApplyTheme = function()
     Title.TextColor3 = CurrentTheme.ACCENT
     BtnStroke.Color = CurrentTheme.ACCENT
     ToggleBtn.TextColor3 = CurrentTheme.ACCENT
-    
+
     DebugFrame.BackgroundColor3 = CurrentTheme.BG
     DebugStroke.Color = CurrentTheme.ACCENT
     debugHeader.TextColor3 = CurrentTheme.ACCENT
     accentLine.BackgroundColor3 = CurrentTheme.ACCENT
-    
+
     for _, t in ipairs(TabsList) do
         if t.Page.Visible then
             t.Btn.BackgroundColor3 = CurrentTheme.ACCENT; t.Btn.TextColor3 = CurrentTheme.BG
@@ -847,7 +828,7 @@ ApplyTheme = function()
             t.Btn.BackgroundColor3 = CurrentTheme.OFF; t.Btn.TextColor3 = CurrentTheme.TEXT
         end
     end
-    
+
     for _, el in ipairs(UI_Elements) do
         if el.type == "label" then el.btn.TextColor3 = CurrentTheme.TEXT
         elseif el.type == "button" then el.btn.BackgroundColor3 = CurrentTheme.OFF; el.btn.TextColor3 = CurrentTheme.TEXT
@@ -903,20 +884,18 @@ UserInputService.InputBegan:Connect(function(input, gpe)
 end)
 
 -- ============================================================
--- [ 16. ЛОГИКА ПАРИРОВАНИЯ (HUMAN DELAY 0.10-0.15s) ]
+-- [ 16. ЛОГИКА ПАРИРОВАНИЯ (COOLDOWN 0.21) ]
 -- ============================================================
 local function TriggerParry()
     local now = tick()
-    -- Защита от спама
+    -- Защита от спама: COOLDOWN теперь 0.21
     if now - STATE.LastParry < CONFIG.COOLDOWN then return end
     STATE.LastParry = now
 
     task.spawn(function()
-        -- 1. ИМИТАЦИЯ ЧЕЛОВЕЧЕСКОЙ РЕАКЦИИ (x1.5 быстрее)
         local delay = math.random(CONFIG.HUMAN_DELAY_MIN * 1000, CONFIG.HUMAN_DELAY_MAX * 1000) / 1000
         task.wait(delay)
 
-        -- 2. ВЫПОЛНЕНИЕ ПАРИРОВАНИЯ
         if not STATE.BlockButton or not STATE.BlockButton.Parent then
             STATE.BlockButton = FindBlockButton()
         end
@@ -928,9 +907,9 @@ local function TriggerParry()
                     if c.Fire then c:Fire() end
                 end
             end)
-            if success then 
+            if success then
                 STATE.ParryMethod = "Button"
-                return 
+                return
             end
         end
 
@@ -976,7 +955,6 @@ end
 
 local PulseTime = 0
 
--- Лок камеры (RenderStepped)
 RunService.RenderStepped:Connect(function()
     if STATE.CameraLock and STATE.Ball and STATE.Ball.Parent then
         Camera.CameraType = Enum.CameraType.Scriptable
@@ -984,7 +962,6 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- Главный цикл (Heartbeat)
 RunService.Heartbeat:Connect(function(dt)
     pcall(function()
         STATE.Frames = STATE.Frames + 1
@@ -1037,8 +1014,8 @@ RunService.Heartbeat:Connect(function(dt)
                 local predictedHit = false
                 if speed > 1 then
                     local predictedPos = bp + bv * CONFIG.PREDICT_TIME
-                    if (hrp.Position - predictedPos).Magnitude <= CONFIG.CLOSE_DIST then 
-                        predictedHit = true 
+                    if (hrp.Position - predictedPos).Magnitude <= CONFIG.CLOSE_DIST then
+                        predictedHit = true
                     end
                 end
 
@@ -1063,10 +1040,9 @@ RunService.Heartbeat:Connect(function(dt)
             STATE.PrevBallPos = nil
         end
 
-        -- Визуал сферы (макс. 90)
         if render and STATE.ShowVisuals and OuterSphere and InnerSphere then
             PulseTime = PulseTime + (dt * 2.5)
-            
+
             local targetSize = clamp(math.max(dist * 1.5, CONFIG.SPHERE_MIN), CONFIG.SPHERE_MIN, CONFIG.SPHERE_MAX)
             local currentSize = OuterSphere.Size.X
             local newSize = currentSize + (targetSize - currentSize) * math.exp(-10 * dt)
@@ -1074,7 +1050,7 @@ RunService.Heartbeat:Connect(function(dt)
 
             OuterSphere.Size = Vector3.new(finalSize, finalSize, finalSize)
             OuterSphere.CFrame = CFrame.new(hrp.Position + Vector3.new(0, -0.5, 0))
-            
+
             if STATE.NightModeSphere then
                 OuterSphere.Material = Enum.Material.Neon
                 OuterSphere.Transparency = 0.5
@@ -1089,19 +1065,18 @@ RunService.Heartbeat:Connect(function(dt)
             end
 
             OuterSphere.Color = OuterSphere.Color:Lerp(targetColor, clamp(10 * dt, 0, 1))
-            
+
             if targetColor == Color3.fromRGB(255, 50, 50) then
                 InnerSphere.Color = InnerSphere.Color:Lerp(Color3.fromRGB(255, 50, 50), clamp(10 * dt, 0, 1))
             else
                 local finalInner = STATE.NightModeSphere and Color3.fromRGB(255, 0, 255) or STATE.InnerColor
                 InnerSphere.Color = InnerSphere.Color:Lerp(finalInner, clamp(10 * dt, 0, 1))
             end
-            
+
             InnerSphere.CFrame = OuterSphere.CFrame * CFrame.Angles(PulseTime, PulseTime, 0)
             InnerSphere.Size = Vector3.new(finalSize * CONFIG.CORE_RATIO, finalSize * CONFIG.CORE_RATIO, finalSize * CONFIG.CORE_RATIO)
         end
 
-        -- Обновление панели отладки
         if debugLabels then
             if debugLabels["Status"] then
                 debugLabels["Status"].Text = status
@@ -1116,7 +1091,7 @@ RunService.Heartbeat:Connect(function(dt)
             if debugLabels["Speed"]    then debugLabels["Speed"].Text    = string.format("%.0f", speed) end
             if debugLabels["Time"]     then debugLabels["Time"].Text     = (timeToImpact > 900 and "N/A" or string.format("%.2fs", timeToImpact)) end
             if debugLabels["Distance"] then debugLabels["Distance"].Text = string.format("%.1f", dist) end
-            if debugLabels["Armed"]    then 
+            if debugLabels["Armed"]    then
                 debugLabels["Armed"].Text = tostring(STATE.IsArmed)
                 debugLabels["Armed"].TextColor3 = STATE.IsArmed and Color3.fromRGB(0, 255, 100) or Color3.fromRGB(255, 150, 150)
             end
@@ -1125,7 +1100,6 @@ RunService.Heartbeat:Connect(function(dt)
     end)
 end)
 
--- Сброс при респавне
 LocalPlayer.CharacterAdded:Connect(function()
     STATE.IsArmed = true
     STATE.PrevBallPos = nil
@@ -1136,4 +1110,22 @@ LocalPlayer.CharacterAdded:Connect(function()
     end
 end)
 
-print(">>> [BB] CANDY EDITION v15.0 LOADED! (Human Delay: 0.10-0.15s)")
+print(">>> [BB] CANDY EDITION " .. CANDY_VERSION .. " LOADED! (COOLDOWN: 0.21s)")
+
+end -- CandyMain()
+
+-- ============================================================
+-- [ CANDY WRAPPER — безопасный запуск ]
+-- ============================================================
+local success, err = pcall(CandyMain)
+if not success then
+    warn("╔══════════════════════════════════════════╗")
+    warn("║  [BB CANDY] Execution failed!            ║")
+    warn("║  Error: " .. tostring(err))
+    warn("╚══════════════════════════════════════════╝")
+else
+    print("╔══════════════════════════════════════════╗")
+    print("║  [BB CANDY] Loaded successfully! 🍬       ║")
+    print("║  Version: " .. CANDY_VERSION .. "                     ║")
+    print("╚══════════════════════════════════════════╝")
+end
