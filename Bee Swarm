@@ -1,13 +1,14 @@
 --[[
     ╔═══════════════════════════════════════════════════════════════════════════╗
-    ║   [ BEE SWARM SIMULATOR | ULTIMATE HUB v7.4 ]                             ║
-    ║   • Настоящие тумблеры (iOS Style)                                        ║
-    ║   • Ускоренный спам палкой (0.05 сек)                                     ║
-    ║   • Авто-захват базы и авто-реконнект                                     ║
+    ║   [ BEE SWARM SIMULATOR | ULTIMATE HUB v8.0 ]                             ║
+    ║   • Запись координат полей и баз в Other                                  ║
+    ║   • Улучшенный Auto Pollen (Клик-спам)                                    ║
+    ║   • Улучшенный Auto Token (Прыжки при застревании)                        ║
+    ║   • Tween до поля, пешком на поле                                         ║
     ╚═══════════════════════════════════════════════════════════════════════════╝
 ]]
 
-print(">>> [BSS] ЗАПУСК ULTIMATE HUB v7.4...")
+print(">>> [BSS] ЗАПУСК ULTIMATE HUB v8.0...")
 
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
@@ -31,28 +32,11 @@ end
 -- ============================================================
 -- [ КОНФИГУРАЦИЯ ]
 -- ============================================================
-local ALL_FIELDS = {
-    ["Dandelion"]   = Vector3.new(0, 10, 0),
-    ["Sunflower"]   = Vector3.new(0, 10, 0),
-    ["Mushroom"]    = Vector3.new(0, 10, 0),
-    ["Blue Flower"] = Vector3.new(0, 10, 0),
-    ["Clover"]      = Vector3.new(0, 10, 0),
-    ["Bamboo"]      = Vector3.new(0, 10, 0),
-    ["Pineapple"]   = Vector3.new(0, 10, 0),
-    ["Strawberry"]  = Vector3.new(-190, 15, 145),    
-    ["Cactus"]      = Vector3.new(160, 25, -340),    
-    ["Pumpkin"]     = Vector3.new(0, 10, 0),
-    ["Pine Tree"]   = Vector3.new(290, 30, 240),     
-    ["Rose"]        = Vector3.new(0, 10, 0),
-    ["Spider"]      = Vector3.new(0, 10, 0),
-    ["Coconut"]     = Vector3.new(0, 10, 0),
-    ["Pepper"]      = Vector3.new(0, 10, 0),
-    ["Mountain Top"]= Vector3.new(0, 10, 0)
+local SORTED_FIELDS = {
+    "Dandelion", "Sunflower", "Mushroom", "Blue Flower", "Clover", 
+    "Bamboo", "Pineapple", "Strawberry", "Cactus", "Pumpkin", 
+    "Pine Tree", "Rose", "Spider", "Coconut", "Pepper", "Mountain Top"
 }
-
-local SORTED_FIELDS = {}
-for fieldName, _ in pairs(ALL_FIELDS) do table.insert(SORTED_FIELDS, fieldName) end
-table.sort(SORTED_FIELDS)
 
 local QUESTS = {
     ["Black Bear"] = { Pos = Vector3.new(-30, 10, -20) },
@@ -61,19 +45,22 @@ local QUESTS = {
     ["Dapper Bear"] = { Pos = Vector3.new(150, 10, -50) }
 }
 
-local BASE_LOCATIONS = {
-    Vector3.new(-50, 10, 50), Vector3.new(50, 10, 50),
-    Vector3.new(-50, 10, -50), Vector3.new(50, 10, -50),
-    Vector3.new(0, 10, 100), Vector3.new(0, 10, -100)
-}
-
 local STATE = {
     AutoFarm = false, AutoPollen = false, AutoToken = false, AutoConvert = false, AutoQuest = false, AutoRejoin = false,
     CurrentField = "Strawberry", CurrentQuestNPC = "Black Bear",
     QuestFieldRed = "Strawberry", QuestFieldWhite = "Cactus", QuestFieldBlue = "Pine Tree",
-    WalkSpeed = 16, JumpPower = 50, MyBasePos = nil, DebugText = "Ожидание...",
-    IsConverting = false, IsQuesting = false
+    WalkSpeed = 16, JumpPower = 50, DebugText = "Ожидание...",
+    IsConverting = false, IsQuesting = false,
+    
+    -- НОВОЕ: Кастомные координаты
+    CustomFields = {},
+    CustomBases = {},
+    ActiveBaseIndex = 1,
+    CurrentBasePos = nil
 }
+
+-- Заполняем базовые координаты (заглушки), если их нет
+for i = 1, 6 do STATE.CustomBases[i] = Vector3.new(0, 0, 0) end
 
 local UI_References = { Toggles = {}, Dropdowns = {}, Sliders = {} }
 
@@ -92,12 +79,15 @@ local function SaveSettings()
         AutoConvert = STATE.AutoConvert, AutoQuest = STATE.AutoQuest,
         CurrentField = STATE.CurrentField, CurrentQuestNPC = STATE.CurrentQuestNPC,
         QuestFieldRed = STATE.QuestFieldRed, QuestFieldWhite = STATE.QuestFieldWhite, QuestFieldBlue = STATE.QuestFieldBlue,
-        WalkSpeed = STATE.WalkSpeed, JumpPower = STATE.JumpPower
+        WalkSpeed = STATE.WalkSpeed, JumpPower = STATE.JumpPower,
+        CustomFields = STATE.CustomFields, CustomBases = STATE.CustomBases -- Сохраняем координаты
     }
+    
     local success = pcall(function()
+        -- Просто перезаписываем файл, если он есть
         writefile(PROFILE_FOLDER .. "/" .. pName .. ".json", HttpService:JSONEncode(data))
     end)
-    if success then print(">>> [BSS] Профиль '" .. pName .. "' сохранен!") 
+    if success then print(">>> [BSS] Профиль '" .. pName .. "' сохранен (или перезаписан)!") 
     else print(">>> [BSS] Ошибка сохранения.") end
     
     if _G.BSS_RefreshProfiles then _G.BSS_RefreshProfiles() end
@@ -110,10 +100,19 @@ local function LoadSettings(profileName)
         end
     end)
     if success and data then
-        for k, v in pairs(data) do if STATE[k] ~= nil then STATE[k] = v end end
+        for k, v in pairs(data) do 
+            if STATE[k] ~= nil then 
+                if type(v) == "table" then
+                    STATE[k] = v
+                else
+                    STATE[k] = v 
+                end
+            end 
+        end
         for _, update in ipairs(UI_References.Toggles) do update() end
         for _, update in ipairs(UI_References.Dropdowns) do update() end
         for _, update in ipairs(UI_References.Sliders) do update() end
+        
         local char = LP.Character
         if char and char:FindFirstChildOfClass("Humanoid") then
             char.Humanoid.WalkSpeed = STATE.WalkSpeed
@@ -131,7 +130,6 @@ end
 -- ============================================================
 local function SetupAutoRejoin()
     local SCRIPT_URL = "loadstring(game:HttpGet('https://raw.githubusercontent.com/s9295365949-sketch/test-script/refs/heads/main/Bee%20Swarm'))()"
-    
     local function queueTeleport()
         pcall(function()
             if syn and syn.queue_on_teleport then syn.queue_on_teleport(SCRIPT_URL)
@@ -140,17 +138,13 @@ local function SetupAutoRejoin()
             elseif getgenv().queue_on_teleport then getgenv().queue_on_teleport(SCRIPT_URL) end
         end)
     end
-    
     LP.OnTeleport:Connect(function(State)
         if State == Enum.TeleportState.Started then queueTeleport() end
     end)
-    
     game:GetService("CoreGui").RobloxPromptGui.promptOverlay.ChildAdded:Connect(function(child)
         if child.Name == "ErrorPrompt" and STATE.AutoRejoin then
             task.wait(5)
-            pcall(function()
-                game:GetService("TeleportService"):Teleport(game.PlaceId, LP)
-            end)
+            pcall(function() game:GetService("TeleportService"):Teleport(game.PlaceId, LP) end)
         end
     end)
 end
@@ -177,7 +171,7 @@ MainStroke.Thickness = 2
 local Title = Instance.new("TextLabel")
 Title.Size = UDim2.new(1, 0, 0, 35)
 Title.BackgroundTransparency = 1
-Title.Text = "BSS ULTIMATE HUB v7.4"
+Title.Text = "BSS ULTIMATE HUB v8.0"
 Title.TextColor3 = Color3.fromRGB(255, 180, 0)
 Title.Font = Enum.Font.GothamBold
 Title.TextSize = 16
@@ -253,8 +247,6 @@ end
 -- ============================================================
 -- [ ФУНКЦИИ UI ]
 -- ============================================================
-
--- НОВЫЙ КРАСИВЫЙ ТУМБЛЕР (iOS Style)
 local function CreateToggle(parent, yPos, text, stateKey, callback)
     local Container = Instance.new("Frame")
     Container.Size = UDim2.new(0, 260, 0, 35)
@@ -272,7 +264,6 @@ local function CreateToggle(parent, yPos, text, stateKey, callback)
     Label.TextXAlignment = Enum.TextXAlignment.Left
     Label.Parent = Container
 
-    -- Фон переключателя
     local SwitchBg = Instance.new("Frame")
     SwitchBg.Size = UDim2.new(0, 40, 0, 22)
     SwitchBg.Position = UDim2.new(1, -40, 0.5, -11)
@@ -280,7 +271,6 @@ local function CreateToggle(parent, yPos, text, stateKey, callback)
     SwitchBg.Parent = Container
     Instance.new("UICorner", SwitchBg).CornerRadius = UDim.new(1, 0)
     
-    -- Кружок внутри
     local Knob = Instance.new("Frame")
     Knob.Size = UDim2.new(0, 18, 0, 18)
     Knob.Position = STATE[stateKey] and UDim2.new(1, -20, 0.5, -9) or UDim2.new(0, 2, 0.5, -9)
@@ -288,7 +278,6 @@ local function CreateToggle(parent, yPos, text, stateKey, callback)
     Knob.Parent = SwitchBg
     Instance.new("UICorner", Knob).CornerRadius = UDim.new(1, 0)
 
-    -- Невидимая кнопка для кликов
     local Hitbox = Instance.new("TextButton")
     Hitbox.Size = UDim2.new(1, 0, 1, 0)
     Hitbox.BackgroundTransparency = 1
@@ -312,7 +301,6 @@ local function CreateToggle(parent, yPos, text, stateKey, callback)
     table.insert(UI_References.Toggles, updateUI)
 end
 
--- ВЫПАДАЮЩИЙ СПИСОК
 local function CreateFieldDropdown(parent, yPos, titleText, stateKey)
     local Container = Instance.new("Frame")
     Container.Size = UDim2.new(0, 260, 0, 35)
@@ -487,7 +475,6 @@ end
 -- [ ВКЛАДКИ ]
 -- ============================================================
 
--- MAIN
 local MainPage = CreateTab("Main")
 CreateFieldDropdown(MainPage, 0, "Поле для фарма", "CurrentField")
 CreateToggle(MainPage, 45, "Auto Farm (Лететь на поле)", "AutoFarm")
@@ -495,7 +482,6 @@ CreateToggle(MainPage, 85, "Auto Collect Pollen (Спам)", "AutoPollen")
 CreateToggle(MainPage, 125, "Auto Collect Token", "AutoToken")
 CreateToggle(MainPage, 165, "Auto Convert", "AutoConvert")
 
--- QUESTS
 local QuestPage = CreateTab("Quests")
 local NPCLabel = Instance.new("TextLabel")
 NPCLabel.Size = UDim2.new(0, 260, 0, 20)
@@ -553,7 +539,6 @@ CreateFieldDropdown(QuestPage, 150, "Квест (White)", "QuestFieldWhite")
 CreateFieldDropdown(QuestPage, 195, "Квест (Blue)", "QuestFieldBlue")
 CreateToggle(QuestPage, 240, "Auto Quest", "AutoQuest")
 
--- PLAYER
 local PlayerPage = CreateTab("Player")
 CreateSlider(PlayerPage, 0, "WalkSpeed (Скорость)", 0, 120, "WalkSpeed", function(val)
     local char = LP.Character
@@ -566,12 +551,176 @@ CreateSlider(PlayerPage, 60, "JumpPower (Прыжок)", 0, 200, "JumpPower", fu
     end
 end)
 
--- OTHER
+-- ============================================================
+-- [ ВКЛАДКА OTHER (КАСТОМНЫЕ КООРДИНАТЫ) ]
+-- ============================================================
 local OtherPage = CreateTab("Other")
 
+-- Поле для записи координат
+local FieldRecorderFrame = Instance.new("Frame")
+FieldRecorderFrame.Size = UDim2.new(0, 260, 0, 35)
+FieldRecorderFrame.Position = UDim2.new(0, 0, 0, 0)
+FieldRecorderFrame.BackgroundTransparency = 1
+FieldRecorderFrame.Parent = OtherPage
+
+local RecordFieldBtn = Instance.new("TextButton")
+RecordFieldBtn.Size = UDim2.new(0, 80, 1, 0)
+RecordFieldBtn.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
+RecordFieldBtn.Text = "REC Field"
+RecordFieldBtn.TextColor3 = Color3.new(1,1,1)
+RecordFieldBtn.Font = Enum.Font.GothamBold
+RecordFieldBtn.TextSize = 11
+RecordFieldBtn.Parent = FieldRecorderFrame
+Instance.new("UICorner", RecordFieldBtn).CornerRadius = UDim.new(0, 6)
+
+local FieldListBtn = Instance.new("TextButton")
+FieldListBtn.Size = UDim2.new(0, 170, 1, 0)
+FieldListBtn.Position = UDim2.new(0, 90, 0, 0)
+FieldListBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
+FieldListBtn.Text = "Поле: " .. STATE.CurrentField
+FieldListBtn.TextColor3 = Color3.new(1,1,1)
+FieldListBtn.Font = Enum.Font.GothamBold
+FieldListBtn.TextSize = 11
+FieldListBtn.Parent = FieldRecorderFrame
+Instance.new("UICorner", FieldListBtn).CornerRadius = UDim.new(0, 6)
+
+-- Список полей (выпадающий)
+local FieldListFrame = Instance.new("ScrollingFrame")
+FieldListFrame.Size = UDim2.new(0, 170, 0, 150)
+FieldListFrame.Position = UDim2.new(0, 90, 0, 40)
+FieldListFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+FieldListFrame.BorderSizePixel = 0
+FieldListFrame.ScrollBarThickness = 2
+FieldListFrame.Visible = false
+FieldListFrame.ZIndex = 10
+FieldListFrame.CanvasSize = UDim2.new(0, 0, 0, #SORTED_FIELDS * 27)
+FieldListFrame.Parent = FieldRecorderFrame
+Instance.new("UICorner", FieldListFrame).CornerRadius = UDim.new(0, 6)
+
+local FLayout = Instance.new("UIListLayout")
+FLayout.Padding = UDim.new(0, 2)
+FLayout.Parent = FieldListFrame
+
+for _, fName in ipairs(SORTED_FIELDS) do
+    local itm = Instance.new("TextButton")
+    itm.Size = UDim2.new(0.95, 0, 0, 25)
+    itm.BackgroundColor3 = (STATE.CurrentField == fName) and Color3.fromRGB(255, 180, 0) or Color3.fromRGB(40, 40, 45)
+    itm.Text = fName
+    itm.TextColor3 = (STATE.CurrentField == fName) and Color3.new(0,0,0) or Color3.new(1,1,1)
+    itm.Font = Enum.Font.Gotham
+    itm.TextSize = 11
+    itm.Parent = FieldListFrame
+    itm.Active = true
+    itm.ZIndex = 11
+    Instance.new("UICorner", itm).CornerRadius = UDim.new(0, 4)
+
+    itm.MouseButton1Click:Connect(function()
+        STATE.CurrentField = fName
+        FieldListBtn.Text = "Поле: " .. fName
+        FieldListFrame.Visible = false
+    end)
+end
+
+FieldListBtn.MouseButton1Click:Connect(function()
+    FieldListFrame.Visible = not FieldListFrame.Visible
+end)
+
+RecordFieldBtn.MouseButton1Click:Connect(function()
+    local char = LP.Character
+    if char and char:FindFirstChild("HumanoidRootPart") then
+        STATE.CustomFields[STATE.CurrentField] = char.HumanoidRootPart.Position
+        RecordFieldBtn.BackgroundColor3 = Color3.fromRGB(60, 180, 100)
+        RecordFieldBtn.Text = "Saved!"
+        task.wait(1)
+        RecordFieldBtn.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
+        RecordFieldBtn.Text = "REC Field"
+    end
+end)
+
+-- Запись баз
+local BaseRecorderFrame = Instance.new("Frame")
+BaseRecorderFrame.Size = UDim2.new(0, 260, 0, 35)
+BaseRecorderFrame.Position = UDim2.new(0, 0, 0, 45)
+BaseRecorderFrame.BackgroundTransparency = 1
+BaseRecorderFrame.Parent = OtherPage
+
+local RecordBaseBtn = Instance.new("TextButton")
+RecordBaseBtn.Size = UDim2.new(0, 80, 1, 0)
+RecordBaseBtn.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
+RecordBaseBtn.Text = "REC Base"
+RecordBaseBtn.TextColor3 = Color3.new(1,1,1)
+RecordBaseBtn.Font = Enum.Font.GothamBold
+RecordBaseBtn.TextSize = 11
+RecordBaseBtn.Parent = BaseRecorderFrame
+Instance.new("UICorner", RecordBaseBtn).CornerRadius = UDim.new(0, 6)
+
+local BaseListBtn = Instance.new("TextButton")
+BaseListBtn.Size = UDim2.new(0, 170, 1, 0)
+BaseListBtn.Position = UDim2.new(0, 90, 0, 0)
+BaseListBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
+BaseListBtn.Text = "База: #" .. STATE.ActiveBaseIndex
+BaseListBtn.TextColor3 = Color3.new(1,1,1)
+BaseListBtn.Font = Enum.Font.GothamBold
+BaseListBtn.TextSize = 11
+BaseListBtn.Parent = BaseRecorderFrame
+Instance.new("UICorner", BaseListBtn).CornerRadius = UDim.new(0, 6)
+
+local BaseListFrame = Instance.new("ScrollingFrame")
+BaseListFrame.Size = UDim2.new(0, 170, 0, 150)
+BaseListFrame.Position = UDim2.new(0, 90, 0, 40)
+BaseListFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+BaseListFrame.BorderSizePixel = 0
+BaseListFrame.ScrollBarThickness = 2
+BaseListFrame.Visible = false
+BaseListFrame.ZIndex = 10
+BaseListFrame.CanvasSize = UDim2.new(0, 0, 0, 6 * 27)
+BaseListFrame.Parent = BaseRecorderFrame
+Instance.new("UICorner", BaseListFrame).CornerRadius = UDim.new(0, 6)
+
+local BLayout = Instance.new("UIListLayout")
+BLayout.Padding = UDim.new(0, 2)
+BLayout.Parent = BaseListFrame
+
+for i = 1, 6 do
+    local itm = Instance.new("TextButton")
+    itm.Size = UDim2.new(0.95, 0, 0, 25)
+    itm.BackgroundColor3 = (STATE.ActiveBaseIndex == i) and Color3.fromRGB(255, 180, 0) or Color3.fromRGB(40, 40, 45)
+    itm.Text = "База #" .. i
+    itm.TextColor3 = (STATE.ActiveBaseIndex == i) and Color3.new(0,0,0) or Color3.new(1,1,1)
+    itm.Font = Enum.Font.Gotham
+    itm.TextSize = 11
+    itm.Parent = BaseListFrame
+    itm.Active = true
+    itm.ZIndex = 11
+    Instance.new("UICorner", itm).CornerRadius = UDim.new(0, 4)
+
+    itm.MouseButton1Click:Connect(function()
+        STATE.ActiveBaseIndex = i
+        BaseListBtn.Text = "База: #" .. i
+        BaseListFrame.Visible = false
+    end)
+end
+
+BaseListBtn.MouseButton1Click:Connect(function()
+    BaseListFrame.Visible = not BaseListFrame.Visible
+end)
+
+RecordBaseBtn.MouseButton1Click:Connect(function()
+    local char = LP.Character
+    if char and char:FindFirstChild("HumanoidRootPart") then
+        STATE.CustomBases[STATE.ActiveBaseIndex] = char.HumanoidRootPart.Position
+        RecordBaseBtn.BackgroundColor3 = Color3.fromRGB(60, 180, 100)
+        RecordBaseBtn.Text = "Saved!"
+        task.wait(1)
+        RecordBaseBtn.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
+        RecordBaseBtn.Text = "REC Base"
+    end
+end)
+
+-- Профили (сдвинуты вниз)
 local ProfileNameBox = Instance.new("TextBox")
 ProfileNameBox.Size = UDim2.new(0, 260, 0, 35)
-ProfileNameBox.Position = UDim2.new(0, 0, 0, 0)
+ProfileNameBox.Position = UDim2.new(0, 0, 0, 90)
 ProfileNameBox.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
 ProfileNameBox.PlaceholderText = "Имя профиля..."
 ProfileNameBox.Text = ""
@@ -582,11 +731,11 @@ ProfileNameBox.Parent = OtherPage
 Instance.new("UICorner", ProfileNameBox).CornerRadius = UDim.new(0, 6)
 _G.BSS_ProfileNameBox = ProfileNameBox
 
-CreateButton(OtherPage, 40, "Save Profile", function() SaveSettings() end, Color3.fromRGB(60, 180, 100))
+CreateButton(OtherPage, 130, "Save / Overwrite Profile", function() SaveSettings() end, Color3.fromRGB(60, 180, 100))
 
 local ProfileList = Instance.new("ScrollingFrame")
-ProfileList.Size = UDim2.new(0, 260, 0, 120)
-ProfileList.Position = UDim2.new(0, 0, 0, 80)
+ProfileList.Size = UDim2.new(0, 260, 0, 100)
+ProfileList.Position = UDim2.new(0, 0, 0, 170)
 ProfileList.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
 ProfileList.BorderSizePixel = 0
 ProfileList.ScrollBarThickness = 2
@@ -685,7 +834,7 @@ _G.BSS_RefreshProfiles = function()
     end
 end
 
-CreateToggle(OtherPage, 205, "Auto Rejoin", "AutoRejoin", function(enabled)
+CreateToggle(OtherPage, 280, "Auto Rejoin", "AutoRejoin", function(enabled)
     if enabled then SetupAutoRejoin() end
 end)
 
@@ -755,55 +904,11 @@ local function GetBackpackPercentage()
     return percent
 end
 
-local function FindMyBase()
-    local hivesFolder = Workspace:FindFirstChild("Hives")
-    if not hivesFolder then return nil end
-    for _, hive in ipairs(hivesFolder:GetChildren()) do
-        local owner = hive:GetAttribute("Owner")
-        if owner == LP.Name or owner == LP.UserId or tostring(owner) == LP.Name then
-            local basePart = hive:FindFirstChild("ClaimPart") or hive:FindFirstChildWhichIsA("BasePart")
-            if basePart then return basePart.Position end
-        end
-    end
-    return nil
-end
-
-local function ClaimNewBase()
-    STATE.DebugText = "Ищем свободную базу..."
-    local char = LP.Character
-    if not char then return false end
-    for i, pos in ipairs(BASE_LOCATIONS) do
-        STATE.DebugText = "Проверяем базу #" .. i
-        TweenToPosition(pos, 1)
-        task.wait(0.5)
-        for _, obj in ipairs(Workspace:GetDescendants()) do
-            if obj:IsA("ProximityPrompt") and (obj.Parent.Position - char.HumanoidRootPart.Position).Magnitude < 25 then
-                STATE.DebugText = "Занимаем базу!"
-                if fireproximityprompt then fireproximityprompt(obj) end
-                task.wait(1.5)
-                local myBase = FindMyBase()
-                if myBase then
-                    STATE.MyBasePos = myBase
-                    STATE.DebugText = "База занята!"
-                    return true
-                end
-            end
-        end
-    end
-    return false
-end
-
-CreateButton(MainPage, 205, "Find / Claim Base", function()
-    local base = FindMyBase()
-    if base then STATE.MyBasePos = base; STATE.DebugText = "База найдена."
-    else ClaimNewBase() end
-end, Color3.fromRGB(100, 50, 200))
-
 local function GetNearestItem(keywords)
     local char = LP.Character
     if not char or not char:FindFirstChild("HumanoidRootPart") then return nil end
     local hrp = char.HumanoidRootPart
-    local nearest, shortestDist = nil, 100
+    local nearest, shortestDist = nil, 120 -- Увеличили радиус
     local searchFolders = {Workspace}
     if Workspace:FindFirstChild("Tokens") then table.insert(searchFolders, Workspace.Tokens) end
     for _, folder in ipairs(searchFolders) do
@@ -823,29 +928,47 @@ local function GetNearestItem(keywords)
     return nearest, shortestDist
 end
 
--- AUTO FARM (Лететь на поле)
+-- AUTO FARM (Tween до поля, потом пешком)
 task.spawn(function()
-    local lastField = ""
-    while task.wait(1) do
+    local walking = false
+    local walkTarget = nil
+    
+    while task.wait(0.5) do
         if STATE.AutoFarm then
-            local targetPos = ALL_FIELDS[STATE.CurrentField]
+            local targetPos = STATE.CustomFields[STATE.CurrentField] or Vector3.new(0, 10, 0)
             local char = LP.Character
-            if targetPos and char and char:FindFirstChild("HumanoidRootPart") then
-                local dist = (char.HumanoidRootPart.Position - targetPos).Magnitude
-                if dist > 30 or lastField ~= STATE.CurrentField then
+            
+            if char and char:FindFirstChild("HumanoidRootPart") and char:FindFirstChild("Humanoid") then
+                local hrp = char.HumanoidRootPart
+                local humanoid = char.Humanoid
+                local dist = (hrp.Position - targetPos).Magnitude
+                
+                if dist > 30 then
                     STATE.DebugText = "Летим на поле: " .. STATE.CurrentField
                     TweenToPosition(targetPos, 1.5)
-                    lastField = STATE.CurrentField
-                    STATE.DebugText = "На поле " .. STATE.CurrentField .. ". Ждем..."
+                    walkTarget = nil
+                else
+                    STATE.DebugText = "На поле " .. STATE.CurrentField .. " (Пешком)"
+                    -- На поле: ходим пешком
+                    if not walkTarget or (hrp.Position - walkTarget).Magnitude < 5 then
+                        -- Выбираем случайную точку в радиусе 15 стабсов от центра поля
+                        local angle = math.random() * math.pi * 2
+                        local radius = math.random() * 15
+                        walkTarget = targetPos + Vector3.new(math.cos(angle) * radius, 0, math.sin(angle) * radius)
+                    end
+                    
+                    if walkTarget then
+                        humanoid:MoveTo(walkTarget)
+                    end
                 end
             end
         else
-            lastField = ""
+            walkTarget = nil
         end
     end
 end)
 
--- AUTO TOKEN
+-- AUTO TOKEN (Улучшенный: с прыжками)
 task.spawn(function()
     while task.wait(0.3) do
         if STATE.AutoToken and not STATE.IsConverting and not STATE.IsQuesting then
@@ -855,25 +978,31 @@ task.spawn(function()
                 if token then
                     STATE.DebugText = string.format("Бегу к токену (%.1f ст.)", dist)
                     char.Humanoid:MoveTo(token.Position)
+                    -- Если застряли, прыгаем
+                    if char.Humanoid.MoveDirection.Magnitude < 0.1 then
+                        char.Humanoid.Jump = true
+                    end
                 end
             end
         end
     end
 end)
 
--- AUTO POLLEN (Спам палкой)
+-- AUTO POLLEN (Спам кликами)
 task.spawn(function()
-    while task.wait(0.05) do -- Очень быстро! 20 раз в секунду
+    while task.wait(0.05) do 
         if STATE.AutoPollen and not STATE.IsConverting and not STATE.IsQuesting then
             local char = LP.Character
             if char then
                 local tool = char:FindFirstChildOfClass("Tool")
                 if tool then
+                    -- Пытаемся активировать инструмент
                     pcall(function() tool:Activate() end)
-                    pcall(function() if mouse1click then mouse1click() end end)
+                    -- Имитируем клик по центру экрана
                     pcall(function()
                         local vp = Workspace.CurrentCamera.ViewportSize
                         VirtualInputManager:SendMouseButtonEvent(vp.X/2, vp.Y/2, 0, true, game, 0)
+                        task.wait(0.01)
                         VirtualInputManager:SendMouseButtonEvent(vp.X/2, vp.Y/2, 0, false, game, 0)
                     end)
                 end
@@ -882,29 +1011,37 @@ task.spawn(function()
     end
 end)
 
--- AUTO CONVERT
+-- AUTO CONVERT (Использует записанные координаты базы)
 task.spawn(function()
     while task.wait(2) do
         if STATE.AutoConvert and not STATE.IsConverting and not STATE.IsQuesting then
             local percent = GetBackpackPercentage()
-            if percent >= 90 and STATE.MyBasePos then
-                STATE.IsConverting = true
-                STATE.DebugText = "Рюкзак полон! На базу..."
-                TweenToPosition(STATE.MyBasePos, 2)
-                task.wait(0.5)
-                for i = 1, 3 do
-                    pcall(function()
-                        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
-                        task.wait(0.1)
-                        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
-                    end)
+            if percent >= 90 then
+                local basePos = STATE.CustomBases[STATE.ActiveBaseIndex]
+                if basePos and basePos ~= Vector3.new(0,0,0) then
+                    STATE.IsConverting = true
+                    STATE.DebugText = "Рюкзак полон! На базу #" .. STATE.ActiveBaseIndex
+                    TweenToPosition(basePos, 2)
                     task.wait(0.5)
+                    
+                    -- Разгрузка
+                    for i = 1, 3 do
+                        pcall(function()
+                            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+                            task.wait(0.1)
+                            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+                        end)
+                        task.wait(0.5)
+                    end
+                    
+                    task.wait(1.5)
+                    STATE.DebugText = "Назад на поле..."
+                    local returnPos = STATE.CustomFields[STATE.CurrentField]
+                    if returnPos then TweenToPosition(returnPos, 2) end
+                    STATE.IsConverting = false
+                else
+                    STATE.DebugText = "Ошибка: База не записана (Other -> REC Base)"
                 end
-                task.wait(1.5)
-                STATE.DebugText = "Назад на поле..."
-                local returnPos = ALL_FIELDS[STATE.CurrentField]
-                if returnPos then TweenToPosition(returnPos, 2) end
-                STATE.IsConverting = false
             end
         end
     end
@@ -932,7 +1069,7 @@ task.spawn(function()
                     local targetFieldName = STATE.CurrentQuestNPC == "Black Bear" and STATE.QuestFieldRed 
                                        or STATE.CurrentQuestNPC == "Brown Bear" and STATE.QuestFieldWhite
                                        or STATE.QuestFieldBlue
-                    local fieldPos = ALL_FIELDS[targetFieldName]
+                    local fieldPos = STATE.CustomFields[targetFieldName]
                     if fieldPos then
                         TweenToPosition(fieldPos, 1.5)
                         task.wait(2)
@@ -946,7 +1083,7 @@ task.spawn(function()
     end
 end)
 
--- AUTO START
+-- АВТО-ЗАГРУЗКА
 task.spawn(function()
     task.wait(3)
     pcall(function()
@@ -956,13 +1093,6 @@ task.spawn(function()
             print(">>> [BSS] Авто-загрузка профиля: " .. autoName)
         end
     end)
-
-    local base = FindMyBase()
-    if base then 
-        STATE.MyBasePos = base; STATE.DebugText = "База найдена."
-    else 
-        ClaimNewBase() 
-    end
 end)
 
 Tabs[1].Page.Visible = true
@@ -983,5 +1113,4 @@ task.spawn(function()
     end
 end)
 
-print(">>> [BSS] Скрипт v7.4 загружен. Тумблеры и спам палкой активны.")
-
+print(">>> [BSS] Скрипт v8.0 загружен. Запись координат и Tween-пешком готовы.")
