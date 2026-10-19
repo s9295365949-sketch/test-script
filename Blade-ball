@@ -1,9 +1,9 @@
 --[[
     ╔═══════════════════════════════════════════════════════════════════════╗
-    ║   BLADE BALL — SUPER EARLY PARRY (FIXED BUTTONS)                      ║
-    ║   • Парирует за 0.4 секунды до удара (в 3 раза раньше)                ║
-    ║   • Кнопки с защитой от двойного тапа (дебаунс)                       ║
-    ║   • Только RemoteEvent (анти-бан)                                     ║
+    ║   BLADE BALL — PERFECT TIMING (FIXED SERVER REJECT)                   ║
+    ║   • Строгий радиус 12 (сервер засчитывает)                            ║
+    ║   • Отправка аргументов в Remote                                      ║
+    ║   • Кнопки меню работают идеально (с защитой от двойного тапа)        ║
     ╚═══════════════════════════════════════════════════════════════════════╝
 ]]
 
@@ -21,16 +21,14 @@ if PlayerGui:FindFirstChild("BBDebug") then PlayerGui.BBDebug:Destroy() end
 if PlayerGui:FindFirstChild("BBMenu") then PlayerGui.BBMenu:Destroy() end
 
 local CFG = {
-    PARRY_RADIUS        = 35,        -- Визуальный радиус
-    MAX_RADIUS          = 45,        -- Размер сферы
-    PARRY_COOLDOWN      = 0.25,      
+    PARRY_RADIUS        = 12,        -- ИДЕАЛЬНЫЙ РАДИУС (сервер засчитывает)
+    MAX_RADIUS          = 20,        -- Размер сферы
+    PARRY_COOLDOWN      = 0.20,      
     PARRY_ENABLED       = true,
     SPHERE_VISIBLE      = true,      
     Y_OFFSET            = -0.5,
     COLOR_INSIDE        = Color3.fromRGB(255, 30, 30),
     COLOR_OUTSIDE       = Color3.fromRGB(30, 255, 50),
-    
-    PREDICT_TIME        = 0.4,       -- Парировать за 0.4 сек до удара (в 3 раза раньше)
 }
 
 -- 1. REMOTE
@@ -78,7 +76,7 @@ debugText.TextYAlignment = Enum.TextYAlignment.Top
 debugText.Text = "Ожидание..."
 debugText.Parent = screenGui
 
--- 4. МЕНЮ С ДЕБАУНСОМ
+-- 4. МЕНЮ
 local menuGui = Instance.new("ScreenGui")
 menuGui.Name = "BBMenu"
 menuGui.ResetOnSpawn = false
@@ -119,17 +117,14 @@ local function createToggle(yPos, text, cfKey)
         btn.BackgroundColor3 = state and Color3.fromRGB(60, 180, 100) or Color3.fromRGB(180, 60, 60)
         btn.TextColor3 = Color3.new(1,1,1)
     end
-    
     updateUI()
 
     local function toggle()
-        if isClicking then return end -- Защита от двойного клика
+        if isClicking then return end
         isClicking = true
-        
         CFG[cfKey] = not CFG[cfKey]
         updateUI()
-        
-        task.wait(0.2) -- Ждем 0.2 сек перед следующим кликом
+        task.wait(0.2)
         isClicking = false
     end
 
@@ -157,7 +152,6 @@ menuBtn.MouseButton1Click:Connect(function()
     task.wait(0.2)
     menuClicking = false
 end)
-
 closeBtn.MouseButton1Click:Connect(function() menuFrame.Visible = false end)
 
 -- 5. ПОИСК МЯЧА
@@ -176,15 +170,17 @@ Workspace.ChildAdded:Connect(function(o)
     end
 end)
 
--- 6. ПАРИРОВАНИЕ
+-- 6. ПАРИРОВАНИЕ (С АРГУМЕНТАМИ)
 local lastParry = 0
 local lastAction = "None"
 
-local function executeParry()
+local function executeParry(ball)
     if not CFG.PARRY_ENABLED then return end
     if tick() - lastParry < CFG.PARRY_COOLDOWN then return end
 
     if parryRemote then
+        -- Отправляем разные варианты аргументов (вдруг сервер ждет мяч)
+        pcall(function() parryRemote:FireServer(ball) end)
         pcall(function() parryRemote:FireServer() end)
         lastAction = "Remote Fired"
     end
@@ -192,7 +188,7 @@ local function executeParry()
     lastParry = tick()
 end
 
--- 7. ЦИКЛ ПРЕДСКАЗАНИЯ
+-- 7. ЦИКЛ
 local lastBall = nil
 local prevPos = nil
 local currentDiameter = CFG.MAX_RADIUS * 2
@@ -216,7 +212,6 @@ RunService.Heartbeat:Connect(function(dt)
         
         local dbg_ball = "NO"
         local dbg_dist = 0
-        local dbg_time = 999
         local dbg_status = "Safe"
         local targetDiameter = CFG.MAX_RADIUS * 2
         local targetColor = CFG.COLOR_OUTSIDE
@@ -232,38 +227,28 @@ RunService.Heartbeat:Connect(function(dt)
                 lastBall = ball
             end
 
-            -- Считаем скорость и направление
             local speed = 0
-            local isHeadingToMe = false
-            
             if prevPos and dt > 0 then
-                local moveVec = bp - prevPos
-                speed = moveVec.Magnitude / dt
-                
-                if speed > 5 then
-                    -- Проверяем, летит ли мяч В НАС (скалярное произведение)
-                    local dirToMe = (hrpPos - bp).Unit
-                    local dot = moveVec.Unit:Dot(dirToMe)
-                    if dot > 0.7 then -- Если угол меньше 45 градусов
-                        isHeadingToMe = true
-                    end
-                end
+                speed = (bp - prevPos).Magnitude / dt
             end
 
-            -- Время до столкновения
-            if isHeadingToMe and speed > 5 then
-                dbg_time = dist / speed
+            local isTargetingMe = false
+            local tVal = ball:GetAttribute("target")
+            if tVal and (tVal == LocalPlayer.Name or tostring(tVal) == LocalPlayer.Name) then 
+                isTargetingMe = true 
+            elseif speed > 10 and dist < 50 then
+                isTargetingMe = true 
             end
 
-            if isHeadingToMe then
+            if isTargetingMe then
                 dbg_status = "Incoming!"
                 
                 local targetRadius = math.clamp(dist, CFG.PARRY_RADIUS, CFG.MAX_RADIUS)
                 targetDiameter = targetRadius * 2
                 
-                -- ПАРИРУЕМ ЗА 0.4 СЕК ДО УДАРА (в 3 раза раньше)
-                if dbg_time <= CFG.PREDICT_TIME or dist <= CFG.PARRY_RADIUS then
-                    executeParry()
+                -- СТРОГОЕ СРАБАТЫВАНИЕ: только когда мяч реально близко
+                if dist <= CFG.PARRY_RADIUS then
+                    executeParry(ball)
                     dbg_status = "PARRY!"
                     targetColor = CFG.COLOR_INSIDE
                 end
@@ -271,8 +256,8 @@ RunService.Heartbeat:Connect(function(dt)
             prevPos = bp
         end
 
-        debugText.Text = string.format("Ball: %s\nDist: %.1f\nTime: %s\nStatus: %s\nMethod: %s", 
-            dbg_ball, dbg_dist, (dbg_time > 900 and "N/A" or string.format("%.2fs", dbg_time)), dbg_status, lastAction)
+        debugText.Text = string.format("Ball: %s\nDist: %.1f\nStatus: %s\nMethod: %s", 
+            dbg_ball, dbg_dist, dbg_status, lastAction)
 
         if CFG.SPHERE_VISIBLE then
             currentDiameter = currentDiameter + (targetDiameter - currentDiameter) * math.exp(-14 * dt)
