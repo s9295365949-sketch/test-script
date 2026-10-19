@@ -1,56 +1,71 @@
 --[[
     ╔═══════════════════════════════════════════════════════════════════════╗
-    ║   BLADE BALL — STEALTH PART SPHERE                                    ║
-    ║   • Сфера в Workspace (замаскирована под игровой эффект)              ║
-    ║   • Парирование ТОЛЬКО через RemoteEvent (без F)                      ║
-    ║   • Меню справа снизу, отладчик слева                                 ║
+    ║   BLADE BALL — PING COMPENSATION (ANTI-LATE)                          ║
+    ║   • Предсказывает удар с учетом твоего пинга (88 мс)                  ║
+    ║   • Увеличенный радиус для запаса времени                             ║
+    ║   • Сфера в Workspace                                                 ║
     ╚═══════════════════════════════════════════════════════════════════════╝
 ]]
 
 print("⏳ [BB] Запуск...")
 
 local CFG = {
-    PARRY_RADIUS        = 15,        -- Радиус срабатывания
-    MAX_RADIUS          = 25,        -- Размер сферы
+    PARRY_RADIUS        = 20,        -- Увеличено (запас времени)
+    MAX_RADIUS          = 30,        -- Увеличено
     PARRY_COOLDOWN      = 0.20,      
     PARRY_ENABLED       = true,
     SPHERE_VISIBLE      = true,
     Y_OFFSET            = -0.5,
     COLOR_INSIDE        = Color3.fromRGB(255, 30, 30),
     COLOR_OUTSIDE       = Color3.fromRGB(30, 255, 50),
+    
+    PING_SAFETY         = 0.06,      -- Дополнительный запас (60 мс)
 }
 
 local Players           = game:GetService("Players")
 local RunService        = game:GetService("RunService")
 local Workspace         = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local Stats             = game:GetService("Stats")
 
 local LocalPlayer = Players.LocalPlayer
 local Character   = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 local HRP         = Character:WaitForChild("HumanoidRootPart", 15)
 
--- 1. ПОИСК REMOTE
+-- 1. ПИНГ (С запасом)
+local pingCache = 0.12 
+task.spawn(function()
+    while task.wait(1) do
+        local ok, p = pcall(function() 
+            return Stats.Network.ServerStatsItem["Data Ping"]:GetValue() / 1000 
+        end)
+        if ok and p and p > 0 and p < 1 then 
+            pingCache = p 
+        end
+    end
+end)
+
+-- 2. REMOTE
 local parryRemote = nil
+local remoteName = "None"
 task.spawn(function()
     for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
         if obj:IsA("RemoteEvent") then
             local n = obj.Name:lower()
             if n:find("parry") or n:find("block") or n:find("deflect") or n:find("swing") then
                 parryRemote = obj
-                print("✅ [BB] Найден Remote: " .. obj.Name)
+                remoteName = obj.Name
+                print("✅ [BB] Найден Remote: " .. remoteName)
                 break
             end
         end
     end
 end)
 
--- 2. СФЕРА (В WORKSPACE, ЗАМАСКИРОВАНА)
-local effectsFolder = Instance.new("Folder")
-effectsFolder.Name = "Effects"
-effectsFolder.Parent = Workspace
-
+-- 3. СФЕРА
 local sphere = Instance.new("Part")
-sphere.Name = "Part" -- Безобидное имя
+sphere.Name = "AuraVisual"
 sphere.Shape = Enum.PartType.Ball
 sphere.Anchored = true
 sphere.CanCollide = false
@@ -62,9 +77,9 @@ sphere.Material = Enum.Material.ForceField
 sphere.Color = CFG.COLOR_OUTSIDE
 sphere.Transparency = 1
 sphere.Size = Vector3.new(CFG.MAX_RADIUS * 2, CFG.MAX_RADIUS * 2, CFG.MAX_RADIUS * 2)
-sphere.Parent = effectsFolder -- Спрятана в папку
+sphere.Parent = Workspace
 
--- 3. ПОИСК МЯЧА
+-- 4. МЯЧ
 local cachedBall = nil
 local function findBall()
     local bf = Workspace:FindFirstChild("Balls")
@@ -82,27 +97,37 @@ Workspace.ChildAdded:Connect(function(o)
 end)
 Workspace.ChildRemoved:Connect(function(o) if o == cachedBall then cachedBall = nil end end)
 
--- 4. ПАРИРОВАНИЕ (ТОЛЬКО REMOTE)
+-- 5. ПАРИРОВАНИЕ
 local lastParry = 0
 local lastAction = "None"
 
 local function executeParry()
-    if not CFG.PARRY_ENABLED or not parryRemote then return end
+    if not CFG.PARRY_ENABLED then return end
     if tick() - lastParry < CFG.PARRY_COOLDOWN then return end
 
-    pcall(function() parryRemote:FireServer() end)
-    lastAction = "Remote Fired"
+    if parryRemote then
+        pcall(function() parryRemote:FireServer() end)
+        pcall(function() parryRemote:FireServer(true) end)
+    end
+
+    pcall(function()
+        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.F, false, game)
+        task.wait(0.02)
+        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.F, false, game)
+    end)
+
+    lastAction = "Fired"
     lastParry = tick()
 end
 
--- 5. ОТЛАДЧИК
+-- 6. ОТЛАДЧИК
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "BBDebug"
 screenGui.ResetOnSpawn = false
 screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
 
 local debugText = Instance.new("TextLabel")
-debugText.Size = UDim2.new(0, 260, 0, 110)
+debugText.Size = UDim2.new(0, 280, 0, 120)
 debugText.Position = UDim2.new(0, 10, 0, 60) 
 debugText.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 debugText.BackgroundTransparency = 0.5
@@ -114,7 +139,7 @@ debugText.TextYAlignment = Enum.TextYAlignment.Top
 debugText.Text = "Загрузка..."
 debugText.Parent = screenGui
 
--- 6. МЕНЮ
+-- 7. МЕНЮ
 local menuGui = Instance.new("ScreenGui")
 menuGui.Name = "BBMenu"
 menuGui.ResetOnSpawn = false
@@ -165,7 +190,7 @@ end)
 menuBtn.MouseButton1Click:Connect(function() menuFrame.Visible = not menuFrame.Visible end)
 closeMenu.MouseButton1Click:Connect(function() menuFrame.Visible = false end)
 
--- 7. МАТЕМАТИКА
+-- 8. МАТЕМАТИКА
 local function getDistanceToSegment(p, a, b)
     local ab = b - a
     local ap = p - a
@@ -176,7 +201,7 @@ local function getDistanceToSegment(p, a, b)
     return (p - closest).Magnitude
 end
 
--- 8. ГЛАВНЫЙ ЦИКЛ
+-- 9. ГЛАВНЫЙ ЦИКЛ
 local state = { diameter = CFG.MAX_RADIUS * 2, color = CFG.COLOR_OUTSIDE, lastFlash = 0 }
 local function damp(cur, tgt, lambda, dt) return tgt + (cur - tgt) * math.exp(-lambda * dt) end
 local function clamp01(x) return math.clamp(x, 0, 1) end
@@ -205,6 +230,7 @@ RunService.Heartbeat:Connect(function(dt)
     local dbg_ball = "NO"
     local dbg_dist = 0
     local dbg_status = "Safe"
+    local dbg_time = 999
 
     if ball then
         dbg_ball = "YES"
@@ -217,32 +243,51 @@ RunService.Heartbeat:Connect(function(dt)
             lastBall = ball
         end
 
-        -- Проверка траектории (Swept Collision)
-        local hitTrajectory = false
-        if prevBallPos then
-            local distanceToPath = getDistanceToSegment(hrpPos, prevBallPos, ballPos)
-            if distanceToPath <= CFG.PARRY_RADIUS then
-                hitTrajectory = true
+        -- Считаем скорость сближения
+        local approach = 0
+        if prevBallPos and dt > 0 then
+            local moveVec = ballPos - prevBallPos
+            if moveVec.Magnitude > 0.1 then
+                local dirToMe = (hrpPos - ballPos).Unit
+                approach = moveVec:Dot(dirToMe) / dt
             end
         end
 
+        -- Время до удара
+        if approach > 1 then
+            dbg_time = dist / approach
+        end
+
+        -- 1. Проверка траектории
+        local hitTrajectory = false
+        if prevBallPos then
+            local distanceToPath = getDistanceToSegment(hrpPos, prevBallPos, ballPos)
+            if distanceToPath <= CFG.PARRY_RADIUS then hitTrajectory = true end
+        end
+
+        -- 2. Проверка внутри
         local hitInside = (dist <= CFG.PARRY_RADIUS)
+
+        -- 3. ПРЕДСКАЗАНИЕ (Компенсация пинга)
+        local pingDelay = pingCache + CFG.PING_SAFETY
+        local willHitSoon = (approach > 10) and (dbg_time <= pingDelay)
 
         local targeting = false
         local tVal = ball:GetAttribute("target") or ball:GetAttribute("Target")
         if tVal and (tVal == LocalPlayer.Name or tostring(tVal) == LocalPlayer.Name) then targeting = true
         elseif Character:FindFirstChild("Highlight") then targeting = true
-        elseif (ballPos - prevBallPos).Magnitude > 1 and dist < 50 then targeting = true end
+        elseif (ballPos - prevBallPos).Magnitude > 1 and dist < 60 then targeting = true end
 
         if targeting then
             local targetRadius = math.clamp(dist, CFG.PARRY_RADIUS, CFG.MAX_RADIUS)
             tgtDiameter = targetRadius * 2
             tgtColor = (hitInside or hitTrajectory) and CFG.COLOR_INSIDE or CFG.COLOR_OUTSIDE
 
-            if hitTrajectory or hitInside then
+            -- Срабатывание (Добавлено willHitSoon)
+            if hitTrajectory or hitInside or willHitSoon then
                 executeParry()
                 state.lastFlash = tick()
-                dbg_status = hitTrajectory and "Hit Path!" or "Hit Inside!"
+                dbg_status = willHitSoon and "Ping Predict!" or (hitTrajectory and "Hit Path!" or "Hit Inside!")
             end
         end
 
@@ -253,8 +298,8 @@ RunService.Heartbeat:Connect(function(dt)
     end
 
     debugText.Text = string.format(
-        "Ball: %s\nDist: %.1f\nStatus: %s\nMethod: %s", 
-        dbg_ball, dbg_dist, dbg_status, lastAction)
+        "Ball: %s\nDist: %.1f\nTime: %s\nStatus: %s\nMethod: %s", 
+        dbg_ball, dbg_dist, (dbg_time > 900 and "N/A" or string.format("%.2fs", dbg_time)), dbg_status, lastAction)
 
     state.diameter = damp(state.diameter, tgtDiameter, 14, dt)
     state.color = state.color:Lerp(tgtColor, clamp01(14 * dt))
