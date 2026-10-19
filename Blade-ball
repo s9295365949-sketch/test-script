@@ -1,9 +1,9 @@
 --[[
     ╔═══════════════════════════════════════════════════════════════════════╗
-    ║   BLADE BALL — 3D PART SPHERE (ANTI-BAN SAFE)                         ║
-    ║   • Сфера возвращена в Workspace (3D объект)                          ║
-    ║   • Без VirtualInputManager (защита от BAC)                           ║
-    ║   • Срабатывание за 0.15 сек до удара                                 ║
+    ║   BLADE BALL — 3D SPHERE (0.35s PERFECT TRIGGER)                      ║
+    ║   • Сфера в Workspace (3D)                                            ║
+    ║   • Безопасный метод (CAS + Remote)                                   ║
+    ║   • Нажатие за 0.35 сек до удара (учет пинга 80мс + анимация 50мс)    ║
     ╚═══════════════════════════════════════════════════════════════════════╝
 ]]
 
@@ -18,14 +18,13 @@ local ContextActionService = game:GetService("ContextActionService")
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui", 10)
 
--- Удаляем старые версии
 if PlayerGui:FindFirstChild("BBDebug") then PlayerGui.BBDebug:Destroy() end
 if PlayerGui:FindFirstChild("BBMenu") then PlayerGui.BBMenu:Destroy() end
 if Workspace:FindFirstChild("VisualEffect") then Workspace.VisualEffect:Destroy() end
 
 local CFG = {
-    PARRY_RADIUS        = 20,        -- Радиус парирования
-    MAX_RADIUS          = 35,        -- Максимальный размер сферы
+    PARRY_RADIUS        = 25,        -- Радиус срабатывания
+    MAX_RADIUS          = 35,        -- Размер сферы
     PARRY_COOLDOWN      = 0.25,      
     PARRY_ENABLED       = true,
     SPHERE_VISIBLE      = true,      
@@ -33,7 +32,8 @@ local CFG = {
     COLOR_INSIDE        = Color3.fromRGB(255, 30, 30),
     COLOR_OUTSIDE       = Color3.fromRGB(30, 255, 50),
     
-    PREDICT_TIME        = 0.15,      -- Нажатие за 0.15 сек до удара
+    -- НАЖИМАЕМ ЗА 0.35 СЕК ДО УДАРА (запас на пинг и анимацию)
+    PREDICT_TIME        = 0.35,      
 }
 
 -- 1. REMOTE
@@ -50,7 +50,7 @@ end)
 
 -- 2. СФЕРА В WORKSPACE (3D)
 local sphere = Instance.new("Part")
-sphere.Name = "VisualEffect" -- Безобидное имя
+sphere.Name = "VisualEffect" 
 sphere.Shape = Enum.PartType.Ball
 sphere.Anchored = true
 sphere.CanCollide = false
@@ -176,7 +176,7 @@ Workspace.ChildAdded:Connect(function(o)
     end
 end)
 
--- 6. ПАРИРОВАНИЕ (БЕЗ VIM)
+-- 6. ПАРИРОВАНИЕ
 local lastParry = 0
 local lastAction = "None"
 local isArmed = true
@@ -188,14 +188,12 @@ local function executeParry()
 
     local fired = false
 
-    -- 1. ContextActionService (безопасно)
     pcall(function()
         ContextActionService:CallFunction("Block", Enum.UserInputState.Begin, nil)
         ContextActionService:CallFunction("Parry", Enum.UserInputState.Begin, nil)
         fired = true
     end)
 
-    -- 2. RemoteEvent
     if parryRemote then
         pcall(function() parryRemote:FireServer() end)
         fired = true
@@ -241,6 +239,7 @@ RunService.Heartbeat:Connect(function(dt)
             local dist = (hrpPos - bp).Magnitude
             dbg_dist = dist
 
+            -- Перезаряжаем скрипт
             if dist > CFG.PARRY_RADIUS * 2.5 then
                 isArmed = true
             end
@@ -285,6 +284,7 @@ RunService.Heartbeat:Connect(function(dt)
                 local targetRadius = math.clamp(dist, CFG.PARRY_RADIUS, CFG.MAX_RADIUS)
                 targetDiameter = targetRadius * 2
                 
+                -- СРАБАТЫВАНИЕ ЗА 0.35 СЕК
                 if dbg_time <= CFG.PREDICT_TIME or dist <= CFG.PARRY_RADIUS then
                     executeParry()
                     if not isArmed then
@@ -301,11 +301,9 @@ RunService.Heartbeat:Connect(function(dt)
         debugText.Text = string.format("Ball: %s\nDist: %.1f\nTime: %s\nArmed: %s\nStatus: %s\nMethod: %s", 
             dbg_ball, dbg_dist, (dbg_time > 900 and "N/A" or string.format("%.2fs", dbg_time)), tostring(isArmed), dbg_status, lastAction)
 
-        -- ОБНОВЛЕНИЕ 3D СФЕРЫ
         if CFG.SPHERE_VISIBLE then
             currentDiameter = currentDiameter + (targetDiameter - currentDiameter) * math.exp(-14 * dt)
             currentColor = currentColor:Lerp(targetColor, math.clamp(14 * dt, 0, 1))
-            
             sphere.CFrame = CFrame.new(hrpPos.X, hrpPos.Y + CFG.Y_OFFSET, hrpPos.Z)
             sphere.Size = Vector3.new(currentDiameter, currentDiameter, currentDiameter)
             sphere.Transparency = 0.7
