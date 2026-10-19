@@ -1,0 +1,220 @@
+--[[
+    ╔═══════════════════════════════════════════════════════════════════════════╗
+    ║   [ BEE SWARM SIMULATOR | STARTER KIT ]                                   ║
+    ║   • Безопасный авто-сбор токенов                                          ║
+    ║   • Авто-клик по ближайшему цветку                                        ║
+    ╚═══════════════════════════════════════════════════════════════════════════╝
+]]
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+
+local LP = Players.LocalPlayer
+local PGui = LP:WaitForChild("PlayerGui")
+
+-- Очистка старых версий
+if PGui:FindFirstChild("BSS_UI") then PGui.BSS_UI:Destroy() end
+if Workspace:FindFirstChild("BSS_TweenModel") then Workspace.BSS_TweenModel:Destroy() end
+
+local STATE = {
+    AutoCollect = false,
+    AutoFarm = false,
+    TweenModel = nil -- Модель для плавного перемещения
+}
+
+-- Создаем невидимую модель для Tween
+local tweenModel = Instance.new("Model")
+tweenModel.Name = "BSS_TweenModel"
+tweenModel.Parent = Workspace
+STATE.TweenModel = tweenModel
+
+local tweenPart = Instance.new("Part")
+tweenPart.Anchored = true
+tweenPart.CanCollide = false
+tweenPart.Transparency = 1
+tweenPart.Size = Vector3.new(1, 1, 1)
+tweenPart.Parent = tweenModel
+
+-- ============================================================
+-- [ UI ]
+-- ============================================================
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "BSS_UI"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.IgnoreGuiInset = true
+ScreenGui.Parent = PGui
+
+local Frame = Instance.new("Frame")
+Frame.Size = UDim2.new(0, 220, 0, 160)
+Frame.Position = UDim2.new(0.5, -110, 0.5, -80)
+Frame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+Frame.Parent = ScreenGui
+Instance.new("UICorner", Frame).CornerRadius = UDim.new(0, 10)
+local FrameStroke = Instance.new("UIStroke", Frame)
+FrameStroke.Color = Color3.fromRGB(255, 200, 0)
+FrameStroke.Thickness = 2
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, 0, 0, 30)
+Title.BackgroundTransparency = 1
+Title.Text = "🐝 BSS STARTER KIT"
+Title.TextColor3 = Color3.fromRGB(255, 200, 0)
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 14
+Title.Parent = Frame
+
+local function CreateToggle(y, text, stateKey)
+    local Btn = Instance.new("TextButton")
+    Btn.Size = UDim2.new(1, -20, 0, 40)
+    Btn.Position = UDim2.new(0, 10, 0, y)
+    Btn.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
+    Btn.Text = text .. ": ВЫКЛ"
+    Btn.TextColor3 = Color3.new(1, 1, 1)
+    Btn.Font = Enum.Font.GothamBold
+    Btn.TextSize = 13
+    Btn.Parent = Frame
+    Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 6)
+
+    Btn.Activated:Connect(function()
+        STATE[stateKey] = not STATE[stateKey]
+        Btn.Text = text .. ": " .. (STATE[stateKey] and "ВКЛ" or "ВЫКЛ")
+        Btn.BackgroundColor3 = STATE[stateKey] and Color3.fromRGB(60, 180, 100) or Color3.fromRGB(40, 40, 45)
+    end)
+end
+
+CreateToggle(40, "Auto Collect", "AutoCollect")
+CreateToggle(90, "Auto Farm", "AutoFarm")
+
+-- Перетаскивание меню
+local dragging = false
+local dragStart = nil
+local startPos = nil
+Frame.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = Frame.Position
+    end
+end)
+UserInputService.InputChanged:Connect(function(input)
+    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        local delta = input.Position - dragStart
+        Frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = false
+    end
+end)
+
+-- ============================================================
+-- [ ЛОГИКА ]
+-- ============================================================
+local isBusy = false
+
+-- Поиск токенов
+local function GetNearestToken()
+    local char = LP.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return nil end
+    local hrp = char.HumanoidRootPart.Position
+
+    local nearest = nil
+    local shortestDist = 50 -- Радиус поиска токенов (не больше 50 стабсов)
+
+    -- Токены обычно в Workspace.Tokens или просто в Workspace
+    local tokenFolder = Workspace:FindFirstChild("Tokens")
+    local searchArea = tokenFolder or Workspace
+
+    for _, obj in ipairs(searchArea:GetChildren()) do
+        if obj:IsA("BasePart") and (obj.Name:find("Token") or obj.Name:find("Honey") or obj.Name:find("Pollen")) then
+            local dist = (obj.Position - hrp).Magnitude
+            if dist < shortestDist then
+                shortestDist = dist
+                nearest = obj
+            end
+        end
+    end
+    return nearest
+end
+
+-- Сбор токенов через плавное перемещение (Tween)
+task.spawn(function()
+    while task.wait(0.5) do
+        if STATE.AutoCollect and not isBusy then
+            local token = GetNearestToken()
+            local char = LP.Character
+            
+            if token and char and char:FindFirstChild("HumanoidRootPart") then
+                isBusy = true
+                local originalCFrame = char.HumanoidRootPart.CFrame
+                
+                -- Настраиваем TweenPart на позицию токена
+                tweenPart.CFrame = originalCFrame
+                
+                local tweenInfo = TweenInfo.new(0.3, Enum.EasingStyle.Linear)
+                local goal = {CFrame = CFrame.new(token.Position)}
+                local tween = TweenService:Create(tweenPart, tweenInfo, goal)
+                
+                tween:Play()
+                tween.Completed:Wait()
+                
+                -- Подбираем токен
+                pcall(function()
+                    firetouchinterest(char.HumanoidRootPart, token, 0)
+                    task.wait(0.05)
+                    firetouchinterest(char.HumanoidRootPart, token, 1)
+                end)
+                
+                -- Возвращаемся (или просто телепортируемся на место, где были)
+                char.HumanoidRootPart.CFrame = originalCFrame
+                isBusy = false
+                task.wait(0.2)
+            end
+        end
+    end
+end)
+
+-- Авто-фарм (Клик по ближайшему цветку)
+task.spawn(function()
+    while task.wait(0.3) do
+        if STATE.AutoFarm and not isBusy then
+            local char = LP.Character
+            if not char or not char:FindFirstChild("HumanoidRootPart") then continue end
+            local hrp = char.HumanoidRootPart.Position
+            
+            local nearestFlower = nil
+            local shortestDist = 25 -- Радиус фарма (25 стабсов)
+
+            -- Ищем цветы в Workspace.Flowers или Workspace
+            local flowerFolder = Workspace:FindFirstChild("Flowers") or Workspace
+            
+            for _, obj in ipairs(flowerFolder:GetChildren()) do
+                if obj:IsA("BasePart") and obj.Name:find("Flower") then
+                    local dist = (obj.Position - hrp).Magnitude
+                    if dist < shortestDist then
+                        shortestDist = dist
+                        nearestFlower = obj
+                    end
+                end
+            end
+
+            if nearestFlower then
+                isBusy = true
+                -- Физически "касаемся" цветка, чтобы собрать пыльцу
+                pcall(function()
+                    firetouchinterest(char.HumanoidRootPart, nearestFlower, 0)
+                    task.wait(0.05)
+                    firetouchinterest(char.HumanoidRootPart, nearestFlower, 1)
+                end)
+                isBusy = false
+            end
+        end
+    end
+end)
+
+print("✅ [BSS] Starter Kit Loaded. Используй меню для включения функций.")
