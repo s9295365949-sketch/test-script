@@ -1,6 +1,6 @@
 --[[
     ╔═══════════════════════════════════════════════════════════════════════════╗
-    ║   [ DEVELOPER EDITION v6.1 | FIXED LAYOUT & SCROLLING ]                   ║
+    ║   [ DEVELOPER EDITION v7.0 | SPEED PREDICTION & SWEPT COLLISION ]         ║
     ╚═══════════════════════════════════════════════════════════════════════════╝
 ]]
 
@@ -23,6 +23,10 @@ local CONFIG = {
     SYSTEM = {
         PARRY_COOLDOWN = 0.25,
         CLICK_SOUND    = "rbxassetid://6895079853",
+        
+        -- ВРЕМЯ ДО УДАРА (в секундах). 
+        -- Если мяч летит быстрее, чем за 0.25 сек, скрипт нажмет F ДО того, как мяч зайдет в сферу.
+        PING_BUFFER = 0.25 
     }
 }
 
@@ -44,6 +48,7 @@ local Workspace = game:GetService("Workspace")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local LP = Players.LocalPlayer
 local PGui = LP:WaitForChild("PlayerGui")
@@ -61,8 +66,19 @@ local STATE = {
     LastParry = 0,
     Ball = nil,
     PrevBallPos = nil,
-    Frames = 0
+    Frames = 0,
+    Remote = nil
 }
+
+-- Поиск скрытого Remote (ParryAttempt)
+task.spawn(function()
+    for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
+        if obj:IsA("RemoteEvent") and (obj.Name:lower():find("parry") or obj.Name:lower():find("attempt")) then
+            STATE.Remote = obj
+            break
+        end
+    end
+end)
 
 -- ============================================================
 -- [ 3D СФЕРА ]
@@ -111,7 +127,6 @@ ClickSound.Volume = 0.3
 ClickSound.Parent = ScreenGui
 local function PlayClick() pcall(function() ClickSound:Play() end) end
 
--- Кнопка вызова
 local ToggleBtn = Instance.new("TextButton")
 ToggleBtn.Size = UDim2.new(0, 50, 0, 50)
 ToggleBtn.Position = UDim2.new(1, -70, 0.5, -25)
@@ -128,7 +143,6 @@ BtnStroke.Color = CurrentTheme.ACCENT
 BtnStroke.Thickness = 1.5
 BtnStroke.Transparency = 0.2
 
--- Главное окно (Увеличено)
 local Window = Instance.new("Frame")
 Window.Size = UDim2.new(0, 300, 0, 480)
 Window.Position = UDim2.new(0.5, -150, 0.5, -240)
@@ -142,7 +156,6 @@ WinStroke.Color = CurrentTheme.ACCENT
 WinStroke.Thickness = 1.5
 WinStroke.Transparency = 0.4
 
--- Шапка
 local Header = Instance.new("Frame")
 Header.Size = UDim2.new(1, 0, 0, 105)
 Header.BackgroundColor3 = CurrentTheme.HEADER
@@ -180,7 +193,6 @@ CloseBtn.TextSize = 12
 CloseBtn.Parent = Header
 Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(0, 6)
 
--- Вкладки
 local TabContainer = Instance.new("Frame")
 TabContainer.Size = UDim2.new(1, -20, 0, 35)
 TabContainer.Position = UDim2.new(0, 10, 0, 115)
@@ -192,7 +204,6 @@ TabLayout.FillDirection = Enum.FillDirection.Horizontal
 TabLayout.Padding = UDim.new(0, 8)
 TabLayout.Parent = TabContainer
 
--- Страницы (Теперь со скроллом, чтобы ничего не обрезалось)
 local Pages = Instance.new("ScrollingFrame")
 Pages.Size = UDim2.new(1, -20, 1, -170)
 Pages.Position = UDim2.new(0, 10, 0, 160)
@@ -202,12 +213,9 @@ Pages.ScrollBarThickness = 2
 Pages.ScrollBarImageColor3 = CurrentTheme.ACCENT
 Pages.ScrollBarImageTransparency = 0.5
 Pages.CanvasSize = UDim2.new(0, 0, 0, 0)
-Pages.AutomaticCanvasSize = Enum.AutomaticSize.Y -- Автоматически растягивает скролл
+Pages.AutomaticCanvasSize = Enum.AutomaticSize.Y
 Pages.Parent = Window
 
--- ============================================================
--- [ ПАНЕЛЬ ТЕМ ]
--- ============================================================
 local ThemePanel = Instance.new("Frame")
 ThemePanel.Size = UDim2.new(0, 160, 0, 285)
 ThemePanel.Position = UDim2.new(0, -170, 0, 80) 
@@ -257,13 +265,6 @@ local function CreateThemeButton(themeName, themeData)
     Label.TextXAlignment = Enum.TextXAlignment.Left
     Label.Parent = Btn
     
-    Btn.MouseEnter:Connect(function()
-        TweenService:Create(Btn, TweenInfo.new(0.2), {BackgroundTransparency = 0}):Play()
-    end)
-    Btn.MouseLeave:Connect(function()
-        TweenService:Create(Btn, TweenInfo.new(0.2), {BackgroundTransparency = 0.3}):Play()
-    end)
-    
     Btn.Activated:Connect(function()
         PlayClick()
         CurrentThemeName = themeName
@@ -277,9 +278,6 @@ for name, data in pairs(THEMES) do
     CreateThemeButton(name, data)
 end
 
--- ============================================================
--- [ ПЕРЕТАСКИВАНИЕ ]
--- ============================================================
 local dragging, dragStart, startPos = false, nil, nil
 Header.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -309,9 +307,6 @@ ToggleBtn.Activated:Connect(function()
 end)
 CloseBtn.Activated:Connect(function() PlayClick(); Window.Visible = false; ThemePanel.Visible = false end)
 
--- ============================================================
--- [ UI ЭЛЕМЕНТЫ ]
--- ============================================================
 local PagesList, TabsList = {}, {}
 
 local function CreateTab(name, icon)
@@ -328,7 +323,7 @@ local function CreateTab(name, icon)
     Layout.Parent = Page
     
     local TabBtn = Instance.new("TextButton")
-    TabBtn.Size = UDim2.new(0.5, -4, 1, 0) -- Теперь ровно 50% на 50%
+    TabBtn.Size = UDim2.new(0.5, -4, 1, 0)
     TabBtn.BackgroundColor3 = CurrentTheme.OFF
     TabBtn.BackgroundTransparency = 0.3
     TabBtn.Text = icon .. " " .. name
@@ -473,13 +468,6 @@ local function CreateButton(parent, text, callback)
     Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 6)
     table.insert(UI_Elements, {btn = Btn, type = "button"})
     
-    Btn.MouseEnter:Connect(function()
-        TweenService:Create(Btn, TweenInfo.new(0.2), {BackgroundTransparency = 0}):Play()
-    end)
-    Btn.MouseLeave:Connect(function()
-        TweenService:Create(Btn, TweenInfo.new(0.2), {BackgroundTransparency = 0.3}):Play()
-    end)
-    
     Btn.Activated:Connect(function()
         PlayClick()
         callback(Btn)
@@ -488,9 +476,6 @@ local function CreateButton(parent, text, callback)
     return Btn
 end
 
--- ============================================================
--- [ СБОРКА СТРАНИЦ ]
--- ============================================================
 local MainPage = CreateTab("Main", "🎯")
 local ParryAscii = [[
 ██████╗  █████╗ ██████╗ ██████╗ ██╗   ██╗
@@ -514,16 +499,16 @@ CreateButton(VisPage, "Change Theme", function()
 end)
 
 -- ============================================================
--- [ ПАНЕЛЬ ОТЛАДКИ (Поверх всего) ]
+-- [ ПАНЕЛЬ ОТЛАДКИ ]
 -- ============================================================
 local DebugGui = Instance.new("ScreenGui")
 DebugGui.Name = "BB_Debug"
 DebugGui.ResetOnSpawn = false
-DebugGui.DisplayOrder = 1000 -- Вытащили на самый верх
+DebugGui.DisplayOrder = 1000 
 DebugGui.Parent = PGui
 
 local DebugFrame = Instance.new("Frame")
-DebugFrame.Size = UDim2.new(0, 210, 0, 105)
+DebugFrame.Size = UDim2.new(0, 210, 0, 120)
 DebugFrame.Position = UDim2.new(0, 10, 0, 60)
 DebugFrame.BackgroundColor3 = CurrentTheme.BG
 DebugFrame.BackgroundTransparency = 0.2
@@ -546,9 +531,6 @@ DebugLabel.TextYAlignment = Enum.TextYAlignment.Top
 DebugLabel.Text = "Ожидание..."
 DebugLabel.Parent = DebugFrame
 
--- ============================================================
--- [ ПРИМЕНЕНИЕ ТЕМЫ ]
--- ============================================================
 ApplyTheme = function()
     Window.BackgroundColor3 = CurrentTheme.BG
     Header.BackgroundColor3 = CurrentTheme.HEADER
@@ -593,7 +575,7 @@ TabsList[1].Btn.BackgroundColor3 = CurrentTheme.ACCENT
 TabsList[1].Btn.TextColor3 = CurrentTheme.BG
 
 -- ============================================================
--- [ ЛОГИКА ЯДРА ]
+-- [ ЛОГИКА ЯДРА + ПРЕДСКАЗАНИЕ СКОРОСТИ ]
 -- ============================================================
 local function GetBall()
     if STATE.Ball and STATE.Ball.Parent then return STATE.Ball end
@@ -636,6 +618,17 @@ local function GetZone(speed)
     return Z.MAX_DIST
 end
 
+-- Функция для проверки пересечения траектории (Swept Collision)
+local function getDistanceToSegment(p, a, b)
+    local ab = b - a
+    local ap = p - a
+    local abLenSq = ab:Dot(ab)
+    if abLenSq == 0 then return (p - a).Magnitude end
+    local t = math.clamp(ap:Dot(ab) / abLenSq, 0, 1)
+    local closest = a + ab * t
+    return (p - closest).Magnitude
+end
+
 local PulseTime = 0
 
 RunService.Heartbeat:Connect(function(dt)
@@ -653,6 +646,7 @@ RunService.Heartbeat:Connect(function(dt)
 
         local ball = GetBall()
         local dist, zone, speed = 0, CONFIG.ZONE.MIN_DIST, 0
+        local timeToImpact = 999
         local targetColor = CONFIG.VISUALS.OUTER_SAFE
         local status = "Safe"
 
@@ -668,21 +662,54 @@ RunService.Heartbeat:Connect(function(dt)
             
             if dist > CONFIG.ZONE.MAX_DIST * 1.5 then STATE.IsArmed = true end
             
+            -- Расчет скорости и направления
+            local approachSpeed = 0
             if STATE.PrevBallPos and dt > 0 then
-                speed = (bp - STATE.PrevBallPos).Magnitude / dt
+                local moveVec = bp - STATE.PrevBallPos
+                speed = moveVec.Magnitude / dt
+                
+                if speed > 1 then
+                    local dirToMe = (hrp.Position - bp).Unit
+                    approachSpeed = moveVec.Unit:Dot(dirToMe) * speed
+                end
+            end
+            
+            if approachSpeed > 1 then
+                timeToImpact = dist / approachSpeed
             end
 
             if IsTargetingMe(ball) then
                 zone = GetZone(speed)
-                if dist <= zone then
+                
+                -- 1. Проверка, находится ли мяч в сфере (по расстоянию)
+                local inZone = dist <= zone
+                
+                -- 2. Проверка траектории (если мяч проскочил сквозь)
+                local hitTrajectory = false
+                if STATE.PrevBallPos then
+                    hitTrajectory = getDistanceToSegment(hrp.Position, STATE.PrevBallPos, bp) <= zone
+                end
+                
+                -- 3. Проверка по времени (если мяч слишком быстрый)
+                local predictHit = timeToImpact <= CONFIG.SYSTEM.PING_BUFFER
+                
+                if inZone or hitTrajectory or predictHit then
                     status = "DANGER!"
                     targetColor = CONFIG.VISUALS.DANGER_COLOR
+                    
                     if STATE.Enabled and STATE.IsArmed and (tick() - STATE.LastParry > CONFIG.SYSTEM.PARRY_COOLDOWN) then
+                        -- Нажатие F
                         pcall(function()
                             VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.F, false, game)
                             task.wait(0.05)
                             VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.F, false, game)
                         end)
+                        
+                        -- Дублирование через Remote (если существует)
+                        if STATE.Remote then
+                            pcall(function() STATE.Remote:FireServer() end)
+                        end
+                        
                         STATE.LastParry = tick()
                         STATE.IsArmed = false
                     end
@@ -721,8 +748,8 @@ RunService.Heartbeat:Connect(function(dt)
         
         if DebugLabel and DebugLabel.Parent then
             DebugLabel.Text = string.format(
-                "⚡ Speed: %.0f\n🎯 Status: %s\n📏 Dist: %.1f\n🛡️ Armed: %s",
-                speed, status, dist, tostring(STATE.IsArmed)
+                "⚡ Speed: %.0f\n⏱️ Time: %s\n🎯 Status: %s\n📏 Dist: %.1f\n🛡️ Armed: %s",
+                speed, (timeToImpact > 900 and "N/A" or string.format("%.2fs", timeToImpact)), status, dist, tostring(STATE.IsArmed)
             )
             if status == "DANGER!" then
                 DebugLabel.TextColor3 = CONFIG.VISUALS.DANGER_COLOR
@@ -739,4 +766,4 @@ LP.CharacterAdded:Connect(function()
     STATE.Ball = nil
 end)
 
-print("✅ DEVELOPER EDITION v6.1 | Layout Fixed.")
+print("✅ DEVELOPER EDITION v7.0 | Prediction & Swept Collision Added.")
