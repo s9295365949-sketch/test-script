@@ -1,27 +1,31 @@
 --[[
     ╔═══════════════════════════════════════════════════════════════════════╗
-    ║   BLADE BALL — REAL KEY PRESS (0.05s FIX)                             ║
-    ║   • Только физическое нажатие F (игнорирует Remote)                   ║
-    ║   • Срабатывание за 0.3 сек до удара                                  ║
+    ║   BLADE BALL — 3D PART SPHERE (ANTI-BAN SAFE)                         ║
+    ║   • Сфера возвращена в Workspace (3D объект)                          ║
+    ║   • Без VirtualInputManager (защита от BAC)                           ║
+    ║   • Срабатывание за 0.15 сек до удара                                 ║
     ╚═══════════════════════════════════════════════════════════════════════╝
 ]]
 
-print("▶️ 1. Скрипт запущен...")
+print("▶️ 1. Запуск скрипта...")
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
-local VirtualInputManager = game:GetService("VirtualInputManager")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ContextActionService = game:GetService("ContextActionService")
 
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui", 10)
 
+-- Удаляем старые версии
 if PlayerGui:FindFirstChild("BBDebug") then PlayerGui.BBDebug:Destroy() end
 if PlayerGui:FindFirstChild("BBMenu") then PlayerGui.BBMenu:Destroy() end
+if Workspace:FindFirstChild("VisualEffect") then Workspace.VisualEffect:Destroy() end
 
 local CFG = {
-    PARRY_RADIUS        = 25,        -- Визуальный радиус
-    MAX_RADIUS          = 35,        -- Размер сферы
+    PARRY_RADIUS        = 20,        -- Радиус парирования
+    MAX_RADIUS          = 35,        -- Максимальный размер сферы
     PARRY_COOLDOWN      = 0.25,      
     PARRY_ENABLED       = true,
     SPHERE_VISIBLE      = true,      
@@ -29,31 +33,31 @@ local CFG = {
     COLOR_INSIDE        = Color3.fromRGB(255, 30, 30),
     COLOR_OUTSIDE       = Color3.fromRGB(30, 255, 50),
     
-    -- Нажимаем за 0.3 секунды до удара (0.05 сек уйдет на старт парирования, остальное на пинг)
-    PREDICT_TIME        = 0.30,      
+    PREDICT_TIME        = 0.15,      -- Нажатие за 0.15 сек до удара
 }
 
--- 1. ПОИСК КНОПКИ НА ЭКРАНЕ (запасной метод)
-local parryButton = nil
-local function findButton()
-    for _, obj in ipairs(PlayerGui:GetDescendants()) do
-        if obj:IsA("GuiButton") and obj.Visible then
-            local n = obj.Name:lower()
-            if n:find("block") or n:find("parry") or n:find("deflect") then
-                return obj
-            end
+-- 1. REMOTE
+local parryRemote = nil
+task.spawn(function()
+    for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
+        if obj:IsA("RemoteEvent") and (obj.Name:lower():find("parry") or obj.Name:lower():find("attempt") or obj.Name:lower():find("block")) then
+            parryRemote = obj
+            print("✅ Найден Remote: " .. obj.Name)
+            break
         end
     end
-end
+end)
 
--- 2. СФЕРА
+-- 2. СФЕРА В WORKSPACE (3D)
 local sphere = Instance.new("Part")
-sphere.Name = "VisualEffect"
+sphere.Name = "VisualEffect" -- Безобидное имя
 sphere.Shape = Enum.PartType.Ball
 sphere.Anchored = true
 sphere.CanCollide = false
+sphere.CanTouch = false
 sphere.CanQuery = false
 sphere.CastShadow = false
+sphere.Massless = true
 sphere.Material = Enum.Material.ForceField
 sphere.Color = CFG.COLOR_OUTSIDE
 sphere.Transparency = 1
@@ -172,7 +176,7 @@ Workspace.ChildAdded:Connect(function(o)
     end
 end)
 
--- 6. ФИЗИЧЕСКОЕ НАЖАТИЕ (ТОЛЬКО F)
+-- 6. ПАРИРОВАНИЕ (БЕЗ VIM)
 local lastParry = 0
 local lastAction = "None"
 local isArmed = true
@@ -182,16 +186,24 @@ local function executeParry()
     if not isArmed then return end
     if tick() - lastParry < CFG.PARRY_COOLDOWN then return end
 
-    -- Жмем клавишу F (игра это 100% засчитает)
+    local fired = false
+
+    -- 1. ContextActionService (безопасно)
     pcall(function()
-        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.F, false, game)
-        task.wait(0.05)
-        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.F, false, game)
+        ContextActionService:CallFunction("Block", Enum.UserInputState.Begin, nil)
+        ContextActionService:CallFunction("Parry", Enum.UserInputState.Begin, nil)
+        fired = true
     end)
-    
-    lastAction = "Key F Pressed"
+
+    -- 2. RemoteEvent
+    if parryRemote then
+        pcall(function() parryRemote:FireServer() end)
+        fired = true
+    end
+
+    lastAction = fired and "CAS + Remote" or "Failed"
     lastParry = tick()
-    isArmed = false 
+    isArmed = false
 end
 
 -- 7. ЦИКЛ
@@ -273,7 +285,6 @@ RunService.Heartbeat:Connect(function(dt)
                 local targetRadius = math.clamp(dist, CFG.PARRY_RADIUS, CFG.MAX_RADIUS)
                 targetDiameter = targetRadius * 2
                 
-                -- Нажимаем за 0.3 сек до удара
                 if dbg_time <= CFG.PREDICT_TIME or dist <= CFG.PARRY_RADIUS then
                     executeParry()
                     if not isArmed then
@@ -290,9 +301,11 @@ RunService.Heartbeat:Connect(function(dt)
         debugText.Text = string.format("Ball: %s\nDist: %.1f\nTime: %s\nArmed: %s\nStatus: %s\nMethod: %s", 
             dbg_ball, dbg_dist, (dbg_time > 900 and "N/A" or string.format("%.2fs", dbg_time)), tostring(isArmed), dbg_status, lastAction)
 
+        -- ОБНОВЛЕНИЕ 3D СФЕРЫ
         if CFG.SPHERE_VISIBLE then
             currentDiameter = currentDiameter + (targetDiameter - currentDiameter) * math.exp(-14 * dt)
             currentColor = currentColor:Lerp(targetColor, math.clamp(14 * dt, 0, 1))
+            
             sphere.CFrame = CFrame.new(hrpPos.X, hrpPos.Y + CFG.Y_OFFSET, hrpPos.Z)
             sphere.Size = Vector3.new(currentDiameter, currentDiameter, currentDiameter)
             sphere.Transparency = 0.7
