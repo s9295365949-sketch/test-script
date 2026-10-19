@@ -1,26 +1,25 @@
 --[[
     ╔═══════════════════════════════════════════════════════════════════════╗
-    ║   BLADE BALL — SWEPT COLLISION PARRY (NO MISS)                        ║
-    ║   • Проверка траектории (не пропустит мяч на любой скорости)          ║
+    ║   BLADE BALL — SWEPT COLLISION PARRY (FIXED PING)                     ║
+    ║   • Реальный пинг сразу при запуске (с запасом 120 мс)                ║
+    ║   • Проверка траектории (ловит мячи на любой скорости)                ║
     ║   • Гарантированный парир при пересечении границы сферы               ║
-    ║   • Защита от спама                                                   ║
     ╚═══════════════════════════════════════════════════════════════════════╝
 ]]
 
 print("⏳ [BB] Запуск...")
 
 local CFG = {
-    PARRY_RADIUS        = 25,        -- Радиус сферы (зона парирования)
+    PARRY_RADIUS        = 25,        -- Радиус сферы
     MAX_RADIUS          = 35,        -- Максимальный размер сферы
-    PARRY_COOLDOWN      = 0.15,      -- Кулдаун, чтобы не спамить
+    PARRY_COOLDOWN      = 0.15,      -- Кулдаун
     PARRY_ENABLED       = true,
     SPHERE_VISIBLE      = true,
     Y_OFFSET            = -0.5,
     COLOR_INSIDE        = Color3.fromRGB(255, 30, 30),
     COLOR_OUTSIDE       = Color3.fromRGB(30, 255, 50),
     
-    -- Запас на пинг для предсказания
-    PING_SAFETY         = 0.06,      
+    PING_SAFETY         = 0.06,      -- Запас времени для предсказания
 }
 
 local Players           = game:GetService("Players")
@@ -33,14 +32,18 @@ local LocalPlayer = Players.LocalPlayer
 local Character   = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 local HRP         = Character:WaitForChild("HumanoidRootPart", 15)
 
--- 1. ПИНГ
-local pingCache = 0.05
+-- 1. ПИНГ (УЛУЧШЕННЫЙ)
+local pingCache = 0.12 -- По умолчанию ставим 120 мс, чтобы не промахнуться в начале игры
 task.spawn(function()
     while task.wait(1) do
         local ok, p = pcall(function() 
-            return Stats.Network.ServerStatsItem["Data Ping"]:GetValue() / 1000 
+            local stat = Stats.Network.ServerStatsItem["Data Ping"]
+            if stat then return stat:GetValue() / 1000 end
         end)
-        if ok and p and p > 0 and p < 1 then pingCache = p end
+        -- Если пинг реальный (больше 0 и меньше 1 секунды) - обновляем
+        if ok and p and p > 0 and p < 1 then 
+            pingCache = p 
+        end
     end
 end)
 
@@ -99,7 +102,6 @@ local lastAction = "None"
 
 local function executeParry()
     if not CFG.PARRY_ENABLED or not parryRemote then return end
-    -- Проверка кулдауна (не чаще 1 раза в 0.15 сек)
     if tick() - lastParry < CFG.PARRY_COOLDOWN then return end
 
     pcall(function() parryRemote:FireServer() end)
@@ -114,7 +116,7 @@ screenGui.ResetOnSpawn = false
 screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
 
 local debugText = Instance.new("TextLabel")
-debugText.Size = UDim2.new(0, 250, 0, 110)
+debugText.Size = UDim2.new(0, 260, 0, 130)
 debugText.Position = UDim2.new(0, 10, 0, 60) 
 debugText.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 debugText.BackgroundTransparency = 0.5
@@ -177,7 +179,7 @@ end)
 menuBtn.MouseButton1Click:Connect(function() menuFrame.Visible = not menuFrame.Visible end)
 closeMenu.MouseButton1Click:Connect(function() menuFrame.Visible = false end)
 
--- 8. МАТЕМАТИКА: Расстояние от точки до отрезка (Траектория мяча)
+-- 8. МАТЕМАТИКА
 local function getDistanceToSegment(p, a, b)
     local ab = b - a
     local ap = p - a
@@ -224,13 +226,12 @@ RunService.Heartbeat:Connect(function(dt)
         local dist = (hrpPos - ballPos).Magnitude
         dbg_dist = dist
         
-        -- Сброс при появлении нового мяча
         if lastBall ~= ball then
             prevBallPos = ballPos
             lastBall = ball
         end
 
-        -- ВЫЧИСЛЕНИЕ СКОРОСТИ (для предсказания)
+        -- Вычисление скорости сближения
         local approach = 0
         if prevBallPos and dt > 0 then
             local moveVec = ballPos - prevBallPos
@@ -240,8 +241,7 @@ RunService.Heartbeat:Connect(function(dt)
             end
         end
 
-        -- 1. ПРОВЕРКА ТРАЕКТОРИИ (Swept Collision)
-        -- Считаем, пересек ли мяч сферу между прошлым и текущим кадром
+        -- 1. Проверка траектории (Swept Collision)
         local hitTrajectory = false
         if prevBallPos then
             local distanceToPath = getDistanceToSegment(hrpPos, prevBallPos, ballPos)
@@ -250,22 +250,21 @@ RunService.Heartbeat:Connect(function(dt)
             end
         end
 
-        -- 2. ПРОВЕРКА ВНУТРИ СФЕРЫ
+        -- 2. Проверка внутри сферы
         local hitInside = (dist <= CFG.PARRY_RADIUS)
 
-        -- 3. ПРЕДСКАЗАНИЕ (с учетом пинга)
+        -- 3. Предсказание с учетом пинга
         local pingDelay = pingCache + CFG.PING_SAFETY
         local timeInside = (dist - CFG.PARRY_RADIUS) / math.max(approach, 1)
         local willBeInside = (approach > 0) and (timeInside <= pingDelay)
 
-        -- Проверка цели (мяч летит в нас?)
+        -- Проверка, летит ли в нас
         local targeting = false
         local tVal = ball:GetAttribute("target") or ball:GetAttribute("Target")
         if tVal and (tVal == LocalPlayer.Name or tostring(tVal) == LocalPlayer.Name) then targeting = true
         elseif Character:FindFirstChild("Highlight") then targeting = true
         elseif approach > 10 and dist < 80 then targeting = true end
 
-        -- Если цель наша и есть любое из условий - ПАРИРУЕМ
         if targeting then
             local targetRadius = math.clamp(dist, CFG.PARRY_RADIUS, CFG.MAX_RADIUS)
             tgtDiameter = targetRadius * 2
@@ -284,10 +283,10 @@ RunService.Heartbeat:Connect(function(dt)
         prevBallPos = nil
     end
 
-    -- Отладчик
+    -- Отладчик с пингом
     debugText.Text = string.format(
-        "Ball: %s\nDist: %.1f\nStatus: %s\nMethod: %s", 
-        dbg_ball, dbg_dist, dbg_status, lastAction)
+        "Ball: %s\nDist: %.1f\nStatus: %s\nMethod: %s\nPing: %d ms", 
+        dbg_ball, dbg_dist, dbg_status, lastAction, math.floor(pingCache * 1000))
 
     -- Визуал
     state.diameter = damp(state.diameter, tgtDiameter, 14, dt)
@@ -310,4 +309,3 @@ LocalPlayer.CharacterAdded:Connect(function(newChar)
     lastBall = nil
     prevBallPos = nil
 end)
-
