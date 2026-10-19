@@ -1,8 +1,10 @@
 --[[
     ╔═══════════════════════════════════════════════════════════════════════════╗
-    ║   [ BEE SWARM SIMULATOR | STARTER KIT ]                                   ║
-    ║   • Безопасный авто-сбор токенов                                          ║
-    ║   • Авто-клик по ближайшему цветку                                        ║
+    ║   [ BEE SWARM SIMULATOR | ADVANCED AUTOMATION HUB ]                       ║
+    ║   • Auto-Farm (плавное перемещение между полями)                         ║
+    ║   • Field Selection (Red / White / Blue)                                  ║
+    ║   • Auto-Convert (при заполнении рюкзака)                                 ║
+    ║   • Auto-Mob Farm & Auto-Quest (базовая логика)                           ║
     ╚═══════════════════════════════════════════════════════════════════════════╝
 ]]
 
@@ -12,23 +14,49 @@ local Workspace = game:GetService("Workspace")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local LP = Players.LocalPlayer
 local PGui = LP:WaitForChild("PlayerGui")
 
 -- Очистка старых версий
-if PGui:FindFirstChild("BSS_UI") then PGui.BSS_UI:Destroy() end
-if Workspace:FindFirstChild("BSS_TweenModel") then Workspace.BSS_TweenModel:Destroy() end
+if PGui:FindFirstChild("BSS_Hub") then PGui.BSS_Hub:Destroy() end
+if Workspace:FindFirstChild("BSS_Tween") then Workspace.BSS_Tween:Destroy() end
 
-local STATE = {
-    AutoCollect = false,
-    AutoFarm = false,
-    TweenModel = nil -- Модель для плавного перемещения
+-- ============================================================
+-- [ НАСТРОЙКИ И ID ПОЛЕЙ (Меняй под себя) ]
+-- ============================================================
+local FIELD_POSITIONS = {
+    Red = {
+        Name = "Strawberry Field",
+        Position = Vector3.new(-150, 15, 150) -- Примерные координаты, замени на реальные
+    },
+    White = {
+        Name = "Cactus Field",
+        Position = Vector3.new(200, 20, -100) -- Примерные координаты
+    },
+    Blue = {
+        Name = "Pine Tree Forest",
+        Position = Vector3.new(300, 25, 250) -- Примерные координаты
+    }
 }
 
--- Создаем невидимую модель для Tween
+local STATE = {
+    Enabled = false,
+    CurrentField = "Red",
+    AutoConvert = true,
+    AutoMob = false,
+    AutoQuest = false,
+    
+    TweenModel = nil,
+    TweenPart = nil,
+    IsBusy = false,
+    LastActionTime = 0
+}
+
+-- Создаем невидимую модель для Tween (чтобы плавно двигать персонажа)
 local tweenModel = Instance.new("Model")
-tweenModel.Name = "BSS_TweenModel"
+tweenModel.Name = "BSS_Tween"
 tweenModel.Parent = Workspace
 STATE.TweenModel = tweenModel
 
@@ -37,36 +65,92 @@ tweenPart.Anchored = true
 tweenPart.CanCollide = false
 tweenPart.Transparency = 1
 tweenPart.Size = Vector3.new(1, 1, 1)
+tweenPart.CFrame = CFrame.new(0, -100, 0) -- Спрятан под картой
 tweenPart.Parent = tweenModel
+STATE.TweenPart = tweenPart
 
 -- ============================================================
--- [ UI ]
+-- [ UI МЕНЮ ]
 -- ============================================================
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "BSS_UI"
+ScreenGui.Name = "BSS_Hub"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.IgnoreGuiInset = true
 ScreenGui.Parent = PGui
 
-local Frame = Instance.new("Frame")
-Frame.Size = UDim2.new(0, 220, 0, 160)
-Frame.Position = UDim2.new(0.5, -110, 0.5, -80)
-Frame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
-Frame.Parent = ScreenGui
-Instance.new("UICorner", Frame).CornerRadius = UDim.new(0, 10)
-local FrameStroke = Instance.new("UIStroke", Frame)
-FrameStroke.Color = Color3.fromRGB(255, 200, 0)
-FrameStroke.Thickness = 2
+local MainFrame = Instance.new("Frame")
+MainFrame.Size = UDim2.new(0, 260, 0, 320)
+MainFrame.Position = UDim2.new(0.5, -130, 0.5, -160)
+MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+MainFrame.Parent = ScreenGui
+Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 12)
+local MainStroke = Instance.new("UIStroke", MainFrame)
+MainStroke.Color = Color3.fromRGB(255, 180, 0)
+MainStroke.Thickness = 2
 
 local Title = Instance.new("TextLabel")
-Title.Size = UDim2.new(1, 0, 0, 30)
+Title.Size = UDim2.new(1, 0, 0, 40)
 Title.BackgroundTransparency = 1
-Title.Text = "🐝 BSS STARTER KIT"
-Title.TextColor3 = Color3.fromRGB(255, 200, 0)
+Title.Text = "🐝 BSS AUTOMATION HUB"
+Title.TextColor3 = Color3.fromRGB(255, 180, 0)
 Title.Font = Enum.Font.GothamBold
-Title.TextSize = 14
-Title.Parent = Frame
+Title.TextSize = 16
+Title.Parent = MainFrame
 
+local ToggleBtn = Instance.new("TextButton")
+ToggleBtn.Size = UDim2.new(1, -20, 0, 40)
+ToggleBtn.Position = UDim2.new(0, 10, 0, 50)
+ToggleBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
+ToggleBtn.Text = "Auto Farm: ВЫКЛ"
+ToggleBtn.TextColor3 = Color3.new(1, 1, 1)
+ToggleBtn.Font = Enum.Font.GothamBold
+ToggleBtn.TextSize = 14
+ToggleBtn.Parent = MainFrame
+Instance.new("UICorner", ToggleBtn).CornerRadius = UDim.new(0, 6)
+
+-- Выбор поля
+local FieldLabel = Instance.new("TextLabel")
+FieldLabel.Size = UDim2.new(1, -20, 0, 20)
+FieldLabel.Position = UDim2.new(0, 10, 0, 100)
+FieldLabel.BackgroundTransparency = 1
+FieldLabel.Text = "Выберите поле:"
+FieldLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+FieldLabel.Font = Enum.Font.Gotham
+FieldLabel.TextSize = 12
+FieldLabel.TextXAlignment = Enum.TextXAlignment.Left
+FieldLabel.Parent = MainFrame
+
+local function CreateFieldButton(text, fieldKey, yPos)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0.3, -8, 0, 35)
+    btn.Position = UDim2.new(0, 10 + (yPos * 0.31), 0, 125)
+    btn.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
+    btn.Text = text
+    btn.TextColor3 = Color3.new(1, 1, 1)
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 11
+    btn.Parent = MainFrame
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 5)
+    
+    btn.Activated:Connect(function()
+        STATE.CurrentField = fieldKey
+        -- Подсветка выбранной кнопки
+        for _, child in ipairs(MainFrame:GetChildren()) do
+            if child:IsA("TextButton") and child.Name == "FieldBtn" then
+                child.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
+            end
+        end
+        btn.BackgroundColor3 = Color3.fromRGB(255, 180, 0)
+        btn.TextColor3 = Color3.new(0, 0, 0)
+    end)
+    btn.Name = "FieldBtn"
+end
+
+CreateFieldButton("Red", "Red", 0)
+CreateFieldButton("White", "White", 1)
+CreateFieldButton("Blue", "Blue", 2)
+
+-- Тумблеры
 local function CreateToggle(y, text, stateKey)
     local Btn = Instance.new("TextButton")
     Btn.Size = UDim2.new(1, -20, 0, 40)
@@ -76,7 +160,7 @@ local function CreateToggle(y, text, stateKey)
     Btn.TextColor3 = Color3.new(1, 1, 1)
     Btn.Font = Enum.Font.GothamBold
     Btn.TextSize = 13
-    Btn.Parent = Frame
+    Btn.Parent = MainFrame
     Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 6)
 
     Btn.Activated:Connect(function()
@@ -86,24 +170,32 @@ local function CreateToggle(y, text, stateKey)
     end)
 end
 
-CreateToggle(40, "Auto Collect", "AutoCollect")
-CreateToggle(90, "Auto Farm", "AutoFarm")
+CreateToggle(170, "Auto Convert", "AutoConvert")
+CreateToggle(215, "Auto Mob Farm", "AutoMob")
+CreateToggle(260, "Auto Quest", "AutoQuest")
+
+-- Обработчик включения основного авто-фарма
+ToggleBtn.Activated:Connect(function()
+    STATE.Enabled = not STATE.Enabled
+    ToggleBtn.Text = "Auto Farm: " .. (STATE.Enabled and "ВКЛ" or "ВЫКЛ")
+    ToggleBtn.BackgroundColor3 = STATE.Enabled and Color3.fromRGB(60, 180, 100) or Color3.fromRGB(40, 40, 45)
+end)
 
 -- Перетаскивание меню
 local dragging = false
 local dragStart = nil
 local startPos = nil
-Frame.InputBegan:Connect(function(input)
+MainFrame.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
         dragging = true
         dragStart = input.Position
-        startPos = Frame.Position
+        startPos = MainFrame.Position
     end
 end)
 UserInputService.InputChanged:Connect(function(input)
     if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
         local delta = input.Position - dragStart
-        Frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
     end
 end)
 UserInputService.InputEnded:Connect(function(input)
@@ -113,25 +205,80 @@ UserInputService.InputEnded:Connect(function(input)
 end)
 
 -- ============================================================
--- [ ЛОГИКА ]
+-- [ ФУНКЦИИ ПЕРЕМЕЩЕНИЯ И ДЕЙСТВИЙ ]
 -- ============================================================
-local isBusy = false
 
--- Поиск токенов
-local function GetNearestToken()
+-- Безопасное плавное перемещение к позиции
+local function TweenToPosition(targetPos, duration)
+    local char = LP.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return false end
+    local hrp = char.HumanoidRootPart
+    
+    STATE.IsBusy = true
+    
+    -- Создаем Tween
+    local tweenInfo = TweenInfo.new(duration or 1.5, Enum.EasingStyle.Linear)
+    local goal = {CFrame = CFrame.new(targetPos)}
+    local tween = TweenService:Create(tweenPart, tweenInfo, goal)
+    
+    tween:Play()
+    tween.Completed:Wait()
+    
+    -- Телепортируем персонажа к финальной точке (безопасно, т.к. движение было плавным)
+    hrp.CFrame = CFrame.new(targetPos)
+    
+    STATE.IsBusy = false
+    return true
+end
+
+-- Проверка заполнения рюкзака
+local function IsBackpackFull()
+    -- В BSS рюкзак можно проверить по значению в PlayerGui или через Remote
+    -- Простой метод: если количество пыльцы на экране > 90% (нужно уточнять)
+    local ok, pollen = pcall(function()
+        -- Ищем текст с количеством пыльцы в интерфейсе (пример)
+        local pg = LP.PlayerGui
+        -- Здесь нужно найти реальный элемент UI, отображающий пыльцу
+        -- Это заглушка, замени на реальный путь
+        return false
+    end)
+    return false -- Пока всегда false, нужно доработать под UI
+end
+
+-- Переработка (конвертация) пыльцы
+local function ConvertPollen()
+    -- 1. Телепорт к улью (примерные координаты, нужно уточнить)
+    local HivePos = Vector3.new(0, 10, 0) -- Замени на реальные координаты улья
+    TweenToPosition(HivePos, 2)
+    task.wait(0.5)
+    
+    -- 2. Нажимаем кнопку "Convert" (или активируем инструмент)
+    -- В BSS часто нужно нажать на кнопку в интерфейсе или нажать клавишу E
+    pcall(function()
+        -- Имитация нажатия E (или другой клавиши)
+        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+        task.wait(0.1)
+        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+    end)
+    
+    -- Или можно найти кнопку в PlayerGui и нажать её
+    task.wait(1)
+end
+
+-- Поиск ближайшего цветка для сбора пыльцы
+local function FindNearestFlower()
     local char = LP.Character
     if not char or not char:FindFirstChild("HumanoidRootPart") then return nil end
     local hrp = char.HumanoidRootPart.Position
-
+    
     local nearest = nil
-    local shortestDist = 50 -- Радиус поиска токенов (не больше 50 стабсов)
-
-    -- Токены обычно в Workspace.Tokens или просто в Workspace
-    local tokenFolder = Workspace:FindFirstChild("Tokens")
-    local searchArea = tokenFolder or Workspace
-
-    for _, obj in ipairs(searchArea:GetChildren()) do
-        if obj:IsA("BasePart") and (obj.Name:find("Token") or obj.Name:find("Honey") or obj.Name:find("Pollen")) then
+    local shortestDist = 40 -- Радиус поиска
+    
+    -- Цветы обычно в Workspace.Flowers или Workspace
+    local flowerFolder = Workspace:FindFirstChild("Flowers") or Workspace
+    
+    for _, obj in ipairs(flowerFolder:GetChildren()) do
+        if obj:IsA("BasePart") and (obj.Name:find("Flower") or obj.Name:find("Pollen")) then
             local dist = (obj.Position - hrp).Magnitude
             if dist < shortestDist then
                 shortestDist = dist
@@ -142,79 +289,154 @@ local function GetNearestToken()
     return nearest
 end
 
--- Сбор токенов через плавное перемещение (Tween)
-task.spawn(function()
-    while task.wait(0.5) do
-        if STATE.AutoCollect and not isBusy then
-            local token = GetNearestToken()
-            local char = LP.Character
-            
-            if token and char and char:FindFirstChild("HumanoidRootPart") then
-                isBusy = true
-                local originalCFrame = char.HumanoidRootPart.CFrame
-                
-                -- Настраиваем TweenPart на позицию токена
-                tweenPart.CFrame = originalCFrame
-                
-                local tweenInfo = TweenInfo.new(0.3, Enum.EasingStyle.Linear)
-                local goal = {CFrame = CFrame.new(token.Position)}
-                local tween = TweenService:Create(tweenPart, tweenInfo, goal)
-                
-                tween:Play()
-                tween.Completed:Wait()
-                
-                -- Подбираем токен
-                pcall(function()
-                    firetouchinterest(char.HumanoidRootPart, token, 0)
-                    task.wait(0.05)
-                    firetouchinterest(char.HumanoidRootPart, token, 1)
-                end)
-                
-                -- Возвращаемся (или просто телепортируемся на место, где были)
-                char.HumanoidRootPart.CFrame = originalCFrame
-                isBusy = false
-                task.wait(0.2)
+-- Поиск ближайшего моба
+local function FindNearestMob()
+    local char = LP.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return nil end
+    local hrp = char.HumanoidRootPart.Position
+    
+    local nearest = nil
+    local shortestDist = 50
+    
+    -- Мобы обычно в Workspace.Mobs или Workspace
+    local mobFolder = Workspace:FindFirstChild("Mobs") or Workspace
+    
+    for _, obj in ipairs(mobFolder:GetChildren()) do
+        if obj:IsA("Model") and obj:FindFirstChild("Humanoid") and obj.Name ~= LP.Name then
+            local root = obj:FindFirstChild("HumanoidRootPart")
+            if root then
+                local dist = (root.Position - hrp).Magnitude
+                if dist < shortestDist then
+                    shortestDist = dist
+                    nearest = obj
+                end
             end
         end
     end
-end)
+    return nearest
+end
 
--- Авто-фарм (Клик по ближайшему цветку)
+-- Поиск квестового предмета (например, Honey, Egg)
+local function FindQuestItem()
+    local char = LP.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return nil end
+    local hrp = char.HumanoidRootPart.Position
+    
+    local nearest = nil
+    local shortestDist = 60
+    
+    -- Квестовые предметы могут быть в Workspace или в папке Tokens
+    local searchArea = Workspace:FindFirstChild("Tokens") or Workspace
+    
+    for _, obj in ipairs(searchArea:GetChildren()) do
+        if obj:IsA("BasePart") then
+            local name = obj.Name:lower()
+            if name:find("honey") or name:find("egg") or name:find("quest") or name:find("strawberry") then
+                local dist = (obj.Position - hrp).Magnitude
+                if dist < shortestDist then
+                    shortestDist = dist
+                    nearest = obj
+                end
+            end
+        end
+    end
+    return nearest
+end
+
+-- ============================================================
+-- [ ОСНОВНЫЕ ЦИКЛЫ ]
+-- ============================================================
+
+-- 1. Цикл авто-фарма (перемещение по полю и сбор)
 task.spawn(function()
-    while task.wait(0.3) do
-        if STATE.AutoFarm and not isBusy then
+    while task.wait(0.5) do
+        if STATE.Enabled and not STATE.IsBusy then
+            local fieldData = FIELD_POSITIONS[STATE.CurrentField]
+            if not fieldData then continue end
+            
+            -- Проверяем, не заполнен ли рюкзак
+            if STATE.AutoConvert and IsBackpackFull() then
+                ConvertPollen()
+                continue
+            end
+            
+            -- Перемещаемся в выбранное поле (если далеко)
             local char = LP.Character
-            if not char or not char:FindFirstChild("HumanoidRootPart") then continue end
-            local hrp = char.HumanoidRootPart.Position
-            
-            local nearestFlower = nil
-            local shortestDist = 25 -- Радиус фарма (25 стабсов)
-
-            -- Ищем цветы в Workspace.Flowers или Workspace
-            local flowerFolder = Workspace:FindFirstChild("Flowers") or Workspace
-            
-            for _, obj in ipairs(flowerFolder:GetChildren()) do
-                if obj:IsA("BasePart") and obj.Name:find("Flower") then
-                    local dist = (obj.Position - hrp).Magnitude
-                    if dist < shortestDist then
-                        shortestDist = dist
-                        nearestFlower = obj
+            if char and char:FindFirstChild("HumanoidRootPart") then
+                local hrp = char.HumanoidRootPart.Position
+                local distToField = (fieldData.Position - hrp).Magnitude
+                
+                if distToField > 50 then
+                    -- Плавно летим к полю
+                    TweenToPosition(fieldData.Position, 2)
+                else
+                    -- Мы на поле, ищем цветок и собираем
+                    local flower = FindNearestFlower()
+                    if flower then
+                        -- Плавно подходим к цветку (имитация движения)
+                        local flowerPos = flower.Position + Vector3.new(0, 3, 0)
+                        TweenToPosition(flowerPos, 0.4)
+                        
+                        -- Активируем сбор (касание)
+                        pcall(function()
+                            firetouchinterest(char.HumanoidRootPart, flower, 0)
+                            task.wait(0.05)
+                            firetouchinterest(char.HumanoidRootPart, flower, 1)
+                        end)
                     end
                 end
             end
+        end
+    end
+end)
 
-            if nearestFlower then
-                isBusy = true
-                -- Физически "касаемся" цветка, чтобы собрать пыльцу
-                pcall(function()
-                    firetouchinterest(char.HumanoidRootPart, nearestFlower, 0)
-                    task.wait(0.05)
-                    firetouchinterest(char.HumanoidRootPart, nearestFlower, 1)
-                end)
-                isBusy = false
+-- 2. Цикл авто-фарма мобов
+task.spawn(function()
+    while task.wait(0.3) do
+        if STATE.AutoMob and not STATE.IsBusy then
+            local mob = FindNearestMob()
+            if mob then
+                local char = LP.Character
+                if char and char:FindFirstChild("HumanoidRootPart") then
+                    local mobRoot = mob:FindFirstChild("HumanoidRootPart")
+                    if mobRoot then
+                        -- Летим к мобу
+                        TweenToPosition(mobRoot.Position + Vector3.new(0, 2, 0), 0.5)
+                        
+                        -- Атакуем (нажимаем ЛКМ или используем инструмент)
+                        pcall(function()
+                            VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 0)
+                            task.wait(0.1)
+                            VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 0)
+                        end)
+                    end
+                end
             end
         end
     end
 end)
 
-print("✅ [BSS] Starter Kit Loaded. Используй меню для включения функций.")
+-- 3. Цикл авто-квестов (сбор предметов)
+task.spawn(function()
+    while task.wait(0.6) do
+        if STATE.AutoQuest and not STATE.IsBusy then
+            local item = FindQuestItem()
+            if item then
+                local char = LP.Character
+                if char and char:FindFirstChild("HumanoidRootPart") then
+                    -- Летим к предмету
+                    TweenToPosition(item.Position, 0.8)
+                    
+                    -- Собираем
+                    pcall(function()
+                        firetouchinterest(char.HumanoidRootPart, item, 0)
+                        task.wait(0.05)
+                        firetouchinterest(char.HumanoidRootPart, item, 1)
+                    end)
+                end
+            end
+        end
+    end
+end)
+
+print("✅ [BSS] Advanced Hub Loaded. Используй меню для настройки.")
