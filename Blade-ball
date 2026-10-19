@@ -1,8 +1,9 @@
 --[[
     ╔═══════════════════════════════════════════════════════════════════════╗
-    ║   BLADE BALL — ULTRA PARRY ZONE (BAC BYPASS)                          ║
-    ║   • Огромная зона парирования (срабатывает издалека)                  ║
-    ║   • Парирование через RemoteEvent + быстрая реакция                   ║
+    ║   BLADE BALL — BALANCED PARRY (BAC BYPASS)                            ║
+    ║   • Идеальная зона парирования (25-40)                                ║
+    ║   • Парирование через RemoteEvent + без бана                         ║
+    ║   • Настройка DEBUG для проверки расстояния                           ║
     ╚═══════════════════════════════════════════════════════════════════════╝
 ]]
 
@@ -10,25 +11,25 @@
 -- 1. НАСТРОЙКИ
 -- ============================================================
 local CFG = {
-    -- ─── Парирование (УВЕЛИЧЕНО ДЛЯ БЛИЖНЕГО БОЯ) ──────────
-    MIN_PARRY_DIAMETER  = 50,        -- Мин. диаметр (радиус 25) при медленном мяче
-    MAX_PARRY_DIAMETER  = 75,        -- Макс. диаметр (радиус 37.5) при быстром мяче
+    -- ─── Парирование (ИДЕАЛЬНЫЙ БАЛАНС) ────────────────────
+    MIN_PARRY_DIAMETER  = 25,        -- Мин. диаметр (радиус 12.5) при медленном мяче
+    MAX_PARRY_DIAMETER  = 40,        -- Макс. диаметр (радиус 20) при быстром мяче
     MIN_SPEED_THRESH    = 50,        
     MAX_SPEED_THRESH    = 200,       
-    PARRY_COOLDOWN      = 0.2,       
+    PARRY_COOLDOWN      = 0.15,      
 
     -- ─── Визуал сферы ──────────────────────────────────────
-    MAX_RADIUS          = 40,        -- Максимальный радиус сферы (диаметр 80)
+    MAX_RADIUS          = 30,        -- Максимальный радиус сферы
     NEAR_TRANSPARENCY   = 0.60,      
     FAR_TRANSPARENCY    = 0.80,      
     Y_OFFSET            = -0.5,      
 
     -- ─── Человеческая реакция (АНТИ-БАН) ───────────────────
-    HUMAN_DELAY_MIN     = 0.01,      -- Уменьшили задержку, чтобы успевать кликать
-    HUMAN_DELAY_MAX     = 0.05,      
-    PREDICT_FRAMES      = 3,         -- Увеличили предсказание для быстрых мячей
-    MIN_AHEAD           = 0.10,
-    MAX_AHEAD           = 0.30,
+    HUMAN_DELAY_MIN     = 0.01,      -- Минимальная задержка
+    HUMAN_DELAY_MAX     = 0.03,      -- Максимальная задержка
+    PREDICT_FRAMES      = 2,         
+    MIN_AHEAD           = 0.02,      -- Предсказание за 0.02 сек
+    MAX_AHEAD           = 0.10,      -- Максимум за 0.10 сек (чтобы не промахнуться мимо окна)
     
     -- ─── Сглаживание ───────────────────────────────────────
     DAMP_LAMBDA         = 14,
@@ -42,7 +43,7 @@ local CFG = {
     COLOR_INSIDE  = Color3.fromRGB(255, 30, 30),    
     COLOR_OUTSIDE = Color3.fromRGB(30, 255, 50),    
 
-    DEBUG = false,                   
+    DEBUG = false,                   -- Поставь true, чтобы видеть логи в консоли
 }
 
 -- ============================================================
@@ -134,13 +135,13 @@ Workspace.ChildRemoved:Connect(function(o)
 end)
 
 -- ============================================================
--- 6. ПОИСК REMOTE ДЛЯ ПАРИРОВАНИЯ
+-- 6. ПОИСК REMOTE (Event или Function)
 -- ============================================================
 local parryRemote = nil
 local function findParryRemote()
     local ok, found = pcall(function()
         for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
-            if obj:IsA("RemoteEvent") then
+            if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
                 local n = obj.Name:lower()
                 if n:find("parry") or n:find("block") or n:find("deflect") or n:find("swing") then
                     return obj
@@ -152,13 +153,17 @@ local function findParryRemote()
 end
 parryRemote = findParryRemote()
 
+if CFG.DEBUG then
+    print("[BB] Найден Remote для парира:", parryRemote and parryRemote:GetFullName() or "НЕ НАЙДЕН (используется VIM)")
+end
+
 -- ============================================================
--- 7. ПАРИРОВАНИЕ С БЫСТРОЙ РЕАКЦИЕЙ
+-- 7. ПАРИРОВАНИЕ
 -- ============================================================
 local lastParry = 0
 local burstActive = false
 
-local function fireParry()
+local function fireParry(dist)
     if burstActive then return end
     burstActive = true
     
@@ -166,8 +171,18 @@ local function fireParry()
         local delay = CFG.HUMAN_DELAY_MIN + math.random() * (CFG.HUMAN_DELAY_MAX - CFG.HUMAN_DELAY_MIN)
         task.wait(delay)
         
+        if CFG.DEBUG then
+            print(string.format("[BB] ПАРИР! Дистанция: %.1f стабсов", dist))
+        end
+
         if parryRemote then
-            pcall(function() parryRemote:FireServer() end)
+            pcall(function() 
+                if parryRemote:IsA("RemoteEvent") then
+                    parryRemote:FireServer() 
+                else
+                    parryRemote:InvokeServer()
+                end
+            end)
         else
             pcall(function()
                 local vim = game:GetService("VirtualInputManager")
@@ -236,9 +251,11 @@ local function mainTick(dt)
     local tgtTransparency = CFG.FAR_TRANSPARENCY
     local tgtColor        = CFG.COLOR_OUTSIDE
     local doParry         = false
+    local currentDist     = 0
 
     if ball then
         local dist = (hrpPos - ball.Position).Magnitude
+        currentDist = dist
         local bv = ball.AssemblyLinearVelocity
         if bv.Magnitude < 0.5 then bv = ball.Velocity end
         local speed = bv.Magnitude
@@ -271,7 +288,7 @@ local function mainTick(dt)
             if hl and hl.Enabled then targeting = true end
         end
 
-        if not targeting and not isOther and speed > 5 and approach > 10 and dist < 50 then
+        if not targeting and not isOther and speed > 5 and approach > 10 and dist < 40 then
             targeting = true
         end
 
@@ -285,10 +302,12 @@ local function mainTick(dt)
             local u = clamp01((dist - currentParryRadius) / (CFG.MAX_RADIUS - currentParryRadius))
             tgtTransparency = CFG.NEAR_TRANSPARENCY + (CFG.FAR_TRANSPARENCY - CFG.NEAR_TRANSPARENCY) * u
 
+            -- Срабатывание парирования
             if dist <= currentParryRadius then
                 doParry = true
             end
             
+            -- Предиктивка
             if not doParry and approach > 0 then
                 local horizon = math.clamp(pingCache + CFG.PREDICT_FRAMES / 60, CFG.MIN_AHEAD, CFG.MAX_AHEAD)
                 if (dist - currentParryRadius) / approach <= horizon then 
@@ -301,7 +320,7 @@ local function mainTick(dt)
     if doParry then
         local now = tick()
         if now - lastParry >= CFG.PARRY_COOLDOWN then
-            fireParry()
+            fireParry(currentDist)
             lastParry = now
             state.lastFlash = now
         end
@@ -349,4 +368,4 @@ LocalPlayer.CharacterAdded:Connect(function(newChar)
     parryRemote = findParryRemote()
 end)
 
-print("[Blade Ball] Зона парирования УВЕЛИЧЕНА (до 37.5 стабсов).")
+print("[Blade Ball] Сбалансированная зона парирования (25-40).")
