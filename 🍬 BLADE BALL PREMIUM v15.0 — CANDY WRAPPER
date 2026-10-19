@@ -66,12 +66,12 @@ local CONFIG = {
     
     -- Человеческая задержка (x1.5 быстрее)
     HUMAN_DELAY_MIN  = 0.10,   -- Мин. задержка (100 мс)
-    HUMAN_DELAY_MAX  = 0.15,   -- Макс. задержка (150 мс)
+    HUMAN_DELAY_MAX  = 0.12,   -- Макс. задержка (120 мс)
     
     -- Визуал сферы
     SPHERE_MIN       = 40,     -- Мин. диаметр сферы
     SPHERE_MAX       = 90,     -- Макс. диаметр сферы
-    CORE_RATIO       = 0.23,   -- Размер ядра (23% от сферы)
+    CORE_RATIO       = 0.20,   -- Размер ядра (20% от сферы)
 }
 
 local STATE = {
@@ -1146,6 +1146,10 @@ LocalPlayer.CharacterAdded:Connect(function()
     STATE.CameraLock = false
     if Camera.CameraType == Enum.CameraType.Scriptable then
         Camera.CameraType = Enum.CameraType.Custom
+    end
+end)
+
+print(">>> [BB] CANDY EDITION v15.0 LOADED! (Human Delay: 0.10-0.15s)")
     end
 end)
 
