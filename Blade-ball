@@ -1,9 +1,8 @@
 --[[
     ╔═══════════════════════════════════════════════════════════════════════╗
-    ║   BLADE BALL — 3-TIER DYNAMIC PARRY                                   ║
-    ║   • 3 позиции: Медленно / Средне / Быстро                             ║
-    ║   • Плавный расчет зоны между ними                                    ║
-    ║   • Нажатие F ровно 1 раз на мяч                                      ║
+    ║   BLADE BALL — STRICT TARGET & 3-TIER ZONE                            ║
+    ║   • Парирует ТОЛЬКО мячи, летящие ИМЕННО в тебя (без ложных срабатываний)║
+    ║   • 3 позиции зоны (Медленный / Средний / Быстрый)                    ║
     ╚═══════════════════════════════════════════════════════════════════════╝
 ]]
 
@@ -22,15 +21,14 @@ if PlayerGui:FindFirstChild("BBMenu") then PlayerGui.BBMenu:Destroy() end
 if Workspace:FindFirstChild("VisualEffect") then Workspace.VisualEffect:Destroy() end
 
 local CFG = {
-    -- НАСТРОЙКИ 3-Х ПОЗИЦИЙ (Скорость мяча и соответствующая зона парирования)
-    MIN_SPEED           = 50,        -- Медленный мяч (стабсов/сек)
-    MIN_ZONE            = 20,        -- Зона для медленного мяча
+    MIN_SPEED           = 50,        
+    MIN_ZONE            = 20,        
 
-    MID_SPEED           = 125,       -- Средняя скорость (стабсов/сек)
-    MID_ZONE            = 45,        -- Зона для среднего мяча (НОВАЯ ПОЗИЦИЯ)
+    MID_SPEED           = 125,       
+    MID_ZONE            = 45,        
 
-    MAX_SPEED           = 200,       -- Быстрый мяч (стабсов/сек)
-    MAX_ZONE            = 80,        -- Зона для быстрого мяча
+    MAX_SPEED           = 200,       
+    MAX_ZONE            = 80,        
 
     PARRY_COOLDOWN      = 0.25,      
     PARRY_ENABLED       = true,
@@ -187,16 +185,43 @@ local function executeParry()
     isArmed = false
 end
 
--- 6. ФУНКЦИЯ РАСЧЕТА 3-Х ПОЗИЦИЙ
+-- 6. ФУНКЦИЯ ПРОВЕРКИ ЦЕЛИ (СТРОГАЯ)
+local function isBallTargetingMe(ball)
+    -- Проверяем все возможные атрибуты цели
+    local targetAttributes = {"target", "Target", "targetPlayer", "TargetPlayer", "player"}
+    
+    for _, attrName in ipairs(targetAttributes) do
+        local targetVal = ball:GetAttribute(attrName)
+        if targetVal then
+            -- Если игра говорит, что цель - это мы
+            if targetVal == LocalPlayer or targetVal == LocalPlayer.Name or targetVal == LocalPlayer.UserId 
+               or targetVal == LocalPlayer.Character or tostring(targetVal) == LocalPlayer.Name then
+                return true
+            else
+                -- Если атрибут есть, но там ДРУГОЙ игрок — значит мяч летит НЕ В НАС
+                return false
+            end
+        end
+    end
+    
+    -- Если атрибутов нет, проверяем подсветку (Highlight)
+    local char = LocalPlayer.Character
+    if char and char:FindFirstChild("Highlight") then
+        return true
+    end
+    
+    -- Если атрибута нет вообще (мяч только заспавнился), возвращаем false
+    return false
+end
+
+-- 7. ФУНКЦИЯ РАСЧЕТА 3-Х ПОЗИЦИЙ
 local function getDynamicZone(speed)
     if speed <= CFG.MIN_SPEED then
         return CFG.MIN_ZONE
     elseif speed <= CFG.MID_SPEED then
-        -- Плавный переход от MIN к MID
         local alpha = (speed - CFG.MIN_SPEED) / (CFG.MID_SPEED - CFG.MIN_SPEED)
         return CFG.MIN_ZONE + (CFG.MID_ZONE - CFG.MIN_ZONE) * alpha
     elseif speed <= CFG.MAX_SPEED then
-        -- Плавный переход от MID к MAX
         local alpha = (speed - CFG.MID_SPEED) / (CFG.MAX_SPEED - CFG.MID_SPEED)
         return CFG.MID_ZONE + (CFG.MAX_ZONE - CFG.MID_ZONE) * alpha
     else
@@ -204,7 +229,7 @@ local function getDynamicZone(speed)
     end
 end
 
--- 7. ЦИКЛ
+-- 8. ЦИКЛ
 local lastBall = nil
 local prevPos = nil
 local currentDiameter = CFG.MIN_ZONE * 2
@@ -229,7 +254,8 @@ RunService.Heartbeat:Connect(function(dt)
         local dbg_ball = "NO"
         local dbg_dist = 0
         local dbg_speed = 0
-        local dbg_trigger = 0
+        local dbg_zone = 0
+        local dbg_target = "NO"
         local dbg_status = "Safe"
         local targetDiameter = CFG.MIN_ZONE * 2
         local targetColor = CFG.COLOR_OUTSIDE
@@ -251,38 +277,21 @@ RunService.Heartbeat:Connect(function(dt)
             end
 
             local speed = 0
-            local approachSpeed = 0
-            
             if prevPos and dt > 0 then
                 local moveVec = bp - prevPos
                 speed = moveVec.Magnitude / dt
-                
-                if speed > 1 then 
-                    local dirToMe = (hrpPos - bp).Unit
-                    local dot = moveVec.Unit:Dot(dirToMe)
-                    if dot > 0.5 then 
-                        approachSpeed = speed * dot
-                    end
-                end
             end
-            
             dbg_speed = speed
 
-            local isTargetingMe = false
-            local tVal = ball:GetAttribute("target")
+            -- СТРОГАЯ ПРОВЕРКА: Летит ли мяч ИМЕННО в нас?
+            local targetingMe = isBallTargetingMe(ball)
             
-            if tVal and (tostring(tVal):find(LocalPlayer.Name) or tVal == LocalPlayer) then 
-                isTargetingMe = true 
-            elseif approachSpeed > 5 or (speed > 10 and dist < 100) then
-                isTargetingMe = true 
-            end
-
-            if isTargetingMe then
-                -- ПОЛУЧАЕМ ЗОНУ ПО ТРЕМ ПОЗИЦИЯМ
-                local dynamicTriggerDist = getDynamicZone(speed)
-                dbg_trigger = dynamicTriggerDist
-
+            if targetingMe then
+                dbg_target = "ME"
                 dbg_status = "Incoming!"
+                
+                local dynamicTriggerDist = getDynamicZone(speed)
+                dbg_zone = dynamicTriggerDist
                 targetDiameter = dynamicTriggerDist * 2
                 
                 if dist <= dynamicTriggerDist then
@@ -292,6 +301,8 @@ RunService.Heartbeat:Connect(function(dt)
                         targetColor = CFG.COLOR_INSIDE
                     end
                 end
+            else
+                dbg_target = "OTHER"
             end
             prevPos = bp
         else
@@ -300,8 +311,8 @@ RunService.Heartbeat:Connect(function(dt)
             prevPos = nil
         end
 
-        debugText.Text = string.format("Ball: %s\nDist: %.1f\nSpeed: %.1f\nZone: %.1f\nArmed: %s\nStatus: %s\nMethod: %s", 
-            dbg_ball, dbg_dist, dbg_speed, dbg_trigger, tostring(isArmed), dbg_status, lastAction)
+        debugText.Text = string.format("Ball: %s\nDist: %.1f\nSpeed: %.1f\nTarget: %s\nZone: %.1f\nArmed: %s\nStatus: %s", 
+            dbg_ball, dbg_dist, dbg_speed, dbg_target, dbg_zone, tostring(isArmed), dbg_status)
 
         if CFG.SPHERE_VISIBLE then
             currentDiameter = currentDiameter + (targetDiameter - currentDiameter) * math.exp(-14 * dt)
