@@ -8,32 +8,33 @@
     ║   ██║     ██║  ██║██║  ██║██║  ██║   ██║       ██║     ╚██████╔╝          ║
     ║   ╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝       ╚═╝      ╚═════╝           ║
     ║                                                                           ║
-    ║   [ ULTIMATE PREMIUM EDITION | GLASS UI & PREDICTIVE PARRY ]              ║
-    ║   • 12 Themes (6 Dark / 6 Light)                                          ║
-    ║   • Anti-Close Combat Spam + Ping Prediction                              ║
-    ║   • Beautiful Debug HUD & Right-Ctrl Toggle                               ║
-    ║   • Profile Manager & Camera Lock                                         ║
+    ║   [ ULTIMATE PREMIUM EDITION | v14.0 ]                                    ║
     ║                                                                           ║
+    ║   • Glassmorphism UI (Стеклянный интерфейс)                               ║
+    ║   • 12 Premium Themes (6 Dark / 6 Light)                                  ║
+    ║   • Predictive Parry & Anti-Close Spam                                    ║
+    ║   • Camera Lock & Profile Manager                                         ║
+    ║   • Smart Debug HUD & Right Ctrl Toggle                                   ║
     ╚═══════════════════════════════════════════════════════════════════════════╝
 ]]
 
 -- ============================================================
--- [ 1. СЕРВИСЫ И ПЕРЕМЕННЫЕ ]
+-- [ 1. СЕРВИСЫ ]
 -- ============================================================
-local CoreGui = game:GetService("CoreGui")
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local Workspace = game:GetService("Workspace")
-local TweenService = game:GetService("TweenService")
-local UserInputService = game:GetService("UserInputService")
+local CoreGui           = game:GetService("CoreGui")
+local Players           = game:GetService("Players")
+local RunService        = game:GetService("RunService")
+local Workspace         = game:GetService("Workspace")
+local TweenService      = game:GetService("TweenService")
+local UserInputService  = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local HttpService = game:GetService("HttpService")
+local HttpService       = game:GetService("HttpService")
+local Lighting          = game:GetService("Lighting")
 local VirtualInputManager = game:GetService("VirtualInputManager")
-local Lighting = game:GetService("Lighting")
 
 local LocalPlayer = Players.LocalPlayer
-local PlayerGui = LocalPlayer:WaitForChild("PlayerGui", 10)
-local Camera = Workspace.CurrentCamera
+local PlayerGui   = LocalPlayer:WaitForChild("PlayerGui", 10)
+local Camera      = Workspace.CurrentCamera
 
 -- Очистка старых версий
 for _, v in ipairs(PlayerGui:GetChildren()) do
@@ -41,7 +42,74 @@ for _, v in ipairs(PlayerGui:GetChildren()) do
 end
 if Workspace:FindFirstChild("AuraVisual") then Workspace.AuraVisual:Destroy() end
 
--- Утилиты
+-- ============================================================
+-- [ 2. КОНФИГУРАЦИЯ И СОСТОЯНИЕ ]
+-- ============================================================
+local CONFIG = {
+    -- Логика парирования
+    CLOSE_DIST       = 45,     -- Дистанция "ближнего боя" (спам)
+    COOLDOWN         = 0,      -- 0 = без задержки (макс. скорость)
+    PING_SAFE        = 0.35,   -- Компенсация пинга (350мс)
+    PREDICT_TIME     = 0.15,   -- Предсказание позиции мяча (150мс)
+    
+    -- Визуал сферы
+    SPHERE_MIN       = 40,     -- Мин. диаметр сферы
+    SPHERE_MAX       = 90,     -- Макс. диаметр сферы
+    CORE_RATIO       = 0.23,   -- Размер ядра (23% от сферы)
+}
+
+local STATE = {
+    -- Флаги
+    Enabled = true,
+    ShowVisuals = true,
+    AntiLag = false,
+    HideInner = false,
+    StaticSphere = false,
+    NightModeSphere = false,
+    NightMap = false,
+    CameraLock = false,
+    
+    -- Визуал
+    OuterColor = Color3.fromRGB(0, 255, 50),
+    InnerColor = Color3.fromRGB(0, 255, 200),
+    
+    -- Логика
+    IsArmed = true,
+    LastParry = 0,
+    Ball = nil,
+    PrevBallPos = nil,
+    Frames = 0,
+    Remote = nil,
+    ParryMethod = "N/A"
+}
+
+-- ============================================================
+-- [ 3. ТЕМЫ ОФОРМЛЕНИЯ ]
+-- ============================================================
+local THEMES = {
+    -- ═══ 6 DARK THEMES ═══
+    ["Premium Dark"]   = { BG = Color3.fromRGB(15, 16, 20),  HEADER = Color3.fromRGB(22, 24, 30),  ACCENT = Color3.fromRGB(0, 200, 255), TEXT = Color3.fromRGB(240, 240, 240), OFF = Color3.fromRGB(40, 44, 52) },
+    ["Cyber Neon"]     = { BG = Color3.fromRGB(20, 5, 25),   HEADER = Color3.fromRGB(35, 10, 45),  ACCENT = Color3.fromRGB(255, 0, 200), TEXT = Color3.fromRGB(255, 200, 255), OFF = Color3.fromRGB(60, 20, 70) },
+    ["Crimson Void"]   = { BG = Color3.fromRGB(25, 5, 5),    HEADER = Color3.fromRGB(45, 10, 10),  ACCENT = Color3.fromRGB(255, 60, 60), TEXT = Color3.fromRGB(255, 200, 200), OFF = Color3.fromRGB(70, 15, 15) },
+    ["Dark Metal"]     = { BG = Color3.fromRGB(15, 16, 20),  HEADER = Color3.fromRGB(22, 24, 30),  ACCENT = Color3.fromRGB(180, 180, 190), TEXT = Color3.fromRGB(240, 240, 240), OFF = Color3.fromRGB(40, 44, 52) },
+    ["Obsidian Night"] = { BG = Color3.fromRGB(10, 10, 15),  HEADER = Color3.fromRGB(18, 18, 25),  ACCENT = Color3.fromRGB(150, 100, 255), TEXT = Color3.fromRGB(220, 210, 255), OFF = Color3.fromRGB(35, 30, 50) },
+    ["Midnight Ocean"] = { BG = Color3.fromRGB(5, 15, 30),   HEADER = Color3.fromRGB(10, 25, 45),  ACCENT = Color3.fromRGB(0, 255, 200), TEXT = Color3.fromRGB(200, 240, 255), OFF = Color3.fromRGB(20, 40, 60) },
+    
+    -- ═══ 6 LIGHT THEMES ═══
+    ["Light Emerald"]  = { BG = Color3.fromRGB(240, 245, 240), HEADER = Color3.fromRGB(220, 235, 220), ACCENT = Color3.fromRGB(0, 180, 100), TEXT = Color3.fromRGB(20, 40, 20), OFF = Color3.fromRGB(200, 215, 200) },
+    ["Pearl Elegance"] = { BG = Color3.fromRGB(250, 248, 245), HEADER = Color3.fromRGB(240, 235, 230), ACCENT = Color3.fromRGB(200, 150, 50), TEXT = Color3.fromRGB(40, 30, 20), OFF = Color3.fromRGB(220, 215, 210) },
+    ["Arctic Frost"]   = { BG = Color3.fromRGB(230, 245, 255), HEADER = Color3.fromRGB(210, 230, 255), ACCENT = Color3.fromRGB(50, 150, 255), TEXT = Color3.fromRGB(20, 40, 60), OFF = Color3.fromRGB(190, 210, 230) },
+    ["Sunset Blossom"] = { BG = Color3.fromRGB(255, 240, 245), HEADER = Color3.fromRGB(250, 225, 235), ACCENT = Color3.fromRGB(255, 100, 150), TEXT = Color3.fromRGB(60, 20, 30), OFF = Color3.fromRGB(230, 210, 220) },
+    ["Cloudy Silver"]  = { BG = Color3.fromRGB(245, 245, 250), HEADER = Color3.fromRGB(230, 230, 240), ACCENT = Color3.fromRGB(100, 100, 120), TEXT = Color3.fromRGB(30, 30, 40), OFF = Color3.fromRGB(210, 210, 220) },
+    ["Amber Glow"]     = { BG = Color3.fromRGB(255, 250, 235), HEADER = Color3.fromRGB(250, 240, 210), ACCENT = Color3.fromRGB(230, 150, 0), TEXT = Color3.fromRGB(50, 40, 10), OFF = Color3.fromRGB(225, 215, 195) }
+}
+
+local CurrentThemeName = "Premium Dark"
+local CurrentTheme     = THEMES[CurrentThemeName]
+
+-- ============================================================
+-- [ 4. УТИЛИТЫ ]
+-- ============================================================
 local function clamp(val, min, max)
     if val < min then return min end
     if val > max then return max end
@@ -49,46 +117,7 @@ local function clamp(val, min, max)
 end
 
 -- ============================================================
--- [ 2. НАСТРОЙКИ И ТЕМЫ ]
--- ============================================================
-local CONFIG = {
-    CLOSE_DIST = 45,
-    COOLDOWN = 0,
-    PING_SAFE = 0.35,
-    PREDICT_TIME = 0.15
-}
-
-local STATE = {
-    Enabled = true, ShowVisuals = true, AntiLag = false,
-    HideInner = false, StaticSphere = false, NightModeSphere = false, NightMap = false,
-    CameraLock = false,
-    OuterColor = Color3.fromRGB(0, 255, 50), InnerColor = Color3.fromRGB(0, 255, 200),
-    IsArmed = true, LastParry = 0, Ball = nil, PrevBallPos = nil, Frames = 0, Remote = nil,
-    ParryMethod = "N/A"
-}
-
-local THEMES = {
-    -- 6 DARK
-    ["Premium Dark"]  = { BG = Color3.fromRGB(15, 16, 20), HEADER = Color3.fromRGB(22, 24, 30), ACCENT = Color3.fromRGB(0, 200, 255), TEXT = Color3.fromRGB(240, 240, 240), OFF = Color3.fromRGB(40, 44, 52) },
-    ["Cyber Neon"]    = { BG = Color3.fromRGB(20, 5, 25), HEADER = Color3.fromRGB(35, 10, 45), ACCENT = Color3.fromRGB(255, 0, 200), TEXT = Color3.fromRGB(255, 200, 255), OFF = Color3.fromRGB(60, 20, 70) },
-    ["Crimson Void"]  = { BG = Color3.fromRGB(25, 5, 5), HEADER = Color3.fromRGB(45, 10, 10), ACCENT = Color3.fromRGB(255, 60, 60), TEXT = Color3.fromRGB(255, 200, 200), OFF = Color3.fromRGB(70, 15, 15) },
-    ["Dark Metal"]    = { BG = Color3.fromRGB(15, 16, 20), HEADER = Color3.fromRGB(22, 24, 30), ACCENT = Color3.fromRGB(180, 180, 190), TEXT = Color3.fromRGB(240, 240, 240), OFF = Color3.fromRGB(40, 44, 52) },
-    ["Obsidian Night"]= { BG = Color3.fromRGB(10, 10, 15), HEADER = Color3.fromRGB(18, 18, 25), ACCENT = Color3.fromRGB(150, 100, 255), TEXT = Color3.fromRGB(220, 210, 255), OFF = Color3.fromRGB(35, 30, 50) },
-    ["Midnight Ocean"]= { BG = Color3.fromRGB(5, 15, 30), HEADER = Color3.fromRGB(10, 25, 45), ACCENT = Color3.fromRGB(0, 255, 200), TEXT = Color3.fromRGB(200, 240, 255), OFF = Color3.fromRGB(20, 40, 60) },
-    -- 6 LIGHT
-    ["Light Emerald"] = { BG = Color3.fromRGB(240, 245, 240), HEADER = Color3.fromRGB(220, 235, 220), ACCENT = Color3.fromRGB(0, 180, 100), TEXT = Color3.fromRGB(20, 40, 20), OFF = Color3.fromRGB(200, 215, 200) },
-    ["Pearl Elegance"]= { BG = Color3.fromRGB(250, 248, 245), HEADER = Color3.fromRGB(240, 235, 230), ACCENT = Color3.fromRGB(200, 150, 50), TEXT = Color3.fromRGB(40, 30, 20), OFF = Color3.fromRGB(220, 215, 210) },
-    ["Arctic Frost"]  = { BG = Color3.fromRGB(230, 245, 255), HEADER = Color3.fromRGB(210, 230, 255), ACCENT = Color3.fromRGB(50, 150, 255), TEXT = Color3.fromRGB(20, 40, 60), OFF = Color3.fromRGB(190, 210, 230) },
-    ["Sunset Blossom"]= { BG = Color3.fromRGB(255, 240, 245), HEADER = Color3.fromRGB(250, 225, 235), ACCENT = Color3.fromRGB(255, 100, 150), TEXT = Color3.fromRGB(60, 20, 30), OFF = Color3.fromRGB(230, 210, 220) },
-    ["Cloudy Silver"] = { BG = Color3.fromRGB(245, 245, 250), HEADER = Color3.fromRGB(230, 230, 240), ACCENT = Color3.fromRGB(100, 100, 120), TEXT = Color3.fromRGB(30, 30, 40), OFF = Color3.fromRGB(210, 210, 220) },
-    ["Amber Glow"]    = { BG = Color3.fromRGB(255, 250, 235), HEADER = Color3.fromRGB(250, 240, 210), ACCENT = Color3.fromRGB(230, 150, 0), TEXT = Color3.fromRGB(50, 40, 10), OFF = Color3.fromRGB(225, 215, 195) }
-}
-
-local CurrentThemeName = "Premium Dark"
-local CurrentTheme = THEMES[CurrentThemeName]
-
--- ============================================================
--- [ 3. ЭКРАН ЗАГРУЗКИ (LOADER) ]
+-- [ 5. КРАСИВЫЙ ЭКРАН ЗАГРУЗКИ ]
 -- ============================================================
 local function ShowLoader()
     local LoaderGui = Instance.new("ScreenGui")
@@ -138,10 +167,10 @@ local function ShowLoader()
 
     task.spawn(function()
         local steps = {
-            {text = "Загрузка модулей...", time = 0.4},
+            {text = "Загрузка модулей...",   time = 0.4},
             {text = "Поиск скрытых событий...", time = 0.6},
             {text = "Применение конфигурации...", time = 0.4},
-            {text = "Готово!", time = 0.3}
+            {text = "Готово!",               time = 0.3}
         }
         for i, step in ipairs(steps) do
             StatusText.Text = step.text
@@ -166,12 +195,13 @@ end
 ShowLoader()
 
 -- ============================================================
--- [ 4. ПОИСК REMOTE И КНОПКИ ]
+-- [ 6. ПОИСК REMOTE И КНОПКИ ]
 -- ============================================================
 task.spawn(function()
     for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
         if obj:IsA("RemoteEvent") and (obj.Name:lower():find("parry") or obj.Name:lower():find("block") or obj.Name:lower():find("attempt")) then
-            STATE.Remote = obj; break
+            STATE.Remote = obj
+            break
         end
     end
 end)
@@ -189,7 +219,7 @@ local function FindBlockButton()
 end
 
 -- ============================================================
--- [ 5. 3D СФЕРА (ВИЗУАЛ) ]
+-- [ 7. 3D СФЕРА (КУПОЛ + ЯДРО) ]
 -- ============================================================
 local OuterSphere = Instance.new("Part")
 OuterSphere.Name = "AuraVisual"
@@ -213,11 +243,11 @@ InnerSphere.CastShadow = false
 InnerSphere.Material = Enum.Material.Neon
 InnerSphere.Color = STATE.InnerColor
 InnerSphere.Transparency = 0.7
-InnerSphere.Size = Vector3.new(11.5, 11.5, 11.5) -- Увеличенное ядро
+InnerSphere.Size = Vector3.new(9.2, 9.2, 9.2) -- 40 * 0.23 = 9.2
 InnerSphere.Parent = OuterSphere
 
 -- ============================================================
--- [ 6. НОЧЬ НА КАРТЕ ]
+-- [ 8. НОЧЬ НА КАРТЕ ]
 -- ============================================================
 local originalLighting = {}
 local createdAtmosphere = nil
@@ -253,7 +283,7 @@ local function SetNightMap(enabled)
 end
 
 -- ============================================================
--- [ 7. UI ФРЕЙМВОРК (GLASS STYLE) ]
+-- [ 9. UI ФРЕЙМВОРК ]
 -- ============================================================
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "BB_UI"
@@ -270,7 +300,7 @@ ClickSound.Volume = 0.3
 ClickSound.Parent = ScreenGui
 local function PlayClick() pcall(function() ClickSound:Play() end) end
 
--- Кнопка открытия
+-- ─── Кнопка вызова ───────────────────────────────────────
 local ToggleBtn = Instance.new("TextButton")
 ToggleBtn.Size = UDim2.new(0, 45, 0, 45)
 ToggleBtn.Position = UDim2.new(1, -60, 0.5, -22)
@@ -287,7 +317,7 @@ BtnStroke.Color = CurrentTheme.ACCENT
 BtnStroke.Thickness = 1.5
 BtnStroke.Transparency = 0.2
 
--- Главное окно
+-- ─── Главное окно ────────────────────────────────────────
 local Window = Instance.new("Frame")
 Window.Size = UDim2.new(0, 320, 0, 500)
 Window.Position = UDim2.new(0.5, -160, 0.5, -250)
@@ -301,7 +331,7 @@ WinStroke.Color = CurrentTheme.ACCENT
 WinStroke.Thickness = 1.5
 WinStroke.Transparency = 0.4
 
--- Шапка
+-- ─── Шапка ───────────────────────────────────────────────
 local Header = Instance.new("Frame")
 Header.Size = UDim2.new(1, 0, 0, 60)
 Header.BackgroundColor3 = CurrentTheme.HEADER
@@ -330,7 +360,7 @@ CloseBtn.Font = Enum.Font.GothamBold
 CloseBtn.Parent = Header
 Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(0, 6)
 
--- Вкладки
+-- ─── Вкладки ────────────────────────────────────────────
 local TabContainer = Instance.new("Frame")
 TabContainer.Size = UDim2.new(1, -20, 0, 35)
 TabContainer.Position = UDim2.new(0, 10, 0, 70)
@@ -349,7 +379,7 @@ Pages.BackgroundTransparency = 1
 Pages.Parent = Window
 
 -- ============================================================
--- [ 8. КОМПОНЕНТЫ UI ]
+-- [ 10. UI КОМПОНЕНТЫ ]
 -- ============================================================
 local PagesList, TabsList = {}, {}
 
@@ -464,7 +494,7 @@ local function CreateButton(parent, yPos, text, callback, color)
 end
 
 -- ============================================================
--- [ 9. СТРАНИЦЫ МЕНЮ ]
+-- [ 11. СТРАНИЦЫ МЕНЮ ]
 -- ============================================================
 local MainPage = CreateTab("MAIN", "🎯")
 CreateToggle(MainPage, 0, "Auto Parry (Master)", "Enabled")
@@ -553,7 +583,7 @@ for name, data in pairs(THEMES) do
 end
 
 -- ============================================================
--- [ 10. СИСТЕМА ПРОФИЛЕЙ ]
+-- [ 12. СИСТЕМА ПРОФИЛЕЙ ]
 -- ============================================================
 local OtherPage = CreateTab("OTHER", "⚙️")
 local PROFILE_FOLDER = "BB_Profiles"
@@ -714,7 +744,7 @@ task.spawn(function()
 end)
 
 -- ============================================================
--- [ 11. КРАСИВАЯ ПАНЕЛЬ ОТЛАДКИ ]
+-- [ 13. КРАСИВАЯ ПАНЕЛЬ ОТЛАДКИ ]
 -- ============================================================
 local DebugGui = Instance.new("ScreenGui")
 DebugGui.Name = "BB_Debug"
@@ -792,7 +822,7 @@ for _, row in ipairs(rowData) do
 end
 
 -- ============================================================
--- [ 12. ПРИМЕНЕНИЕ ТЕМЫ ]
+-- [ 14. ПРИМЕНЕНИЕ ТЕМЫ ]
 -- ============================================================
 ApplyTheme = function()
     Window.BackgroundColor3 = CurrentTheme.BG
@@ -830,7 +860,7 @@ TabsList[1].Btn.BackgroundColor3 = CurrentTheme.ACCENT
 TabsList[1].Btn.TextColor3 = CurrentTheme.BG
 
 -- ============================================================
--- [ 13. ПЕРЕТАСКИВАНИЕ И УПРАВЛЕНИЕ ]
+-- [ 15. ПЕРЕТАСКИВАНИЕ И УПРАВЛЕНИЕ ]
 -- ============================================================
 local dragging, dragStart, startPos = false, nil, nil
 Header.InputBegan:Connect(function(input)
@@ -870,7 +900,7 @@ UserInputService.InputBegan:Connect(function(input, gpe)
 end)
 
 -- ============================================================
--- [ 14. ЛОГИКА ПАРИРОВАНИЯ ]
+-- [ 16. ЛОГИКА ПАРИРОВАНИЯ ]
 -- ============================================================
 local function TriggerParry()
     local now = tick()
@@ -935,6 +965,7 @@ end
 
 local PulseTime = 0
 
+-- Лок камеры (RenderStepped)
 RunService.RenderStepped:Connect(function()
     if STATE.CameraLock and STATE.Ball and STATE.Ball.Parent then
         Camera.CameraType = Enum.CameraType.Scriptable
@@ -942,6 +973,7 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
+-- Главный цикл (Heartbeat)
 RunService.Heartbeat:Connect(function(dt)
     pcall(function()
         STATE.Frames = STATE.Frames + 1
@@ -1020,10 +1052,11 @@ RunService.Heartbeat:Connect(function(dt)
             STATE.PrevBallPos = nil
         end
 
+        -- Визуал сферы (макс. 90)
         if render and STATE.ShowVisuals and OuterSphere and InnerSphere then
             PulseTime = PulseTime + (dt * 2.5)
             
-            local targetSize = math.max(dist * 1.5, 40)
+            local targetSize = clamp(math.max(dist * 1.5, CONFIG.SPHERE_MIN), CONFIG.SPHERE_MIN, CONFIG.SPHERE_MAX)
             local currentSize = OuterSphere.Size.X
             local newSize = currentSize + (targetSize - currentSize) * math.exp(-10 * dt)
             local finalSize = STATE.StaticSphere and newSize or (newSize * (1 + math.sin(PulseTime) * 0.02))
@@ -1044,19 +1077,20 @@ RunService.Heartbeat:Connect(function(dt)
                 InnerSphere.Transparency = STATE.HideInner and 1 or 0.7
             end
 
-            OuterSphere.Color = OuterSphere.Color:Lerp(targetColor, math.clamp(10 * dt, 0, 1))
+            OuterSphere.Color = OuterSphere.Color:Lerp(targetColor, clamp(10 * dt, 0, 1))
             
             if targetColor == Color3.fromRGB(255, 50, 50) then
-                InnerSphere.Color = InnerSphere.Color:Lerp(Color3.fromRGB(255, 50, 50), math.clamp(10 * dt, 0, 1))
+                InnerSphere.Color = InnerSphere.Color:Lerp(Color3.fromRGB(255, 50, 50), clamp(10 * dt, 0, 1))
             else
                 local finalInner = STATE.NightModeSphere and Color3.fromRGB(255, 0, 255) or STATE.InnerColor
-                InnerSphere.Color = InnerSphere.Color:Lerp(finalInner, math.clamp(10 * dt, 0, 1))
+                InnerSphere.Color = InnerSphere.Color:Lerp(finalInner, clamp(10 * dt, 0, 1))
             end
             
             InnerSphere.CFrame = OuterSphere.CFrame * CFrame.Angles(PulseTime, PulseTime, 0)
-            InnerSphere.Size = Vector3.new(finalSize * 0.23, finalSize * 0.23, finalSize * 0.23)
+            InnerSphere.Size = Vector3.new(finalSize * CONFIG.CORE_RATIO, finalSize * CONFIG.CORE_RATIO, finalSize * CONFIG.CORE_RATIO)
         end
 
+        -- Обновление панели отладки
         if debugLabels then
             if debugLabels["Status"] then
                 debugLabels["Status"].Text = status
@@ -1068,26 +1102,19 @@ RunService.Heartbeat:Connect(function(dt)
                     debugLabels["Status"].TextColor3 = Color3.fromRGB(0, 255, 100)
                 end
             end
-            if debugLabels["Speed"] then
-                debugLabels["Speed"].Text = string.format("%.0f", speed)
-            end
-            if debugLabels["Time"] then
-                debugLabels["Time"].Text = (timeToImpact > 900 and "N/A" or string.format("%.2fs", timeToImpact))
-            end
-            if debugLabels["Distance"] then
-                debugLabels["Distance"].Text = string.format("%.1f", dist)
-            end
-            if debugLabels["Armed"] then
+            if debugLabels["Speed"]    then debugLabels["Speed"].Text    = string.format("%.0f", speed) end
+            if debugLabels["Time"]     then debugLabels["Time"].Text     = (timeToImpact > 900 and "N/A" or string.format("%.2fs", timeToImpact)) end
+            if debugLabels["Distance"] then debugLabels["Distance"].Text = string.format("%.1f", dist) end
+            if debugLabels["Armed"]    then 
                 debugLabels["Armed"].Text = tostring(STATE.IsArmed)
                 debugLabels["Armed"].TextColor3 = STATE.IsArmed and Color3.fromRGB(0, 255, 100) or Color3.fromRGB(255, 150, 150)
             end
-            if debugLabels["Parry"] then
-                debugLabels["Parry"].Text = STATE.ParryMethod or "N/A"
-            end
+            if debugLabels["Parry"]    then debugLabels["Parry"].Text    = STATE.ParryMethod or "N/A" end
         end
     end)
 end)
 
+-- Сброс при респавне
 LocalPlayer.CharacterAdded:Connect(function()
     STATE.IsArmed = true
     STATE.PrevBallPos = nil
@@ -1098,4 +1125,4 @@ LocalPlayer.CharacterAdded:Connect(function()
     end
 end)
 
-print(">>> [BB] ULTIMATE PREMIUM EDITION LOADED SUCCESSFULLY!")
+print(">>> [BB] ULTIMATE PREMIUM EDITION v14.0 LOADED SUCCESSFULLY!")
