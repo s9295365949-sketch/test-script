@@ -1,12 +1,12 @@
 --[[
     ╔═══════════════════════════════════════════════════════════════════════╗
-    ║   BLADE BALL — DEBUG EDITION (UI FIXED)                               ║
-    ║   • Экранный отладчик опущен ниже панели Roblox                       ║
-    ║   • Парирование через Remote, Кнопку или F (каскадный fallback)       ║
+    ║   BLADE BALL — ULTIMATE DEBUG (MENU BOTTOM RIGHT)                     ║
+    ║   • Меню в правом нижнем углу                                         ║
+    ║   • 4 способа нажатия парирования (чтобы пробить античит)             ║
     ╚═══════════════════════════════════════════════════════════════════════╝
 ]]
 
-print("⏳ [BB] Запуск скрипта...")
+print("⏳ [BB] Запуск...")
 
 local CFG = {
     MIN_PARRY_DIAMETER  = 60,
@@ -111,7 +111,7 @@ Workspace.ChildAdded:Connect(function(o)
 end)
 Workspace.ChildRemoved:Connect(function(o) if o == cachedBall then cachedBall = nil end end)
 
--- Парирование
+-- ПАРИРОВАНИЕ (4 СПОСОБА)
 local lastParry = 0
 local burstActive = false
 local lastAction = "None"
@@ -122,47 +122,54 @@ local function executeParry()
     task.spawn(function()
         task.wait(CFG.HUMAN_DELAY_MIN + math.random() * (CFG.HUMAN_DELAY_MAX - CFG.HUMAN_DELAY_MIN))
         
-        local parried = false
+        local worked = false
         
-        -- Способ 1: Remote
-        if parryRemote then
-            pcall(function() parryRemote:FireServer() end)
-            lastAction = "Remote"
-            parried = true
-        end
-        
-        -- Способ 2: Кнопка (Тап)
-        if not parried then
-            if not cachedButton or not cachedButton.Parent then cachedButton = findParryButton() end
-            if cachedButton then
-                local pos = cachedButton.AbsolutePosition
-                local size = cachedButton.AbsoluteSize
-                pcall(function()
-                    VirtualInputManager:SendMouseButtonEvent(pos.X + size.X/2, pos.Y + size.Y/2, 0, true, game, 0)
-                    task.wait(0.05)
-                    VirtualInputManager:SendMouseButtonEvent(pos.X + size.X/2, pos.Y + size.Y/2, 0, false, game, 0)
-                end)
-                lastAction = "Button Tap"
-                parried = true
+        -- 1. Executor Keypress (Самый мощный метод)
+        pcall(function()
+            if keypress and keyrelease then
+                keypress(0x46) -- F
+                task.wait(0.02)
+                keyrelease(0x46)
+                worked = true
             end
-        end
-        
-        -- Способ 3: Клавиша F (PC fallback)
-        if not parried then
+        end)
+
+        -- 2. Кнопка на экране (Тап пальцем/мышкой)
+        if not cachedButton or not cachedButton.Parent then cachedButton = findParryButton() end
+        if cachedButton then
+            local pos = cachedButton.AbsolutePosition
+            local size = cachedButton.AbsoluteSize
             pcall(function()
-                VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.F, false, game)
-                task.wait(0.05)
-                VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.F, false, game)
+                VirtualInputManager:SendMouseButtonEvent(pos.X + size.X/2, pos.Y + size.Y/2, 0, true, game, 0)
+                task.wait(0.02)
+                VirtualInputManager:SendMouseButtonEvent(pos.X + size.X/2, pos.Y + size.Y/2, 0, false, game, 0)
+                worked = true
             end)
-            lastAction = "Key F"
         end
-        
+
+        -- 3. VirtualInputManager (F)
+        pcall(function()
+            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.F, false, game)
+            task.wait(0.02)
+            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.F, false, game)
+            worked = true
+        end)
+
+        -- 4. RemoteEvent
+        if parryRemote then
+            pcall(function()
+                parryRemote:FireServer()
+                worked = true
+            end)
+        end
+
+        lastAction = worked and "Fired All" or "Failed"
         task.wait(0.1)
         burstActive = false
     end)
 end
 
--- Экранный Отладчик (Опущен ниже панели Roblox)
+-- Экранный Отладчик (Слева сверху, чтобы не мешать меню)
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "BBDebug"
 screenGui.ResetOnSpawn = false
@@ -170,9 +177,8 @@ screenGui.IgnoreGuiInset = true
 screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
 
 local debugText = Instance.new("TextLabel")
-debugText.Size = UDim2.new(0, 250, 0, 100)
--- ИЗМЕНЕНИЕ ЗДЕСЬ: Y = 60 вместо 10
-debugText.Position = UDim2.new(0, 10, 0, 60) 
+debugText.Size = UDim2.new(0, 220, 0, 90)
+debugText.Position = UDim2.new(0, 10, 0, 60) -- Опущено ниже кнопок Roblox
 debugText.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 debugText.BackgroundTransparency = 0.5
 debugText.TextColor3 = Color3.fromRGB(0, 255, 0)
@@ -182,6 +188,79 @@ debugText.TextXAlignment = Enum.TextXAlignment.Left
 debugText.TextYAlignment = Enum.TextYAlignment.Top
 debugText.Text = "Загрузка..."
 debugText.Parent = screenGui
+
+-- МЕНЮ (ПРАВЫЙ НИЖНИЙ УГОЛ)
+local mainMenuGui = Instance.new("ScreenGui")
+mainMenuGui.Name = "BBMenu"
+mainMenuGui.ResetOnSpawn = false
+mainMenuGui.IgnoreGuiInset = true
+mainMenuGui.DisplayOrder = 9999
+mainMenuGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+local menuBtn = Instance.new("TextButton")
+menuBtn.Size = UDim2.new(0, 60, 0, 60)
+-- ПОЗИЦИЯ: Правый нижний угол (отступ 20 пикселей от краев)
+menuBtn.Position = UDim2.new(1, -80, 1, -80) 
+menuBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+menuBtn.Text = "MENU"
+menuBtn.TextSize = 14
+menuBtn.Font = Enum.Font.GothamBold
+menuBtn.TextColor3 = Color3.new(1,1,1)
+menuBtn.BorderSizePixel = 0
+menuBtn.Parent = mainMenuGui
+Instance.new("UICorner", menuBtn).CornerRadius = UDim.new(1, 0)
+
+local menuFrame = Instance.new("Frame")
+menuFrame.Size = UDim2.new(0, 280, 0, 400)
+-- ПОЗИЦИЯ: Чуть выше кнопки меню
+menuFrame.Position = UDim2.new(1, -300, 1, -500)
+menuFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+menuFrame.Visible = false
+menuFrame.Parent = mainMenuGui
+Instance.new("UICorner", menuFrame).CornerRadius = UDim.new(0, 10)
+
+local menuTitle = Instance.new("TextLabel")
+menuTitle.Size = UDim2.new(1, 0, 0, 40)
+menuTitle.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+menuTitle.Text = "Настройки"
+menuTitle.TextColor3 = Color3.new(1,1,1)
+menuTitle.Font = Enum.Font.GothamBold
+menuTitle.Parent = menuFrame
+Instance.new("UICorner", menuTitle).CornerRadius = UDim.new(0, 10)
+
+local closeMenu = Instance.new("TextButton")
+closeMenu.Size = UDim2.new(0, 30, 0, 30)
+closeMenu.Position = UDim2.new(1, -35, 0, 5)
+closeMenu.BackgroundColor3 = Color3.fromRGB(200, 60, 60)
+closeMenu.Text = "X"
+closeMenu.TextColor3 = Color3.new(1,1,1)
+closeMenu.Font = Enum.Font.GothamBold
+closeMenu.Parent = menuFrame
+Instance.new("UICorner", closeMenu).CornerRadius = UDim.new(0, 6)
+
+-- Тумблер парирования
+local parryToggle = Instance.new("TextButton")
+parryToggle.Size = UDim2.new(1, -20, 0, 40)
+parryToggle.Position = UDim2.new(0, 10, 0, 60)
+parryToggle.BackgroundColor3 = Color3.fromRGB(60, 180, 100)
+parryToggle.Text = "Парирование: ВКЛ"
+parryToggle.TextColor3 = Color3.new(1,1,1)
+parryToggle.Font = Enum.Font.GothamBold
+parryToggle.Parent = menuFrame
+Instance.new("UICorner", parryToggle).CornerRadius = UDim.new(0, 6)
+
+parryToggle.MouseButton1Click:Connect(function()
+    CFG.PARRY_ENABLED = not CFG.PARRY_ENABLED
+    parryToggle.Text = "Парирование: " .. (CFG.PARRY_ENABLED and "ВКЛ" or "ВЫКЛ")
+    parryToggle.BackgroundColor3 = CFG.PARRY_ENABLED and Color3.fromRGB(60, 180, 100) or Color3.fromRGB(180, 60, 60)
+end)
+
+menuBtn.MouseButton1Click:Connect(function()
+    menuFrame.Visible = not menuFrame.Visible
+end)
+closeMenu.MouseButton1Click:Connect(function()
+    menuFrame.Visible = false
+end)
 
 -- Главный цикл
 local state = { diameter = CFG.MAX_RADIUS * 2, transparency = CFG.FAR_TRANSPARENCY, color = CFG.COLOR_OUTSIDE, lastFlash = 0, phase = 0 }
@@ -198,7 +277,6 @@ RunService.Heartbeat:Connect(function(dt)
     local ball = cachedBall
 
     local tgtDiameter = CFG.MAX_RADIUS * 2
-    local tgtTransparency = CFG.FAR_TRANSPARENCY
     local tgtColor = CFG.COLOR_OUTSIDE
     local doParry = false
     
@@ -218,7 +296,6 @@ RunService.Heartbeat:Connect(function(dt)
 
         local currentParryRadius = CFG.MIN_PARRY_DIAMETER / 2
 
-        -- Проверка: летит ли мяч в нас?
         local tVal = ball:GetAttribute("target") or ball:GetAttribute("Target")
         if tVal and (tVal == LocalPlayer.Name or tostring(tVal) == LocalPlayer.Name) then 
             dbg_target = "ATTR"
@@ -235,7 +312,6 @@ RunService.Heartbeat:Connect(function(dt)
             local targetRadius = math.clamp(dist, currentParryRadius, CFG.MAX_RADIUS)
             tgtDiameter = targetRadius * 2
             tgtColor = (dist <= currentParryRadius) and CFG.COLOR_INSIDE or CFG.COLOR_OUTSIDE
-            tgtTransparency = CFG.NEAR_TRANSPARENCY
 
             if dist <= currentParryRadius then 
                 if tick() - lastParry >= CFG.PARRY_COOLDOWN then
@@ -247,11 +323,9 @@ RunService.Heartbeat:Connect(function(dt)
         end
     end
 
-    -- Обновляем текст отладчика
     debugText.Text = string.format("Ball: %s\nDist: %.1f\nTarget: %s\nMethod: %s", 
         dbg_ball, dbg_dist, dbg_target, lastAction)
 
-    -- Визуал
     state.diameter = damp(state.diameter, tgtDiameter, CFG.DAMP_LAMBDA, dt)
     state.color = state.color:Lerp(tgtColor, clamp01(CFG.DAMP_LAMBDA * dt))
     state.phase = state.phase + dt * CFG.PULSE_SPEED
