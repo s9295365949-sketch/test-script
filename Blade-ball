@@ -1,93 +1,99 @@
 --[[
-    ╔═══════════════════════════════════════════════════════════════════════╗
-    ║   ██████╗  █████╗ ██████╗ ██████╗ ██╗   ██╗    ██████╗ ██████╗        ║
-    ║   ██╔══██╗██╔══██╗██╔══██╗██╔══██╗╚██╗ ██╔╝    ██╔══██╗██╔══██╗       ║
-    ║   ██████╔╝███████║██████╔╝██████╔╝ ╚████╔╝     ██████╔╝██████╔╝       ║
-    ║   ██╔═══╝ ██╔══██║██╔══██╗██╔══██╗  ╚██╔╝      ██╔══██╗██╔══██╗       ║
-    ║   ██║     ██║  ██║██║  ██║██║  ██║   ██║       ██████╔╝██████╔╝       ║
-    ║   ╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝       ╚═════╝ ╚═════╝        ║
-    ║                                                                       ║
-    ║   PREMIUM EDITION | 3-TIER SPEED ZONE | STRICT TARGETING              ║
-    ║   ─────────────────────────────────────────────────────────────       ║
-    ║   • Не парирует мячи, летящие в других игроков                        ║
-    ║   • Адаптивная зона (Медленно / Средне / Быстро)                      ║
-    ║   • Плавная 3D-сфера с эффектом дыхания                               ║
-    ╚═══════════════════════════════════════════════════════════════════════╝
+    ╔═══════════════════════════════════════════════════════════════════════════╗
+    ║                                                                           ║
+    ║   ██████╗  █████╗ ██████╗ ██████╗ ██╗   ██╗    ███████╗██████╗ ██████╗     ║
+    ║   ██╔══██╗██╔══██╗██╔══██╗██╔══██╗╚██╗ ██╔╝    ██╔════╝██╔══██╗██╔══██╗    ║
+    ║   ██████╔╝███████║██████╔╝██████╔╝ ╚████╔╝     █████╗  ██████╔╝██████╔╝    ║
+    ║   ██╔═══╝ ██╔══██║██╔══██╗██╔══██╗  ╚██╔╝      ██╔══╝  ██╔══██╗██╔══██╗    ║
+    ║   ██║     ██║  ██║██║  ██║██║  ██║   ██║       ██║     ██║  ██║██║  ██║    ║
+    ║   ╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝       ╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝    ║
+    ║                                                                           ║
+    ║   [ ULTIMATE EDITION ]                                                    ║
+    ║   • Modern UI (Tabs, Toggles, Smooth Animations)                          ║
+    ║   • 3-Tier Dynamic Zone System                                            ║
+    ║   • Strict Target Detection (Ignore others)                               ║
+    ║   • Anti-Lag Optimization & Click Sounds                                  ║
+    ║                                                                           ║
+    ╚═══════════════════════════════════════════════════════════════════════════╝
 ]]
 
 -- ============================================================
--- [1] НАСТРОЙКИ (CONFIG)
+-- [ CONFIGURATION ]
 -- ============================================================
-local CFG = {
-    -- Адаптивная зона парирования (Скорость -> Дистанция)
+local CONFIG = {
     ZONE = {
-        MIN_SPEED  = 50,   MIN_DIST  = 20,   -- Медленный мяч
-        MID_SPEED  = 125,  MID_DIST  = 45,   -- Средний мяч (Новая зона)
-        MAX_SPEED  = 200,  MAX_DIST  = 80,   -- Быстрый мяч
+        MIN_SPEED  = 50,   MIN_DIST  = 20,   -- Медленный
+        MID_SPEED  = 125,  MID_DIST  = 45,   -- Средний
+        MAX_SPEED  = 200,  MAX_DIST  = 80,   -- Быстрый
     },
     
-    -- Визуал
-    UI_THEME = {
-        BG         = Color3.fromRGB(15, 15, 20),
-        ACCENT     = Color3.fromRGB(0, 255, 180),
-        TEXT       = Color3.fromRGB(240, 240, 240),
-        OFF        = Color3.fromRGB(50, 50, 60),
+    VISUALS = {
+        SAFE_COLOR   = Color3.fromRGB(0, 255, 100),    -- Зеленый (Safe)
+        DANGER_COLOR = Color3.fromRGB(255, 30, 30),    -- Красный (Danger)
+        Y_OFFSET     = -0.5,
+        PULSE_SPEED  = 3,
     },
     
-    SPHERE_COLOR_SAFE  = Color3.fromRGB(0, 255, 180),  -- Бирюзовый (безопасно)
-    SPHERE_COLOR_THREAT= Color3.fromRGB(255, 50, 50),  -- Красный (опасность)
-    SPHERE_Y_OFFSET    = -0.5,
-    
-    -- Системные
-    PARRY_COOLDOWN = 0.25,
-    DEBUG_MODE     = true,
+    SYSTEM = {
+        PARRY_COOLDOWN = 0.25,
+        CLICK_SOUND    = "rbxassetid://6895079853",
+    }
 }
 
+-- Темы оформления
+local THEMES = {
+    Dark   = { BG = Color3.fromRGB(18, 20, 26), ACCENT = Color3.fromRGB(0, 200, 255), TEXT = Color3.fromRGB(200, 200, 200), OFF = Color3.fromRGB(40, 44, 52) },
+    Cyber  = { BG = Color3.fromRGB(25, 10, 30), ACCENT = Color3.fromRGB(255, 0, 200), TEXT = Color3.fromRGB(255, 200, 255), OFF = Color3.fromRGB(60, 20, 70) },
+    Nature = { BG = Color3.fromRGB(15, 25, 15), ACCENT = Color3.fromRGB(50, 255, 100), TEXT = Color3.fromRGB(200, 255, 200), OFF = Color3.fromRGB(30, 50, 30) },
+}
+local CurrentTheme = THEMES.Dark
+
 -- ============================================================
--- [2] СЕРВИСЫ И ПЕРЕМЕННЫЕ
+-- [ SERVICES & STATE ]
 -- ============================================================
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
-local VirtualInputManager = game:GetService("VirtualInputManager")
 local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
 
 local LP = Players.LocalPlayer
-local PlayerGui = LP:WaitForChild("PlayerGui")
+local PGui = LP:WaitForChild("PlayerGui")
 
--- Очистка старых версий
-for _, name in ipairs({"BB_Premium", "BB_Visual", "BB_Debug"}) do
-    local old = PlayerGui:FindFirstChild(name)
-    if old then old:Destroy() end
+-- Очистка
+for _, v in ipairs(PGui:GetChildren()) do
+    if v.Name:match("^BB_") then v:Destroy() end
 end
 if Workspace:FindFirstChild("AuraVisual") then Workspace.AuraVisual:Destroy() end
 
-local State = {
+local STATE = {
     Enabled = true,
-    ShowSphere = true,
+    ShowVisuals = true,
+    AntiLag = false,
     IsArmed = true,
     LastParry = 0,
-    CurrentBall = nil,
+    Ball = nil,
     PrevBallPos = nil,
+    Frames = 0
 }
 
 -- ============================================================
--- [3] 3D ВИЗУАЛ (КРАСИВАЯ СФЕРА)
+-- [ VISUALS (3D SPHERES) ]
 -- ============================================================
-local Sphere = Instance.new("Part")
-Sphere.Name = "AuraVisual"
-Sphere.Shape = Enum.PartType.Ball
-Sphere.Anchored = true
-Sphere.CanCollide = false
-Sphere.CanQuery = false
-Sphere.CastShadow = false
-Sphere.Material = Enum.Material.ForceField
-Sphere.Color = CFG.SPHERE_COLOR_SAFE
-Sphere.Transparency = 0.8
-Sphere.Size = Vector3.new(40, 40, 40)
-Sphere.Parent = Workspace
+local OuterSphere = Instance.new("Part")
+OuterSphere.Name = "AuraVisual"
+OuterSphere.Shape = Enum.PartType.Ball
+OuterSphere.Anchored = true
+OuterSphere.CanCollide = false
+OuterSphere.CanQuery = false
+OuterSphere.CastShadow = false
+OuterSphere.Material = Enum.Material.ForceField
+OuterSphere.Color = CONFIG.VISUALS.SAFE_COLOR
+OuterSphere.Transparency = 0.7
+OuterSphere.Size = Vector3.new(40, 40, 40)
+OuterSphere.Parent = Workspace
 
--- Внутреннее ядро для объема
 local InnerSphere = Instance.new("Part")
 InnerSphere.Shape = Enum.PartType.Ball
 InnerSphere.Anchored = true
@@ -95,346 +101,431 @@ InnerSphere.CanCollide = false
 InnerSphere.CanQuery = false
 InnerSphere.CastShadow = false
 InnerSphere.Material = Enum.Material.Neon
-InnerSphere.Color = CFG.SPHERE_COLOR_SAFE
+InnerSphere.Color = CONFIG.VISUALS.SAFE_COLOR
 InnerSphere.Transparency = 0.9
 InnerSphere.Size = Vector3.new(10, 10, 10)
-InnerSphere.Parent = Sphere
+InnerSphere.Parent = OuterSphere
 
 -- ============================================================
--- [4] КРАСИВЫЙ UI
+-- [ UI FRAMEWORK ]
 -- ============================================================
-local function CreateUI()
-    local ScreenGui = Instance.new("ScreenGui")
-    ScreenGui.Name = "BB_Premium"
-    ScreenGui.ResetOnSpawn = false
-    ScreenGui.IgnoreGuiInset = true
-    ScreenGui.Parent = PlayerGui
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "BB_UI"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.IgnoreGuiInset = true
+ScreenGui.Parent = PGui
 
-    -- === Главная кнопка меню ===
-    local ToggleBtn = Instance.new("TextButton")
-    ToggleBtn.Size = UDim2.new(0, 50, 0, 50)
-    ToggleBtn.Position = UDim2.new(1, -70, 0.5, -25)
-    ToggleBtn.BackgroundColor3 = CFG.UI_THEME.BG
-    ToggleBtn.Text = "⚙️"
-    ToggleBtn.TextSize = 24
-    ToggleBtn.TextColor3 = CFG.UI_THEME.ACCENT
-    ToggleBtn.Font = Enum.Font.GothamBold
-    ToggleBtn.Parent = ScreenGui
-    Instance.new("UICorner", ToggleBtn).CornerRadius = UDim.new(1, 0)
+-- Click Sound
+local ClickSound = Instance.new("Sound")
+ClickSound.SoundId = CONFIG.SYSTEM.CLICK_SOUND
+ClickSound.Volume = 0.3
+ClickSound.Parent = ScreenGui
+local function PlayClick() pcall(function() ClickSound:Play() end) end
+
+-- Toggle Button (Floating)
+local ToggleBtn = Instance.new("TextButton")
+ToggleBtn.Size = UDim2.new(0, 45, 0, 45)
+ToggleBtn.Position = UDim2.new(1, -60, 0.5, -22)
+ToggleBtn.BackgroundColor3 = CurrentTheme.BG
+ToggleBtn.Text = "⚙"
+ToggleBtn.TextSize = 22
+ToggleBtn.TextColor3 = CurrentTheme.ACCENT
+ToggleBtn.Font = Enum.Font.GothamBold
+ToggleBtn.Parent = ScreenGui
+Instance.new("UICorner", ToggleBtn).CornerRadius = UDim.new(1, 0)
+local BtnStroke = Instance.new("UIStroke", ToggleBtn)
+BtnStroke.Color = CurrentTheme.ACCENT
+BtnStroke.Thickness = 1.5
+
+-- Main Window
+local Window = Instance.new("Frame")
+Window.Size = UDim2.new(0, 260, 0, 320)
+Window.Position = UDim2.new(0.5, -130, 0.5, -160)
+Window.BackgroundColor3 = CurrentTheme.BG
+Window.Visible = false
+Window.Parent = ScreenGui
+Instance.new("UICorner", Window).CornerRadius = UDim.new(0, 10)
+local WinStroke = Instance.new("UIStroke", Window)
+WinStroke.Color = CurrentTheme.ACCENT
+WinStroke.Thickness = 1
+WinStroke.Transparency = 0.5
+
+-- Top Bar (Header)
+local Header = Instance.new("Frame")
+Header.Size = UDim2.new(1, 0, 0, 35)
+Header.BackgroundColor3 = Color3.fromRGB(10, 10, 15)
+Header.BackgroundTransparency = 0.5
+Header.Parent = Window
+Instance.new("UICorner", Header).CornerRadius = UDim.new(0, 10)
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, -10, 1, 0)
+Title.Position = UDim2.new(0, 10, 0, 0)
+Title.BackgroundTransparency = 1
+Title.Text = "BLADE BALL | ULTIMATE"
+Title.TextColor3 = CurrentTheme.ACCENT
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 12
+Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.Parent = Header
+
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Size = UDim2.new(0, 35, 1, 0)
+CloseBtn.Position = UDim2.new(1, -35, 0, 0)
+CloseBtn.BackgroundTransparency = 1
+CloseBtn.Text = "✕"
+CloseBtn.TextColor3 = Color3.fromRGB(255, 80, 80)
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.TextSize = 14
+CloseBtn.Parent = Header
+
+-- Tab Container
+local TabContainer = Instance.new("Frame")
+TabContainer.Size = UDim2.new(1, -20, 0, 30)
+TabContainer.Position = UDim2.new(0, 10, 0, 45)
+TabContainer.BackgroundTransparency = 1
+TabContainer.Parent = Window
+
+local TabLayout = Instance.new("UIListLayout")
+TabLayout.FillDirection = Enum.FillDirection.Horizontal
+TabLayout.Padding = UDim.new(0, 5)
+TabLayout.Parent = TabContainer
+
+-- Pages Container
+local Pages = Instance.new("Frame")
+Pages.Size = UDim2.new(1, -20, 1, -85)
+Pages.Position = UDim2.new(0, 10, 0, 75)
+Pages.BackgroundTransparency = 1
+Pages.Parent = Window
+
+-- ============================================================
+-- [ UI COMPONENTS & LOGIC ]
+-- ============================================================
+
+-- Перетаскивание окна
+local dragging, dragInput, dragStart, startPos = false, nil, nil, nil
+Header.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = Window.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then dragging = false end
+        end)
+    end
+end)
+UserInputService.InputChanged:Connect(function(input)
+    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        local delta = input.Position - dragStart
+        Window.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+
+-- Открытие/Закрытие
+ToggleBtn.Activated:Connect(function()
+    PlayClick()
+    Window.Visible = not Window.Visible
+    if Window.Visible then
+        Window.Size = UDim2.new(0, 260, 0, 0)
+        TweenService:Create(Window, TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Size = UDim2.new(0, 260, 0, 320)}):Play()
+    end
+end)
+CloseBtn.Activated:Connect(function() PlayClick(); Window.Visible = false end)
+
+-- Система Вкладок
+local PagesList = {}
+local TabsList = {}
+
+local function CreateTab(name, icon)
+    local Page = Instance.new("Frame")
+    Page.Size = UDim2.new(1, 0, 1, 0)
+    Page.BackgroundTransparency = 1
+    Page.Visible = false
+    Page.Parent = Pages
     
-    local UIStroke = Instance.new("UIStroke", ToggleBtn)
-    UIStroke.Color = CFG.UI_THEME.ACCENT
-    UIStroke.Thickness = 2
-
-    -- === Окно меню ===
-    local Menu = Instance.new("Frame")
-    Menu.Size = UDim2.new(0, 220, 0, 250)
-    Menu.Position = UDim2.new(1, -240, 0.5, -125)
-    Menu.BackgroundColor3 = CFG.UI_THEME.BG
-    Menu.Visible = false
-    Menu.Parent = ScreenGui
-    Instance.new("UICorner", Menu).CornerRadius = UDim.new(0, 12)
-    
-    local MenuStroke = Instance.new("UIStroke", Menu)
-    MenuStroke.Color = CFG.UI_THEME.ACCENT
-    MenuStroke.Thickness = 1
-    MenuStroke.Transparency = 0.5
-
-    local Title = Instance.new("TextLabel")
-    Title.Size = UDim2.new(1, 0, 0, 40)
-    Title.BackgroundTransparency = 1
-    Title.Text = "BLADE BALL"
-    Title.TextColor3 = CFG.UI_THEME.ACCENT
-    Title.Font = Enum.Font.GothamBlack
-    Title.TextSize = 18
-    Title.Parent = Menu
-
     local Layout = Instance.new("UIListLayout")
     Layout.Padding = UDim.new(0, 10)
     Layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-    Layout.SortOrder = Enum.SortOrder.LayoutOrder
-    Layout.Parent = Menu
-
-    local Padding = Instance.new("UIPadding")
-    Padding.PaddingTop = UDim.new(0, 45)
-    Padding.Parent = Menu
-
-    -- Функция создания стильных кнопок
-    local function CreateToggle(text, initialState, callback)
-        local Btn = Instance.new("TextButton")
-        Btn.Size = UDim2.new(1, -30, 0, 40)
-        Btn.BackgroundColor3 = initialState and CFG.UI_THEME.ACCENT or CFG.UI_THEME.OFF
-        Btn.Text = text
-        Btn.TextColor3 = initialState and CFG.UI_THEME.BG or CFG.UI_THEME.TEXT
-        Btn.Font = Enum.Font.GothamBold
-        Btn.TextSize = 14
-        Btn.Parent = Menu
-        Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 8)
-
-        local isClicking = false
-        Btn.Activated:Connect(function()
-            if isClicking then return end
-            isClicking = true
-            
-            initialState = not initialState
-            callback(initialState)
-            
-            -- Плавная анимация цвета
-            TweenService:Create(Btn, TweenInfo.new(0.2), {
-                BackgroundColor3 = initialState and CFG.UI_THEME.ACCENT or CFG.UI_THEME.OFF,
-                TextColor3 = initialState and CFG.UI_THEME.BG or CFG.UI_THEME.TEXT
-            }):Play()
-            
-            task.wait(0.2)
-            isClicking = false
-        end)
-    end
-
-    CreateToggle("Авто-парирование", State.Enabled, function(v) State.Enabled = v end)
-    CreateToggle("3D Сфера", State.ShowSphere, function(v) 
-        State.ShowSphere = v
-        Sphere.Transparency = v and 0.8 or 1
-        InnerSphere.Transparency = v and 0.9 or 1
-    end)
-
-    -- Анимация открытия
-    ToggleBtn.Activated:Connect(function()
-        Menu.Visible = not Menu.Visible
-        if Menu.Visible then
-            Menu.Size = UDim2.new(0, 0, 0, 250)
-            TweenService:Create(Menu, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-                Size = UDim2.new(0, 220, 0, 250)
-            }):Play()
+    Layout.Parent = Page
+    
+    local TabBtn = Instance.new("TextButton")
+    TabBtn.Size = UDim2.new(0, 70, 1, 0)
+    TabBtn.BackgroundColor3 = CurrentTheme.OFF
+    TabBtn.Text = icon
+    TabBtn.TextColor3 = CurrentTheme.TEXT
+    TabBtn.Font = Enum.Font.GothamBold
+    TabBtn.TextSize = 12
+    TabBtn.Parent = TabContainer
+    Instance.new("UICorner", TabBtn).CornerRadius = UDim.new(0, 6)
+    
+    table.insert(PagesList, Page)
+    table.insert(TabsList, {Btn = TabBtn, Page = Page})
+    
+    TabBtn.Activated:Connect(function()
+        PlayClick()
+        for _, t in ipairs(TabsList) do
+            t.Page.Visible = false
+            TweenService:Create(t.Btn, TweenInfo.new(0.2), {BackgroundColor3 = CurrentTheme.OFF, TextColor3 = CurrentTheme.TEXT}):Play()
         end
+        Page.Visible = true
+        TweenService:Create(TabBtn, TweenInfo.new(0.2), {BackgroundColor3 = CurrentTheme.ACCENT, TextColor3 = Color3.new(0,0,0)}):Play()
     end)
     
-    -- === Отладчик ===
-    if CFG.DEBUG_MODE then
-        local DebugGui = Instance.new("ScreenGui")
-        DebugGui.Name = "BB_Debug"
-        DebugGui.ResetOnSpawn = false
-        DebugGui.Parent = PlayerGui
-
-        local DebugFrame = Instance.new("Frame")
-        DebugFrame.Size = UDim2.new(0, 200, 0, 90)
-        DebugFrame.Position = UDim2.new(0, 10, 0, 60)
-        DebugFrame.BackgroundColor3 = CFG.UI_THEME.BG
-        DebugFrame.BackgroundTransparency = 0.3
-        DebugFrame.Parent = DebugGui
-        Instance.new("UICorner", DebugFrame).CornerRadius = UDim.new(0, 8)
-
-        local DebugLabel = Instance.new("TextLabel")
-        DebugLabel.Size = UDim2.new(1, -10, 1, -10)
-        DebugLabel.Position = UDim2.new(0, 5, 0, 5)
-        DebugLabel.BackgroundTransparency = 1
-        DebugLabel.TextColor3 = CFG.UI_THEME.ACCENT
-        DebugLabel.Font = Enum.Font.Code
-        DebugLabel.TextSize = 12
-        DebugLabel.TextXAlignment = Enum.TextXAlignment.Left
-        DebugLabel.TextYAlignment = Enum.TextYAlignment.Top
-        DebugLabel.Text = "Ожидание..."
-        DebugLabel.Parent = DebugFrame
-        
-        return DebugLabel
-    end
+    return Page
 end
 
-local DebugText = CreateUI()
-
--- ============================================================
--- [5] ЛОГИКА (ЯДРО)
--- ============================================================
-
--- Поиск мяча
-local function GetBall()
-    if State.CurrentBall and State.CurrentBall.Parent then 
-        return State.CurrentBall 
-    end
+-- Кастомный Toggle Switch (Красивый ползунок)
+local function CreateSwitch(parent, text, initialState, callback)
+    local Container = Instance.new("Frame")
+    Container.Size = UDim2.new(1, 0, 0, 30)
+    Container.BackgroundTransparency = 1
+    Container.Parent = parent
     
-    local BallsFolder = Workspace:FindFirstChild("Balls")
-    if BallsFolder then
-        for _, obj in ipairs(BallsFolder:GetChildren()) do
-            if obj:IsA("BasePart") then State.CurrentBall = obj; return obj end
+    local Label = Instance.new("TextLabel")
+    Label.Size = UDim2.new(1, -50, 1, 0)
+    Label.BackgroundTransparency = 1
+    Label.Text = text
+    Label.TextColor3 = CurrentTheme.TEXT
+    Label.Font = Enum.Font.Gotham
+    Label.TextSize = 13
+    Label.TextXAlignment = Enum.TextXAlignment.Left
+    Label.Parent = Container
+    
+    local SwitchBg = Instance.new("Frame")
+    SwitchBg.Size = UDim2.new(0, 36, 0, 20)
+    SwitchBg.Position = UDim2.new(1, -36, 0.5, -10)
+    SwitchBg.BackgroundColor3 = initialState and CurrentTheme.ACCENT or CurrentTheme.OFF
+    SwitchBg.Parent = Container
+    Instance.new("UICorner", SwitchBg).CornerRadius = UDim.new(1, 0)
+    
+    local Circle = Instance.new("Frame")
+    Circle.Size = UDim2.new(0, 16, 0, 16)
+    Circle.Position = initialState and UDim2.new(1, -18, 0, 2) or UDim2.new(0, 2, 0, 2)
+    Circle.BackgroundColor3 = Color3.new(1,1,1)
+    Circle.Parent = SwitchBg
+    Instance.new("UICorner", Circle).CornerRadius = UDim.new(1, 0)
+    
+    local isClicking = false
+    local ClickArea = Instance.new("TextButton")
+    ClickArea.Size = UDim2.new(1, 0, 1, 0)
+    ClickArea.BackgroundTransparency = 1
+    ClickArea.Text = ""
+    ClickArea.Parent = Container
+    
+    ClickArea.Activated:Connect(function()
+        if isClicking then return end
+        isClicking = true
+        PlayClick()
+        
+        initialState = not initialState
+        callback(initialState)
+        
+        TweenService:Create(SwitchBg, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {
+            BackgroundColor3 = initialState and CurrentTheme.ACCENT or CurrentTheme.OFF
+        }):Play()
+        TweenService:Create(Circle, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {
+            Position = initialState and UDim2.new(1, -18, 0, 2) or UDim2.new(0, 2, 0, 2)
+        }):Play()
+        
+        task.wait(0.2)
+        isClicking = false
+    end)
+end
+
+-- Кастомная кнопка
+local function CreateButton(parent, text, callback)
+    local Btn = Instance.new("TextButton")
+    Btn.Size = UDim2.new(1, 0, 0, 30)
+    Btn.BackgroundColor3 = CurrentTheme.OFF
+    Btn.Text = text
+    Btn.TextColor3 = CurrentTheme.TEXT
+    Btn.Font = Enum.Font.GothamBold
+    Btn.TextSize = 12
+    Btn.Parent = parent
+    Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 6)
+    
+    Btn.Activated:Connect(function()
+        PlayClick()
+        callback()
+    end)
+end
+
+-- ============================================================
+-- [ BUILD PAGES ]
+-- ============================================================
+
+-- Page 1: Main
+local MainPage = CreateTab("Main", "🎯")
+CreateSwitch(MainPage, "Auto Parry", STATE.Enabled, function(v) STATE.Enabled = v end)
+CreateSwitch(MainPage, "3D Sphere", STATE.ShowVisuals, function(v) 
+    STATE.ShowVisuals = v
+    OuterSphere.Transparency = v and 0.7 or 1
+    InnerSphere.Transparency = v and 0.9 or 1
+end)
+
+-- Page 2: Visuals
+local VisPage = CreateTab("Visuals", "🎨")
+CreateSwitch(VisPage, "Anti-Lag (FPS Boost)", STATE.AntiLag, function(v) STATE.AntiLag = v end)
+CreateButton(VisPage, "Change Theme", function()
+    if CurrentTheme == THEMES.Dark then
+        CurrentTheme = THEMES.Cyber
+    elseif CurrentTheme == THEMES.Cyber then
+        CurrentTheme = THEMES.Nature
+    else
+        CurrentTheme = THEMES.Dark
+    end
+    -- (В реальном проекте здесь был бы вызов функции обновления всех цветов UI)
+    -- Для простоты мы просто перезагрузим цвета основных элементов
+    Window.BackgroundColor3 = CurrentTheme.BG
+    Header.BackgroundColor3 = CurrentTheme.BG
+    WinStroke.Color = CurrentTheme.ACCENT
+    Title.TextColor3 = CurrentTheme.ACCENT
+    BtnStroke.Color = CurrentTheme.ACCENT
+    ToggleBtn.TextColor3 = CurrentTheme.ACCENT
+    for _, t in ipairs(TabsList) do
+        if t.Page.Visible then
+            t.Btn.BackgroundColor3 = CurrentTheme.ACCENT
+            t.Btn.TextColor3 = Color3.new(0,0,0)
+        else
+            t.Btn.BackgroundColor3 = CurrentTheme.OFF
+            t.Btn.TextColor3 = CurrentTheme.TEXT
         end
     end
-    for _, obj in ipairs(Workspace:GetChildren()) do
-        if obj:IsA("BasePart") and obj:GetAttribute("realBall") then
-            State.CurrentBall = obj; return obj
+end)
+
+-- Активируем первую вкладку по умолчанию
+TabsList[1].Page.Visible = true
+TabsList[1].Btn.BackgroundColor3 = CurrentTheme.ACCENT
+TabsList[1].Btn.TextColor3 = Color3.new(0,0,0)
+
+
+-- ============================================================
+-- [ CORE LOGIC & MAIN LOOP ]
+-- ============================================================
+local function GetBall()
+    if STATE.Ball and STATE.Ball.Parent then return STATE.Ball end
+    local bf = Workspace:FindFirstChild("Balls")
+    if bf then
+        for _, o in ipairs(bf:GetChildren()) do
+            if o:IsA("BasePart") then STATE.Ball = o; return o end
         end
     end
     return nil
 end
 
--- Строгая проверка: летит ли ИМЕННО в нас?
 local function IsTargetingMe(ball)
     if not ball then return false end
-    
     local attrs = {"target", "Target", "targetPlayer", "TargetPlayer"}
-    for _, attr in ipairs(attrs) do
-        local val = ball:GetAttribute(attr)
-        if val then
-            if val == LP or val == LP.Name or val == LP.UserId or val == LP.Character or tostring(val) == LP.Name then
+    for _, a in ipairs(attrs) do
+        local v = ball:GetAttribute(a)
+        if v then
+            if v == LP or v == LP.Name or v == LP.UserId or v == LP.Character or tostring(v) == LP.Name then
                 return true
             else
-                return false -- Если там другой игрок, отменяем.
+                return false 
             end
         end
     end
-    
-    local char = LP.Character
-    if char and char:FindFirstChild("Highlight") then return true end
-    
-    return false
+    return LP.Character and LP.Character:FindFirstChild("Highlight") ~= nil
 end
 
--- Расчет 3-х зон
-local function GetDynamicZone(speed)
-    local Z = CFG.ZONE
-    if speed <= Z.MIN_SPEED then return Z.MIN_DIST
-    elseif speed <= Z.MID_SPEED then
+local function GetZone(speed)
+    local Z = CONFIG.ZONE
+    if speed <= Z.MIN_SPEED then return Z.MIN_DIST end
+    if speed <= Z.MID_SPEED then
         local a = (speed - Z.MIN_SPEED) / (Z.MID_SPEED - Z.MIN_SPEED)
         return Z.MIN_DIST + (Z.MID_DIST - Z.MIN_DIST) * a
-    elseif speed <= Z.MAX_SPEED then
+    end
+    if speed <= Z.MAX_SPEED then
         local a = (speed - Z.MID_SPEED) / (Z.MAX_SPEED - Z.MID_SPEED)
         return Z.MID_DIST + (Z.MAX_DIST - Z.MID_DIST) * a
-    else
-        return Z.MAX_DIST
     end
+    return Z.MAX_DIST
 end
 
--- Вызов парирования
-local function FireParry()
-    if not State.Enabled or not State.IsArmed then return end
-    if tick() - State.LastParry < CFG.PARRY_COOLDOWN then return end
-
-    pcall(function()
-        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.F, false, game)
-        task.wait(0.05)
-        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.F, false, game)
-    end)
-
-    State.LastParry = tick()
-    State.IsArmed = false
-end
-
--- ============================================================
--- [6] ОСНОВНОЙ ЦИКЛ
--- ============================================================
 local PulseTime = 0
 
 RunService.Heartbeat:Connect(function(dt)
     pcall(function()
+        -- Anti-Lag Check
+        STATE.Frames = STATE.Frames + 1
+        local render = true
+        if STATE.AntiLag and (STATE.Frames % 3 ~= 0) then render = false end
+        
         local char = LP.Character
         local hrp = char and char:FindFirstChild("HumanoidRootPart")
-        local hum = char and char:FindFirstChildOfClass("Humanoid")
-        
-        if not hrp or not hum or hum.Health <= 0 then
-            if Sphere then Sphere.Transparency = 1 end
-            if InnerSphere then InnerSphere.Transparency = 1 end
+        if not hrp or (char:FindFirstChild("Humanoid") and char.Humanoid.Health <= 0) then
+            if OuterSphere then OuterSphere.Transparency = 1 end
             return
         end
 
         local ball = GetBall()
-        local hrpPos = hrp.Position
-        
-        local targetDist = CFG.ZONE.MIN_DIST * 2
-        local targetColor = CFG.SPHERE_COLOR_SAFE
-        local currentSpeed = 0
-        local statusText = "Safe"
+        local dist, zone, speed = 0, CONFIG.ZONE.MIN_DIST, 0
+        local targetColor = CONFIG.VISUALS.SAFE_COLOR
 
         if ball then
             local bp = ball.Position
-            local dist = (hrpPos - bp).Magnitude
+            dist = (hrp.Position - bp).Magnitude
             
-            -- Сброс при появлении нового мяча
-            if State.CurrentBall ~= ball then
-                State.CurrentBall = ball
-                State.PrevBallPos = bp
-                State.IsArmed = true
+            if STATE.Ball ~= ball then
+                STATE.Ball = ball
+                STATE.PrevBallPos = bp
+                STATE.IsArmed = true
             end
             
-            if dist > CFG.ZONE.MAX_DIST * 1.5 then State.IsArmed = true end
-
-            -- Вычисление скорости
-            if State.PrevBallPos and dt > 0 then
-                currentSpeed = (bp - State.PrevBallPos).Magnitude / dt
+            if dist > CONFIG.ZONE.MAX_DIST * 1.5 then STATE.IsArmed = true end
+            
+            if STATE.PrevBallPos and dt > 0 then
+                speed = (bp - STATE.PrevBallPos).Magnitude / dt
             end
 
-            -- Логика
             if IsTargetingMe(ball) then
-                local zone = GetDynamicZone(currentSpeed)
-                targetDist = zone * 2
-                
+                zone = GetZone(speed)
                 if dist <= zone then
-                    targetColor = CFG.SPHERE_COLOR_THREAT
-                    statusText = "PARRY!"
-                    FireParry()
-                else
-                    statusText = "Incoming!"
+                    targetColor = CONFIG.VISUALS.DANGER_COLOR
+                    if STATE.Enabled and STATE.IsArmed and (tick() - STATE.LastParry > CONFIG.SYSTEM.PARRY_COOLDOWN) then
+                        pcall(function()
+                            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.F, false, game)
+                            task.wait(0.05)
+                            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.F, false, game)
+                        end)
+                        STATE.LastParry = tick()
+                        STATE.IsArmed = false
+                    end
                 end
-            else
-                statusText = "Target: Other"
             end
-            
-            State.PrevBallPos = bp
+            STATE.PrevBallPos = bp
         else
-            State.IsArmed = true
-            State.PrevBallPos = nil
+            STATE.IsArmed = true
+            STATE.PrevBallPos = nil
         end
 
-        -- ==========================================
-        -- ВИЗУАЛИЗАЦИЯ СФЕРЫ (Плавная и красивая)
-        -- ==========================================
-        if State.ShowSphere and Sphere and InnerSphere then
-            PulseTime = PulseTime + dt * 3
+        -- Visual Update
+        if render and STATE.ShowVisuals and OuterSphere and InnerSphere then
+            PulseTime = PulseTime + (dt * CONFIG.VISUALS.PULSE_SPEED)
+            local targetSize = zone * 2
+            local currentSize = OuterSphere.Size.X
+            -- Smooth Lerp
+            local newSize = currentSize + (targetSize - currentSize) * math.exp(-10 * dt)
             
-            -- Эффект "дыхания" (пульсация размера)
-            local pulse = 1 + math.sin(PulseTime) * 0.03
-            local finalSize = targetDist * pulse
+            -- Pulse effect
+            local finalSize = newSize * (1 + math.sin(PulseTime) * 0.03)
             
-            -- Плавное изменение размера (Lerp)
-            local currentSize = Sphere.Size.X
-            local newSize = currentSize + (finalSize - currentSize) * math.exp(-10 * dt)
+            OuterSphere.Size = Vector3.new(finalSize, finalSize, finalSize)
+            OuterSphere.CFrame = CFrame.new(hrp.Position + Vector3.new(0, CONFIG.VISUALS.Y_OFFSET, 0))
+            OuterSphere.Color = OuterSphere.Color:Lerp(targetColor, math.clamp(10 * dt, 0, 1))
+            InnerSphere.Color = OuterSphere.Color
             
-            Sphere.Size = Vector3.new(newSize, newSize, newSize)
-            Sphere.CFrame = CFrame.new(hrpPos.X, hrpPos.Y + CFG.SPHERE_Y_OFFSET, hrpPos.Z)
-            
-            -- Плавная смена цвета
-            Sphere.Color = Sphere.Color:Lerp(targetColor, math.clamp(10 * dt, 0, 1))
-            InnerSphere.Color = Sphere.Color
-            
-            -- Внутренняя сфера немного крутится
-            InnerSphere.CFrame = Sphere.CFrame * CFrame.Angles(PulseTime, PulseTime, 0)
-            InnerSphere.Size = Vector3.new(newSize * 0.2, newSize * 0.2, newSize * 0.2)
-            
-            Sphere.Transparency = 0.8
-            InnerSphere.Transparency = 0.9
-        end
-
-        -- ==========================================
-        -- ОБНОВЛЕНИЕ ОТЛАДЧИКА
-        -- ==========================================
-        if DebugText and DebugText.Parent then
-            DebugText.Text = string.format(
-                "⚡ Speed: %.0f\n🎯 Status: %s\n📏 Dist: %.1f\n🛡️ Armed: %s",
-                currentSpeed, statusText, (ball and (hrpPos - ball.Position).Magnitude or 0), tostring(State.IsArmed)
-            )
-            
-            -- Красим текст в красный при опасности
-            if statusText == "PARRY!" then
-                DebugText.TextColor3 = CFG.SPHERE_COLOR_THREAT
-            else
-                DebugText.TextColor3 = CFG.UI_THEME.ACCENT
-            end
+            InnerSphere.CFrame = OuterSphere.CFrame * CFrame.Angles(PulseTime, PulseTime, 0)
+            InnerSphere.Size = Vector3.new(finalSize * 0.2, finalSize * 0.2, finalSize * 0.2)
         end
     end)
 end)
 
--- Сброс при респавне
 LP.CharacterAdded:Connect(function()
-    State.IsArmed = true
-    State.PrevBallPos = nil
-    State.CurrentBall = nil
+    STATE.IsArmed = true
+    STATE.PrevBallPos = nil
+    STATE.Ball = nil
 end)
 
-print("✅ PREMIUM UI LOADED | 3-Tier System Active")
+print("✅ UI Loaded. Press the ⚙ icon to open.")
