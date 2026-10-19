@@ -1,11 +1,14 @@
 --[[
     ╔═══════════════════════════════════════════════════════════════════════════╗
-    ║   [ DEVELOPER EDITION v7.0 | SPEED PREDICTION & SWEPT COLLISION ]         ║
+    ║   [ DEVELOPER EDITION v10.0 | ENVIRONMENT NIGHT MODE ]                    ║
+    ║   • Локальная ночь на карте (Lighting + Atmosphere)                       ║
+    ║   • Цвета сферы и ядра                                                     ║
+    ║   • Сохранение настроек                                                    ║
     ╚═══════════════════════════════════════════════════════════════════════════╝
 ]]
 
 -- ============================================================
--- [ КОНФИГУРАЦИЯ ]
+-- [ КОНФИГУРАЦИЯ И ТЕМЫ ]
 -- ============================================================
 local CONFIG = {
     ZONE = {
@@ -14,33 +17,38 @@ local CONFIG = {
         MAX_SPEED  = 200,  MAX_DIST  = 80,   
     },
     VISUALS = {
-        OUTER_SAFE   = Color3.fromRGB(0, 255, 50),     
-        INNER_SAFE   = Color3.fromRGB(0, 255, 200),    
-        DANGER_COLOR = Color3.fromRGB(255, 30, 30),    
-        Y_OFFSET     = -0.5,
-        PULSE_SPEED  = 2.5,
+        DEFAULT_OUTER = Color3.fromRGB(0, 255, 50),     
+        DEFAULT_INNER = Color3.fromRGB(0, 255, 200),    
+        DANGER_COLOR  = Color3.fromRGB(255, 30, 30),    
+        Y_OFFSET      = -0.5,
+        PULSE_SPEED   = 2.5,
     },
     SYSTEM = {
         PARRY_COOLDOWN = 0.25,
         CLICK_SOUND    = "rbxassetid://6895079853",
-        
-        -- ВРЕМЯ ДО УДАРА (в секундах). 
-        -- Если мяч летит быстрее, чем за 0.25 сек, скрипт нажмет F ДО того, как мяч зайдет в сферу.
-        PING_BUFFER = 0.25 
+        PING_BUFFER    = 0.25 
     }
 }
 
 local THEMES = {
-    ["Dark Metal"]    = { BG = Color3.fromRGB(15, 16, 20), HEADER = Color3.fromRGB(22, 24, 30), ACCENT = Color3.fromRGB(0, 200, 255), TEXT = Color3.fromRGB(240, 240, 240), OFF = Color3.fromRGB(40, 44, 52) },
-    ["Light Emerald"] = { BG = Color3.fromRGB(240, 245, 240), HEADER = Color3.fromRGB(220, 235, 220), ACCENT = Color3.fromRGB(0, 180, 100), TEXT = Color3.fromRGB(20, 40, 20), OFF = Color3.fromRGB(200, 215, 200) },
-    ["Cyber Neon"]    = { BG = Color3.fromRGB(20, 5, 25), HEADER = Color3.fromRGB(35, 10, 45), ACCENT = Color3.fromRGB(255, 0, 200), TEXT = Color3.fromRGB(255, 200, 255), OFF = Color3.fromRGB(60, 20, 70) },
-    ["Crimson Void"]  = { BG = Color3.fromRGB(25, 5, 5), HEADER = Color3.fromRGB(45, 10, 10), ACCENT = Color3.fromRGB(255, 60, 60), TEXT = Color3.fromRGB(255, 200, 200), OFF = Color3.fromRGB(70, 15, 15) }
+    ["Dark Metal"]      = { BG = Color3.fromRGB(15, 16, 20), HEADER = Color3.fromRGB(22, 24, 30), ACCENT = Color3.fromRGB(0, 200, 255), TEXT = Color3.fromRGB(240, 240, 240), OFF = Color3.fromRGB(40, 44, 52) },
+    ["Cyber Neon"]      = { BG = Color3.fromRGB(20, 5, 25), HEADER = Color3.fromRGB(35, 10, 45), ACCENT = Color3.fromRGB(255, 0, 200), TEXT = Color3.fromRGB(255, 200, 255), OFF = Color3.fromRGB(60, 20, 70) },
+    ["Crimson Void"]    = { BG = Color3.fromRGB(25, 5, 5), HEADER = Color3.fromRGB(45, 10, 10), ACCENT = Color3.fromRGB(255, 60, 60), TEXT = Color3.fromRGB(255, 200, 200), OFF = Color3.fromRGB(70, 15, 15) },
+    ["Obsidian Night"]  = { BG = Color3.fromRGB(10, 10, 15), HEADER = Color3.fromRGB(18, 18, 25), ACCENT = Color3.fromRGB(150, 100, 255), TEXT = Color3.fromRGB(220, 210, 255), OFF = Color3.fromRGB(35, 30, 50) },
+    ["Midnight Ocean"]  = { BG = Color3.fromRGB(5, 15, 30), HEADER = Color3.fromRGB(10, 25, 45), ACCENT = Color3.fromRGB(0, 255, 200), TEXT = Color3.fromRGB(200, 240, 255), OFF = Color3.fromRGB(20, 40, 60) },
+    ["Light Emerald"]   = { BG = Color3.fromRGB(240, 245, 240), HEADER = Color3.fromRGB(220, 235, 220), ACCENT = Color3.fromRGB(0, 180, 100), TEXT = Color3.fromRGB(20, 40, 20), OFF = Color3.fromRGB(200, 215, 200) },
+    ["Pearl Elegance"]  = { BG = Color3.fromRGB(250, 248, 245), HEADER = Color3.fromRGB(240, 235, 230), ACCENT = Color3.fromRGB(200, 150, 50), TEXT = Color3.fromRGB(40, 30, 20), OFF = Color3.fromRGB(220, 215, 210) },
+    ["Arctic Frost"]    = { BG = Color3.fromRGB(230, 245, 255), HEADER = Color3.fromRGB(210, 230, 255), ACCENT = Color3.fromRGB(50, 150, 255), TEXT = Color3.fromRGB(20, 40, 60), OFF = Color3.fromRGB(190, 210, 230) },
+    ["Sunset Blossom"]  = { BG = Color3.fromRGB(255, 240, 245), HEADER = Color3.fromRGB(250, 225, 235), ACCENT = Color3.fromRGB(255, 100, 150), TEXT = Color3.fromRGB(60, 20, 30), OFF = Color3.fromRGB(230, 210, 220) },
+    ["Cloudy Silver"]   = { BG = Color3.fromRGB(245, 245, 250), HEADER = Color3.fromRGB(230, 230, 240), ACCENT = Color3.fromRGB(100, 100, 120), TEXT = Color3.fromRGB(30, 30, 40), OFF = Color3.fromRGB(210, 210, 220) },
+    ["Amber Glow"]      = { BG = Color3.fromRGB(255, 250, 235), HEADER = Color3.fromRGB(250, 240, 210), ACCENT = Color3.fromRGB(230, 150, 0), TEXT = Color3.fromRGB(50, 40, 10), OFF = Color3.fromRGB(225, 215, 195) }
 }
+
 local CurrentThemeName = "Dark Metal"
 local CurrentTheme = THEMES[CurrentThemeName]
 
 -- ============================================================
--- [ СЕРВИСЫ ]
+-- [ СЕРВИСЫ И STATE ]
 -- ============================================================
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -49,6 +57,8 @@ local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local HttpService = game:GetService("HttpService")
+local Lighting = game:GetService("Lighting")
 
 local LP = Players.LocalPlayer
 local PGui = LP:WaitForChild("PlayerGui")
@@ -62,6 +72,14 @@ local STATE = {
     Enabled = true,
     ShowVisuals = true,
     AntiLag = false,
+    HideInner = false,
+    StaticSphere = false,
+    NightModeSphere = false,
+    NightMap = false, -- НОВОЕ: Ночь на карте
+    
+    OuterColor = CONFIG.VISUALS.DEFAULT_OUTER,
+    InnerColor = CONFIG.VISUALS.DEFAULT_INNER,
+    
     IsArmed = true,
     LastParry = 0,
     Ball = nil,
@@ -70,7 +88,6 @@ local STATE = {
     Remote = nil
 }
 
--- Поиск скрытого Remote (ParryAttempt)
 task.spawn(function()
     for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
         if obj:IsA("RemoteEvent") and (obj.Name:lower():find("parry") or obj.Name:lower():find("attempt")) then
@@ -91,7 +108,7 @@ OuterSphere.CanCollide = false
 OuterSphere.CanQuery = false
 OuterSphere.CastShadow = false
 OuterSphere.Material = Enum.Material.ForceField
-OuterSphere.Color = CONFIG.VISUALS.OUTER_SAFE
+OuterSphere.Color = STATE.OuterColor
 OuterSphere.Transparency = 0.65
 OuterSphere.Size = Vector3.new(40, 40, 40)
 OuterSphere.Parent = Workspace
@@ -103,13 +120,74 @@ InnerSphere.CanCollide = false
 InnerSphere.CanQuery = false
 InnerSphere.CastShadow = false
 InnerSphere.Material = Enum.Material.Neon
-InnerSphere.Color = CONFIG.VISUALS.INNER_SAFE
+InnerSphere.Color = STATE.InnerColor
 InnerSphere.Transparency = 0.8
 InnerSphere.Size = Vector3.new(10, 10, 10)
 InnerSphere.Parent = OuterSphere
 
 -- ============================================================
--- [ ИНТЕРФЕЙС (UI) ]
+-- [ СИСТЕМА НОЧИ НА КАРТЕ ]
+-- ============================================================
+local originalLighting = {}
+local createdAtmosphere = nil
+
+local function SetNightMap(enabled)
+    if enabled then
+        -- Сохраняем оригинальные настройки
+        originalLighting = {
+            ClockTime = Lighting.ClockTime,
+            Brightness = Lighting.Brightness,
+            Ambient = Lighting.Ambient,
+            OutdoorAmbient = Lighting.OutdoorAmbient,
+            FogEnd = Lighting.FogEnd,
+            FogColor = Lighting.FogColor,
+            EnvironmentDiffuseScale = Lighting.EnvironmentDiffuseScale,
+            EnvironmentSpecularScale = Lighting.EnvironmentSpecularScale,
+        }
+        
+        -- Ставим ночь
+        Lighting.ClockTime = 0
+        Lighting.Brightness = 0.5
+        Lighting.Ambient = Color3.fromRGB(20, 20, 30)
+        Lighting.OutdoorAmbient = Color3.fromRGB(30, 30, 40)
+        Lighting.FogEnd = 500
+        Lighting.FogColor = Color3.fromRGB(10, 10, 20)
+        Lighting.EnvironmentDiffuseScale = 0.1
+        Lighting.EnvironmentSpecularScale = 0.1
+        
+        -- Добавляем атмосферу (туман), если её нет
+        if not Lighting:FindFirstChildOfClass("Atmosphere") then
+            local atm = Instance.new("Atmosphere")
+            atm.Density = 0.4
+            atm.Offset = 0.1
+            atm.Color = Color3.fromRGB(50, 50, 80)
+            atm.Decay = Color3.fromRGB(20, 20, 40)
+            atm.Glare = 0
+            atm.Haze = 1
+            atm.Parent = Lighting
+            createdAtmosphere = atm
+        end
+    else
+        -- Возвращаем день
+        if originalLighting.ClockTime then
+            Lighting.ClockTime = originalLighting.ClockTime
+            Lighting.Brightness = originalLighting.Brightness
+            Lighting.Ambient = originalLighting.Ambient
+            Lighting.OutdoorAmbient = originalLighting.OutdoorAmbient
+            Lighting.FogEnd = originalLighting.FogEnd
+            Lighting.FogColor = originalLighting.FogColor
+            Lighting.EnvironmentDiffuseScale = originalLighting.EnvironmentDiffuseScale
+            Lighting.EnvironmentSpecularScale = originalLighting.EnvironmentSpecularScale
+        end
+        if createdAtmosphere then
+            createdAtmosphere:Destroy()
+            createdAtmosphere = nil
+        end
+    end
+end
+
+-- ============================================================
+-- [ UI ФРЕЙМВОРК ]
 -- ============================================================
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "BB_UI"
@@ -144,8 +222,8 @@ BtnStroke.Thickness = 1.5
 BtnStroke.Transparency = 0.2
 
 local Window = Instance.new("Frame")
-Window.Size = UDim2.new(0, 300, 0, 480)
-Window.Position = UDim2.new(0.5, -150, 0.5, -240)
+Window.Size = UDim2.new(0, 320, 0, 540)
+Window.Position = UDim2.new(0.5, -160, 0.5, -270)
 Window.BackgroundColor3 = CurrentTheme.BG
 Window.BackgroundTransparency = 0.1
 Window.Visible = false
@@ -201,7 +279,7 @@ TabContainer.Parent = Window
 
 local TabLayout = Instance.new("UIListLayout")
 TabLayout.FillDirection = Enum.FillDirection.Horizontal
-TabLayout.Padding = UDim.new(0, 8)
+TabLayout.Padding = UDim.new(0, 5)
 TabLayout.Parent = TabContainer
 
 local Pages = Instance.new("ScrollingFrame")
@@ -216,12 +294,17 @@ Pages.CanvasSize = UDim2.new(0, 0, 0, 0)
 Pages.AutomaticCanvasSize = Enum.AutomaticSize.Y
 Pages.Parent = Window
 
-local ThemePanel = Instance.new("Frame")
-ThemePanel.Size = UDim2.new(0, 160, 0, 285)
-ThemePanel.Position = UDim2.new(0, -170, 0, 80) 
+local ThemePanel = Instance.new("ScrollingFrame")
+ThemePanel.Size = UDim2.new(0, 170, 0, 320)
+ThemePanel.Position = UDim2.new(0, -180, 0, 80) 
 ThemePanel.BackgroundColor3 = CurrentTheme.BG
 ThemePanel.BackgroundTransparency = 0.1
 ThemePanel.Visible = false
+ThemePanel.BorderSizePixel = 0
+ThemePanel.ScrollBarThickness = 2
+ThemePanel.ScrollBarImageColor3 = CurrentTheme.ACCENT
+ThemePanel.CanvasSize = UDim2.new(0, 0, 0, 0)
+ThemePanel.AutomaticCanvasSize = Enum.AutomaticSize.Y
 ThemePanel.Parent = Window
 Instance.new("UICorner", ThemePanel).CornerRadius = UDim.new(0, 10)
 local PanelStroke = Instance.new("UIStroke", ThemePanel)
@@ -236,6 +319,7 @@ ThemeList.Parent = ThemePanel
 
 local ThemePad = Instance.new("UIPadding")
 ThemePad.PaddingTop = UDim.new(0, 10)
+ThemePad.PaddingBottom = UDim.new(0, 10)
 ThemePad.Parent = ThemePanel
 
 local function CreateThemeButton(themeName, themeData)
@@ -301,12 +385,15 @@ ToggleBtn.Activated:Connect(function()
     Window.Visible = not Window.Visible
     ThemePanel.Visible = false
     if Window.Visible then
-        Window.Size = UDim2.new(0, 300, 0, 0)
-        TweenService:Create(Window, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Size = UDim2.new(0, 300, 0, 480)}):Play()
+        Window.Size = UDim2.new(0, 320, 0, 0)
+        TweenService:Create(Window, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Size = UDim2.new(0, 320, 0, 540)}):Play()
     end
 end)
 CloseBtn.Activated:Connect(function() PlayClick(); Window.Visible = false; ThemePanel.Visible = false end)
 
+-- ============================================================
+-- [ UI ЭЛЕМЕНТЫ ]
+-- ============================================================
 local PagesList, TabsList = {}, {}
 
 local function CreateTab(name, icon)
@@ -323,13 +410,13 @@ local function CreateTab(name, icon)
     Layout.Parent = Page
     
     local TabBtn = Instance.new("TextButton")
-    TabBtn.Size = UDim2.new(0.5, -4, 1, 0)
+    TabBtn.Size = UDim2.new(0.33, -4, 1, 0)
     TabBtn.BackgroundColor3 = CurrentTheme.OFF
     TabBtn.BackgroundTransparency = 0.3
     TabBtn.Text = icon .. " " .. name
     TabBtn.TextColor3 = CurrentTheme.TEXT
     TabBtn.Font = Enum.Font.GothamBold
-    TabBtn.TextSize = 12
+    TabBtn.TextSize = 11
     TabBtn.Parent = TabContainer
     Instance.new("UICorner", TabBtn).CornerRadius = UDim.new(0, 6)
     
@@ -373,20 +460,16 @@ local function CreateAsciiButton(parent, asciiText, initialState, callback)
         if isClicking then return end
         isClicking = true
         PlayClick()
-        
         initialState = not initialState
         callback(initialState)
-        
         for _, el in ipairs(UI_Elements) do
             if el.btn == Btn then el.state = initialState end
         end
-        
         TweenService:Create(Btn, TweenInfo.new(0.2), {
             BackgroundColor3 = initialState and CurrentTheme.ACCENT or CurrentTheme.OFF,
             BackgroundTransparency = initialState and 0.2 or 0.4,
             TextColor3 = initialState and CurrentTheme.BG or CurrentTheme.TEXT
         }):Play()
-        
         task.wait(0.2)
         isClicking = false
     end)
@@ -435,21 +518,17 @@ local function CreateSwitch(parent, text, initialState, callback)
         if isClicking then return end
         isClicking = true
         PlayClick()
-        
         initialState = not initialState
         callback(initialState)
-        
         for _, el in ipairs(UI_Elements) do
             if el.btn == SwitchBg then el.state = initialState end
         end
-        
         TweenService:Create(SwitchBg, TweenInfo.new(0.25, Enum.EasingStyle.Quad), {
             BackgroundColor3 = initialState and CurrentTheme.ACCENT or CurrentTheme.OFF
         }):Play()
         TweenService:Create(Circle, TweenInfo.new(0.25, Enum.EasingStyle.Quad), {
             Position = initialState and UDim2.new(1, -20, 0, 2) or UDim2.new(0, 2, 0, 2)
         }):Play()
-        
         task.wait(0.2)
         isClicking = false
     end)
@@ -476,6 +555,70 @@ local function CreateButton(parent, text, callback)
     return Btn
 end
 
+local function CreateColorPicker(parent, text, currentColor, callback)
+    local Container = Instance.new("Frame")
+    Container.Size = UDim2.new(1, 0, 0, 55)
+    Container.BackgroundTransparency = 1
+    Container.Parent = parent
+
+    local Label = Instance.new("TextLabel")
+    Label.Size = UDim2.new(1, 0, 0, 20)
+    Label.BackgroundTransparency = 1
+    Label.Text = text
+    Label.TextColor3 = CurrentTheme.TEXT
+    Label.Font = Enum.Font.GothamMedium
+    Label.TextSize = 12
+    Label.TextXAlignment = Enum.TextXAlignment.Left
+    Label.Parent = Container
+    table.insert(UI_Elements, {btn = Label, type = "label"})
+
+    local Colors = {
+        Color3.fromRGB(0, 255, 50), Color3.fromRGB(0, 255, 200), Color3.fromRGB(0, 150, 255), Color3.fromRGB(150, 0, 255),
+        Color3.fromRGB(255, 0, 200), Color3.fromRGB(255, 50, 50), Color3.fromRGB(255, 200, 0), Color3.fromRGB(255, 255, 255)
+    }
+
+    local StartX = 0
+    for i, c in ipairs(Colors) do
+        local ColorBtn = Instance.new("TextButton")
+        ColorBtn.Size = UDim2.new(0, 20, 0, 20)
+        ColorBtn.Position = UDim2.new(0, StartX, 0, 25)
+        ColorBtn.BackgroundColor3 = c
+        ColorBtn.Text = ""
+        ColorBtn.Parent = Container
+        Instance.new("UICorner", ColorBtn).CornerRadius = UDim.new(0, 4)
+        
+        local Stroke = Instance.new("UIStroke", ColorBtn)
+        Stroke.Color = (c == currentColor) and CurrentTheme.ACCENT or Color3.new(0,0,0)
+        Stroke.Thickness = (c == currentColor) and 2 or 1
+        Stroke.Transparency = (c == currentColor) and 0 or 0.5
+
+        ColorBtn.Activated:Connect(function()
+            PlayClick()
+            callback(c)
+            for _, other in ipairs(Container:GetChildren()) do
+                if other:IsA("TextButton") then
+                    local s = other:FindFirstChild("UIStroke")
+                    if s then
+                        s.Color = Color3.new(0,0,0)
+                        s.Thickness = 1
+                        s.Transparency = 0.5
+                    end
+                end
+            end
+            Stroke.Color = CurrentTheme.ACCENT
+            Stroke.Thickness = 2
+            Stroke.Transparency = 0
+        end)
+        
+        StartX = StartX + 24
+    end
+end
+
+-- ============================================================
+-- [ СБОРКА СТРАНИЦ ]
+-- ============================================================
+
+-- 1. Main Page
 local MainPage = CreateTab("Main", "🎯")
 local ParryAscii = [[
 ██████╗  █████╗ ██████╗ ██████╗ ██╗   ██╗
@@ -489,13 +632,87 @@ CreateAsciiButton(MainPage, ParryAscii, STATE.Enabled, function(v) STATE.Enabled
 CreateSwitch(MainPage, "3D Sphere", STATE.ShowVisuals, function(v) 
     STATE.ShowVisuals = v
     OuterSphere.Transparency = v and 0.65 or 1
-    InnerSphere.Transparency = v and 0.8 or 1
+    InnerSphere.Transparency = (v and not STATE.HideInner) and 0.8 or 1
 end)
 
+-- 2. Visual Page
 local VisPage = CreateTab("Visual", "🎨")
 CreateSwitch(VisPage, "Anti-Lag (Boost)", STATE.AntiLag, function(v) STATE.AntiLag = v end)
-CreateButton(VisPage, "Change Theme", function()
+CreateSwitch(VisPage, "Hide Inner Core", STATE.HideInner, function(v) 
+    STATE.HideInner = v
+    InnerSphere.Transparency = (v or not STATE.ShowVisuals) and 1 or 0.8
+end)
+CreateSwitch(VisPage, "Static Sphere (No Pulse)", STATE.StaticSphere, function(v) STATE.StaticSphere = v end)
+CreateSwitch(VisPage, "Night Mode (Cyberpunk Sphere)", STATE.NightModeSphere, function(v) STATE.NightModeSphere = v end)
+
+-- НОВЫЙ ТУМБЛЕР: НОЧЬ НА КАРТЕ
+CreateSwitch(VisPage, "Night Map (Environment)", STATE.NightMap, function(v) 
+    STATE.NightMap = v 
+    SetNightMap(v)
+end)
+
+CreateColorPicker(VisPage, "Outer Sphere Color", STATE.OuterColor, function(c) STATE.OuterColor = c end)
+CreateColorPicker(VisPage, "Inner Core Color", STATE.InnerColor, function(c) STATE.InnerColor = c end)
+
+CreateButton(VisPage, "Change UI Theme", function()
     ThemePanel.Visible = not ThemePanel.Visible
+end)
+
+-- 3. Other Page
+local OtherPage = CreateTab("Other", "⚙️")
+
+local function SaveConfig()
+    local data = {
+        Theme = CurrentThemeName,
+        Enabled = STATE.Enabled,
+        ShowVisuals = STATE.ShowVisuals,
+        AntiLag = STATE.AntiLag,
+        HideInner = STATE.HideInner,
+        StaticSphere = STATE.StaticSphere,
+        NightModeSphere = STATE.NightModeSphere,
+        NightMap = STATE.NightMap,
+        OuterColor = tostring(STATE.OuterColor),
+        InnerColor = tostring(STATE.InnerColor)
+    }
+    local success, err = pcall(function()
+        writefile("BB_Premium_Config.json", HttpService:JSONEncode(data))
+    end)
+    if success then
+        print("✅ [BB] Настройки успешно сохранены!")
+    else
+        print("❌ [BB] Ошибка сохранения (экзекутор не поддерживает writefile).")
+    end
+end
+
+local function LoadConfig()
+    local success, data = pcall(function()
+        if isfile and isfile("BB_Premium_Config.json") then
+            return HttpService:JSONDecode(readfile("BB_Premium_Config.json"))
+        end
+    end)
+    if success and data then
+        CurrentThemeName = data.Theme or "Dark Metal"
+        CurrentTheme = THEMES[CurrentThemeName] or THEMES["Dark Metal"]
+        
+        STATE.Enabled = data.Enabled ~= false
+        STATE.ShowVisuals = data.ShowVisuals ~= false
+        STATE.AntiLag = data.AntiLag == true
+        STATE.HideInner = data.HideInner == true
+        STATE.StaticSphere = data.StaticSphere == true
+        STATE.NightModeSphere = data.NightModeSphere == true
+        STATE.NightMap = data.NightMap == true
+        
+        if ApplyTheme then ApplyTheme() end
+        print("✅ [BB] Настройки успешно загружены! (Требуется перезапуск для полного применения)")
+    else
+        print("❌ [BB] Файл конфигурации не найден.")
+    end
+end
+
+CreateButton(OtherPage, "Save Current Settings", SaveConfig)
+CreateButton(OtherPage, "Load Settings", LoadConfig)
+CreateButton(OtherPage, "Toggle Mouse Lock", function()
+    UserInputService.MouseIconEnabled = not UserInputService.MouseIconEnabled
 end)
 
 -- ============================================================
@@ -523,7 +740,7 @@ local DebugLabel = Instance.new("TextLabel")
 DebugLabel.Size = UDim2.new(1, -15, 1, -15)
 DebugLabel.Position = UDim2.new(0, 10, 0, 10)
 DebugLabel.BackgroundTransparency = 1
-DebugLabel.TextColor3 = CONFIG.VISUALS.INNER_SAFE
+DebugLabel.TextColor3 = STATE.InnerColor
 DebugLabel.Font = Enum.Font.Code
 DebugLabel.TextSize = 12
 DebugLabel.TextXAlignment = Enum.TextXAlignment.Left
@@ -531,6 +748,9 @@ DebugLabel.TextYAlignment = Enum.TextYAlignment.Top
 DebugLabel.Text = "Ожидание..."
 DebugLabel.Parent = DebugFrame
 
+-- ============================================================
+-- [ ПРИМЕНЕНИЕ ТЕМЫ ]
+-- ============================================================
 ApplyTheme = function()
     Window.BackgroundColor3 = CurrentTheme.BG
     Header.BackgroundColor3 = CurrentTheme.HEADER
@@ -544,6 +764,7 @@ ApplyTheme = function()
     DebugFrame.BackgroundColor3 = CurrentTheme.BG
     DebugStroke.Color = CurrentTheme.ACCENT
     Pages.ScrollBarImageColor3 = CurrentTheme.ACCENT
+    ThemePanel.ScrollBarImageColor3 = CurrentTheme.ACCENT
     
     for _, t in ipairs(TabsList) do
         if t.Page.Visible then
@@ -575,7 +796,7 @@ TabsList[1].Btn.BackgroundColor3 = CurrentTheme.ACCENT
 TabsList[1].Btn.TextColor3 = CurrentTheme.BG
 
 -- ============================================================
--- [ ЛОГИКА ЯДРА + ПРЕДСКАЗАНИЕ СКОРОСТИ ]
+-- [ ЛОГИКА ЯДРА ]
 -- ============================================================
 local function GetBall()
     if STATE.Ball and STATE.Ball.Parent then return STATE.Ball end
@@ -618,7 +839,6 @@ local function GetZone(speed)
     return Z.MAX_DIST
 end
 
--- Функция для проверки пересечения траектории (Swept Collision)
 local function getDistanceToSegment(p, a, b)
     local ab = b - a
     local ap = p - a
@@ -647,7 +867,7 @@ RunService.Heartbeat:Connect(function(dt)
         local ball = GetBall()
         local dist, zone, speed = 0, CONFIG.ZONE.MIN_DIST, 0
         local timeToImpact = 999
-        local targetColor = CONFIG.VISUALS.OUTER_SAFE
+        local targetColor = STATE.OuterColor
         local status = "Safe"
 
         if ball then
@@ -662,7 +882,6 @@ RunService.Heartbeat:Connect(function(dt)
             
             if dist > CONFIG.ZONE.MAX_DIST * 1.5 then STATE.IsArmed = true end
             
-            -- Расчет скорости и направления
             local approachSpeed = 0
             if STATE.PrevBallPos and dt > 0 then
                 local moveVec = bp - STATE.PrevBallPos
@@ -681,16 +900,11 @@ RunService.Heartbeat:Connect(function(dt)
             if IsTargetingMe(ball) then
                 zone = GetZone(speed)
                 
-                -- 1. Проверка, находится ли мяч в сфере (по расстоянию)
                 local inZone = dist <= zone
-                
-                -- 2. Проверка траектории (если мяч проскочил сквозь)
                 local hitTrajectory = false
                 if STATE.PrevBallPos then
                     hitTrajectory = getDistanceToSegment(hrp.Position, STATE.PrevBallPos, bp) <= zone
                 end
-                
-                -- 3. Проверка по времени (если мяч слишком быстрый)
                 local predictHit = timeToImpact <= CONFIG.SYSTEM.PING_BUFFER
                 
                 if inZone or hitTrajectory or predictHit then
@@ -698,14 +912,12 @@ RunService.Heartbeat:Connect(function(dt)
                     targetColor = CONFIG.VISUALS.DANGER_COLOR
                     
                     if STATE.Enabled and STATE.IsArmed and (tick() - STATE.LastParry > CONFIG.SYSTEM.PARRY_COOLDOWN) then
-                        -- Нажатие F
                         pcall(function()
                             VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.F, false, game)
                             task.wait(0.05)
                             VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.F, false, game)
                         end)
                         
-                        -- Дублирование через Remote (если существует)
                         if STATE.Remote then
                             pcall(function() STATE.Remote:FireServer() end)
                         end
@@ -726,20 +938,37 @@ RunService.Heartbeat:Connect(function(dt)
         end
 
         if render and STATE.ShowVisuals and OuterSphere and InnerSphere then
-            PulseTime = PulseTime + (dt * CONFIG.VISUALS.PULSE_SPEED)
+            if not STATE.StaticSphere then
+                PulseTime = PulseTime + (dt * CONFIG.VISUALS.PULSE_SPEED)
+            end
             local targetSize = zone * 2
             local currentSize = OuterSphere.Size.X
             local newSize = currentSize + (targetSize - currentSize) * math.exp(-10 * dt)
-            local finalSize = newSize * (1 + math.sin(PulseTime) * 0.02)
+            local finalSize = STATE.StaticSphere and newSize or (newSize * (1 + math.sin(PulseTime) * 0.02))
             
             OuterSphere.Size = Vector3.new(finalSize, finalSize, finalSize)
             OuterSphere.CFrame = CFrame.new(hrp.Position + Vector3.new(0, CONFIG.VISUALS.Y_OFFSET, 0))
             
+            if STATE.NightModeSphere then
+                OuterSphere.Material = Enum.Material.Neon
+                OuterSphere.Transparency = 0.5
+                InnerSphere.Transparency = 0.2
+                if targetColor ~= CONFIG.VISUALS.DANGER_COLOR then
+                    targetColor = Color3.fromRGB(20, 0, 30)
+                end
+            else
+                OuterSphere.Material = Enum.Material.ForceField
+                OuterSphere.Transparency = 0.65
+                InnerSphere.Transparency = STATE.HideInner and 1 or 0.8
+            end
+
             OuterSphere.Color = OuterSphere.Color:Lerp(targetColor, math.clamp(10 * dt, 0, 1))
+            
             if targetColor == CONFIG.VISUALS.DANGER_COLOR then
                 InnerSphere.Color = InnerSphere.Color:Lerp(CONFIG.VISUALS.DANGER_COLOR, math.clamp(10 * dt, 0, 1))
             else
-                InnerSphere.Color = InnerSphere.Color:Lerp(CONFIG.VISUALS.INNER_SAFE, math.clamp(10 * dt, 0, 1))
+                local finalInner = STATE.NightModeSphere and Color3.fromRGB(255, 0, 255) or STATE.InnerColor
+                InnerSphere.Color = InnerSphere.Color:Lerp(finalInner, math.clamp(10 * dt, 0, 1))
             end
             
             InnerSphere.CFrame = OuterSphere.CFrame * CFrame.Angles(PulseTime, PulseTime, 0)
@@ -754,7 +983,7 @@ RunService.Heartbeat:Connect(function(dt)
             if status == "DANGER!" then
                 DebugLabel.TextColor3 = CONFIG.VISUALS.DANGER_COLOR
             else
-                DebugLabel.TextColor3 = CONFIG.VISUALS.INNER_SAFE
+                DebugLabel.TextColor3 = STATE.InnerColor
             end
         end
     end)
@@ -766,4 +995,4 @@ LP.CharacterAdded:Connect(function()
     STATE.Ball = nil
 end)
 
-print("✅ DEVELOPER EDITION v7.0 | Prediction & Swept Collision Added.")
+print("✅ DEVELOPER EDITION v10.0 | Environment Night Mode Added.")
