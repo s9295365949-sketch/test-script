@@ -1,13 +1,13 @@
 --[[
     ╔═══════════════════════════════════════════════════════════════════════════╗
-    ║   [ DEVELOPER EDITION v12.2 | CAMERA LOCK FIX ]                           ║
-    ║   • Увеличенное ядро на 15% (0.23)                                        ║
-    ║   • Защищенный Camera Lock                                                ║
-    ║   • Убраны краш-факторы для мобилок                                       ║
+    ║   [ DEVELOPER EDITION v12.3 | CLEAN & STABLE ]                            ║
+    ║   • Убраны все эмодзи (защита от краша)                                   ║
+    ║   • Увеличенное ядро (+15%)                                               ║
+    ║   • Рабочий Camera Lock                                                   ║
     ╚═══════════════════════════════════════════════════════════════════════════╝
 ]]
 
-print(">>> [BB] Запуск...")
+print(">>> [BB] Запуск v12.3...")
 
 -- ============================================================
 -- [ КОНФИГУРАЦИЯ ]
@@ -41,6 +41,13 @@ local THEMES = {
 local CurrentThemeName = "Dark Metal"
 local CurrentTheme = THEMES[CurrentThemeName]
 
+-- Кастомный clamp
+local function clamp(val, min, max)
+    if val < min then return min end
+    if val > max then return max end
+    return val
+end
+
 -- ============================================================
 -- [ СЕРВИСЫ ]
 -- ============================================================
@@ -52,6 +59,7 @@ local UserInputService = game:GetService("UserInputService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local HttpService = game:GetService("HttpService")
+local Camera = Workspace.CurrentCamera
 
 local LP = Players.LocalPlayer
 local PGui = LP:WaitForChild("PlayerGui")
@@ -64,7 +72,7 @@ if Workspace:FindFirstChild("AuraVisual") then Workspace.AuraVisual:Destroy() en
 local STATE = {
     Enabled = true, ShowVisuals = true, AntiLag = false,
     HideInner = false, StaticSphere = false, NightModeSphere = false, NightMap = false,
-    CameraLock = false, -- Camera Lock
+    CameraLock = false,
     OuterColor = CONFIG.VISUALS.DEFAULT_OUTER, InnerColor = CONFIG.VISUALS.DEFAULT_INNER,
     IsArmed = true, LastParry = 0, Ball = nil, PrevBallPos = nil, Frames = 0, Remote = nil
 }
@@ -102,16 +110,15 @@ InnerSphere.CastShadow = false
 InnerSphere.Material = Enum.Material.Neon
 InnerSphere.Color = STATE.InnerColor
 InnerSphere.Transparency = 0.8
-InnerSphere.Size = Vector3.new(11.5, 11.5, 11.5) -- +15%
+InnerSphere.Size = Vector3.new(11.5, 11.5, 11.5) -- УВЕЛИЧЕНО НА 15%
 InnerSphere.Parent = OuterSphere
 
 -- ============================================================
--- [ UI ФРЕЙМВОРК ]
+-- [ UI ФРЕЙМВОРК (БЕЗ ЭМОДЗИ) ]
 -- ============================================================
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "BB_UI"
 ScreenGui.ResetOnSpawn = false
--- Убрали IgnoreGuiInset = true (частая причина краша)
 ScreenGui.DisplayOrder = 999
 ScreenGui.Parent = PGui
 
@@ -313,7 +320,7 @@ CloseBtn.Activated:Connect(function() PlayClick(); Window.Visible = false; Theme
 -- ============================================================
 local PagesList, TabsList = {}, {}
 
-local function CreateTab(name, icon)
+local function CreateTab(name)
     local Page = Instance.new("Frame")
     Page.Size = UDim2.new(1, 0, 0, 0)
     Page.AutomaticSize = Enum.AutomaticSize.Y
@@ -330,7 +337,7 @@ local function CreateTab(name, icon)
     TabBtn.Size = UDim2.new(0.33, -4, 1, 0)
     TabBtn.BackgroundColor3 = CurrentTheme.OFF
     TabBtn.BackgroundTransparency = 0.3
-    TabBtn.Text = icon .. " " .. name
+    TabBtn.Text = name
     TabBtn.TextColor3 = CurrentTheme.TEXT
     TabBtn.Font = Enum.Font.GothamBold
     TabBtn.TextSize = 11
@@ -521,7 +528,7 @@ end
 -- ============================================================
 -- [ СТРАНИЦЫ ]
 -- ============================================================
-local MainPage = CreateTab("Main", "🎯")
+local MainPage = CreateTab("Main")
 local ParryAscii = [[
 ██████╗  █████╗ ██████╗ ██████╗ ██╗   ██╗
 ██╔══██╗██╔══██╗██╔══██╗██╔══██╗╚██╗ ██╔╝
@@ -537,16 +544,14 @@ CreateSwitch(MainPage, "3D Sphere", STATE.ShowVisuals, function(v)
     InnerSphere.Transparency = (v and not STATE.HideInner) and 0.8 or 1
 end)
 
--- CAMERA LOCK
 CreateSwitch(MainPage, "Camera Lock (Ball)", STATE.CameraLock, function(v) 
     STATE.CameraLock = v
-    if not v then
-        local cam = Workspace.CurrentCamera
-        if cam then cam.CameraType = Enum.CameraType.Custom end
+    if not v and Camera then
+        Camera.CameraType = Enum.CameraType.Custom
     end
 end)
 
-local VisPage = CreateTab("Visual", "🎨")
+local VisPage = CreateTab("Visual")
 CreateSwitch(VisPage, "Anti-Lag (Boost)", STATE.AntiLag, function(v) STATE.AntiLag = v end)
 CreateSwitch(VisPage, "Hide Inner Core", STATE.HideInner, function(v) 
     STATE.HideInner = v
@@ -559,13 +564,13 @@ CreateColorPicker(VisPage, "Inner Core Color", STATE.InnerColor, function(c) STA
 CreateButton(VisPage, "Change UI Theme", function() ThemePanel.Visible = not ThemePanel.Visible end)
 
 -- 3. Other Page
-local OtherPage = CreateTab("Other", "⚙️")
+local OtherPage = CreateTab("Other")
 
 local ProfileTextBox = Instance.new("TextBox")
 ProfileTextBox.Size = UDim2.new(1, 0, 0, 35)
 ProfileTextBox.BackgroundColor3 = CurrentTheme.OFF
 ProfileTextBox.BackgroundTransparency = 0.3
-ProfileTextBox.PlaceholderText = "Название профиля..."
+ProfileTextBox.PlaceholderText = "Profile Name..."
 ProfileTextBox.Text = ""
 ProfileTextBox.TextColor3 = CurrentTheme.TEXT
 ProfileTextBox.Font = Enum.Font.GothamMedium
@@ -585,8 +590,8 @@ local function SaveProfileToFile(pName)
     local success = pcall(function()
         writefile("BB_Profile_" .. pName .. ".json", HttpService:JSONEncode(data))
     end)
-    if success then print("✅ [BB] Профиль '"..pName.."' сохранен!") 
-    else print("❌ [BB] Ошибка сохранения.") end
+    if success then print(">>> [BB] Профиль '"..pName.."' сохранен!") 
+    else print(">>> [BB] Ошибка сохранения.") end
 end
 
 local function LoadProfileFromFile(pName, showMsg)
@@ -606,13 +611,13 @@ local function LoadProfileFromFile(pName, showMsg)
         STATE.NightModeSphere = data.NightModeSphere == true
         STATE.NightMap = data.NightMap == true
         if ApplyTheme then ApplyTheme() end
-        if showMsg then print("✅ [BB] Профиль '"..pName.."' загружен!") end
+        if showMsg then print(">>> [BB] Профиль '"..pName.."' загружен!") end
     else
-        if showMsg then print("❌ [BB] Профиль не найден.") end
+        if showMsg then print(">>> [BB] Профиль не найден.") end
     end
 end
 
-local SaveBtn = CreateButton(OtherPage, "💾 Save Profile", function()
+local SaveBtn = CreateButton(OtherPage, "Save Profile", function()
     local pName = ProfileTextBox.Text ~= "" and ProfileTextBox.Text or "Default"
     SaveProfileToFile(pName)
     if RefreshProfileList then RefreshProfileList() end
@@ -626,7 +631,7 @@ ProfileHeaderRow.Parent = OtherPage
 local ProfileHeaderLabel = Instance.new("TextLabel")
 ProfileHeaderLabel.Size = UDim2.new(1, -60, 1, 0)
 ProfileHeaderLabel.BackgroundTransparency = 1
-ProfileHeaderLabel.Text = "📁 Saved Profiles"
+ProfileHeaderLabel.Text = "Saved Profiles"
 ProfileHeaderLabel.TextColor3 = CurrentTheme.TEXT
 ProfileHeaderLabel.Font = Enum.Font.GothamBold
 ProfileHeaderLabel.TextSize = 12
@@ -638,7 +643,7 @@ local RefreshBtn = Instance.new("TextButton")
 RefreshBtn.Size = UDim2.new(0, 55, 1, 0)
 RefreshBtn.Position = UDim2.new(1, -55, 0, 0)
 RefreshBtn.BackgroundColor3 = CurrentTheme.OFF
-RefreshBtn.Text = "⟳ Refresh"
+RefreshBtn.Text = "Refresh"
 RefreshBtn.TextColor3 = CurrentTheme.TEXT
 RefreshBtn.Font = Enum.Font.GothamBold
 RefreshBtn.TextSize = 10
@@ -716,7 +721,7 @@ RefreshProfileList = function()
         local loadBtn = Instance.new("TextButton")
         loadBtn.Size = UDim2.new(0.42, -2, 1, 0)
         loadBtn.BackgroundColor3 = isAuto and CurrentTheme.ACCENT or CurrentTheme.OFF
-        loadBtn.Text = (isAuto and "★ " or "") .. name
+        loadBtn.Text = (isAuto and "* " or "") .. name
         loadBtn.TextColor3 = isAuto and CurrentTheme.BG or CurrentTheme.TEXT
         loadBtn.Font = Enum.Font.GothamBold
         loadBtn.TextSize = 10
@@ -732,7 +737,7 @@ RefreshProfileList = function()
         autoBtn.Size = UDim2.new(0.34, -2, 1, 0)
         autoBtn.Position = UDim2.new(0.42, 2, 0, 0)
         autoBtn.BackgroundColor3 = isAuto and Color3.fromRGB(100, 200, 100) or CurrentTheme.OFF
-        autoBtn.Text = isAuto and "✓ AUTO" or "SET AUTO"
+        autoBtn.Text = isAuto and "AUTO" or "SET AUTO"
         autoBtn.TextColor3 = isAuto and Color3.new(0,0,0) or CurrentTheme.TEXT
         autoBtn.Font = Enum.Font.GothamBold
         autoBtn.TextSize = 9
@@ -742,10 +747,10 @@ RefreshProfileList = function()
             PlayClick()
             if isAuto then
                 pcall(function() if isfile("BB_AutoLoad.txt") then delfile("BB_AutoLoad.txt") end end)
-                print("🔕 Auto-Load отключен")
+                print(">>> [BB] Auto-Load отключен")
             else
                 pcall(function() writefile("BB_AutoLoad.txt", name) end)
-                print("✅ Auto-Load: "..name)
+                print(">>> [BB] Auto-Load: "..name)
             end
             RefreshProfileList()
         end)
@@ -768,7 +773,7 @@ RefreshProfileList = function()
                     delfile("BB_AutoLoad.txt")
                 end
             end)
-            print("🗑️ Удален профиль: "..name)
+            print(">>> [BB] Удален профиль: "..name)
             RefreshProfileList()
         end)
     end
@@ -790,7 +795,7 @@ task.spawn(function()
         if isfile and isfile("BB_AutoLoad.txt") then
             local autoName = readfile("BB_AutoLoad.txt")
             LoadProfileFromFile(autoName, false)
-            print("✅ [BB] Авто-загрузка профиля: "..autoName)
+            print(">>> [BB] Авто-загрузка профиля: "..autoName)
         end
     end)
 end)
@@ -919,21 +924,24 @@ local function getDistanceToSegment(p, a, b)
     local ap = p - a
     local abLenSq = ab:Dot(ab)
     if abLenSq == 0 then return (p - a).Magnitude end
-    local t = math.clamp(ap:Dot(ab) / abLenSq, 0, 1)
+    local t = clamp(ap:Dot(ab) / abLenSq, 0, 1)
     local closest = a + ab * t
     return (p - closest).Magnitude
 end
 
 local PulseTime = 0
 
--- БЕЗОПАСНЫЙ Camera Lock
+-- РАБОЧИЙ Camera Lock
 RunService.RenderStepped:Connect(function()
     pcall(function()
-        if STATE.CameraLock and STATE.Ball and STATE.Ball.Parent then
-            local cam = Workspace.CurrentCamera
-            if cam then
-                cam.CameraType = Enum.CameraType.Scriptable
-                cam.CFrame = CFrame.lookAt(cam.CFrame.Position, STATE.Ball.Position)
+        if STATE.CameraLock then
+            local ball = STATE.Ball
+            if ball and ball.Parent then
+                local cam = Workspace.CurrentCamera
+                if cam then
+                    cam.CameraType = Enum.CameraType.Scriptable
+                    cam.CFrame = CFrame.lookAt(cam.CFrame.Position, ball.Position)
+                end
             end
         end
     end)
@@ -1059,23 +1067,23 @@ RunService.Heartbeat:Connect(function(dt)
                 InnerSphere.Transparency = STATE.HideInner and 1 or 0.8
             end
 
-            OuterSphere.Color = OuterSphere.Color:Lerp(targetColor, math.clamp(10 * dt, 0, 1))
+            OuterSphere.Color = OuterSphere.Color:Lerp(targetColor, clamp(10 * dt, 0, 1))
             
             if targetColor == CONFIG.VISUALS.DANGER_COLOR then
-                InnerSphere.Color = InnerSphere.Color:Lerp(CONFIG.VISUALS.DANGER_COLOR, math.clamp(10 * dt, 0, 1))
+                InnerSphere.Color = InnerSphere.Color:Lerp(CONFIG.VISUALS.DANGER_COLOR, clamp(10 * dt, 0, 1))
             else
                 local finalInner = STATE.NightModeSphere and Color3.fromRGB(255, 0, 255) or STATE.InnerColor
-                InnerSphere.Color = InnerSphere.Color:Lerp(finalInner, math.clamp(10 * dt, 0, 1))
+                InnerSphere.Color = InnerSphere.Color:Lerp(finalInner, clamp(10 * dt, 0, 1))
             end
             
             InnerSphere.CFrame = OuterSphere.CFrame * CFrame.Angles(PulseTime, PulseTime, 0)
-            -- УВЕЛИЧЕННОЕ ЯДРО (0.23)
+            -- УВЕЛИЧЕННОЕ ЯДРО (45%)
             InnerSphere.Size = Vector3.new(finalSize * 0.23, finalSize * 0.23, finalSize * 0.23)
         end
         
         if DebugLabel and DebugLabel.Parent then
             DebugLabel.Text = string.format(
-                "⚡ Speed: %.0f\n⏱️ Time: %s\n🎯 Status: %s\n📏 Dist: %.1f\n🛡️ Armed: %s",
+                "Speed: %.0f\nTime: %s\nStatus: %s\nDist: %.1f\nArmed: %s",
                 speed, (timeToImpact > 900 and "N/A" or string.format("%.2fs", timeToImpact)), status, dist, tostring(STATE.IsArmed)
             )
             if status == "DANGER!" then
@@ -1092,9 +1100,10 @@ LP.CharacterAdded:Connect(function()
     STATE.PrevBallPos = nil
     STATE.Ball = nil
     if OuterSphere then OuterSphere.Size = Vector3.new(40,40,40) end
+    
     STATE.CameraLock = false
     local cam = Workspace.CurrentCamera
     if cam then cam.CameraType = Enum.CameraType.Custom end
 end)
 
-print("✅ DEVELOPER EDITION v12.2 | Camera Lock Fix Loaded.")
+print(">>> [BB] Скрипт успешно загружен.")
