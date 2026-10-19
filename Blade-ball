@@ -1,14 +1,14 @@
 --[[
     ╔═══════════════════════════════════════════════════════════════════════════╗
-    ║   [ DEVELOPER EDITION v10.0 | ENVIRONMENT NIGHT MODE ]                    ║
-    ║   • Локальная ночь на карте (Lighting + Atmosphere)                       ║
-    ║   • Цвета сферы и ядра                                                     ║
-    ║   • Сохранение настроек                                                    ║
+    ║   [ DEVELOPER EDITION v12.0 | PROFILE MANAGER UI ]                        ║
+    ║   • Красивый список профилей с кнопками                                   ║
+    ║   • Авто-загрузка через выбор из списка                                   ║
+    ║   • Удаление профилей прямо из меню                                       ║
     ╚═══════════════════════════════════════════════════════════════════════════╝
 ]]
 
 -- ============================================================
--- [ КОНФИГУРАЦИЯ И ТЕМЫ ]
+-- [ КОНФИГУРАЦИЯ ]
 -- ============================================================
 local CONFIG = {
     ZONE = {
@@ -26,7 +26,7 @@ local CONFIG = {
     SYSTEM = {
         PARRY_COOLDOWN = 0.25,
         CLICK_SOUND    = "rbxassetid://6895079853",
-        PING_BUFFER    = 0.25 
+        PING_BUFFER    = 0.30 
     }
 }
 
@@ -48,7 +48,7 @@ local CurrentThemeName = "Dark Metal"
 local CurrentTheme = THEMES[CurrentThemeName]
 
 -- ============================================================
--- [ СЕРВИСЫ И STATE ]
+-- [ СЕРВИСЫ ]
 -- ============================================================
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -69,30 +69,16 @@ end
 if Workspace:FindFirstChild("AuraVisual") then Workspace.AuraVisual:Destroy() end
 
 local STATE = {
-    Enabled = true,
-    ShowVisuals = true,
-    AntiLag = false,
-    HideInner = false,
-    StaticSphere = false,
-    NightModeSphere = false,
-    NightMap = false, -- НОВОЕ: Ночь на карте
-    
-    OuterColor = CONFIG.VISUALS.DEFAULT_OUTER,
-    InnerColor = CONFIG.VISUALS.DEFAULT_INNER,
-    
-    IsArmed = true,
-    LastParry = 0,
-    Ball = nil,
-    PrevBallPos = nil,
-    Frames = 0,
-    Remote = nil
+    Enabled = true, ShowVisuals = true, AntiLag = false,
+    HideInner = false, StaticSphere = false, NightModeSphere = false, NightMap = false,
+    OuterColor = CONFIG.VISUALS.DEFAULT_OUTER, InnerColor = CONFIG.VISUALS.DEFAULT_INNER,
+    IsArmed = true, LastParry = 0, Ball = nil, PrevBallPos = nil, Frames = 0, Remote = nil
 }
 
 task.spawn(function()
     for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
         if obj:IsA("RemoteEvent") and (obj.Name:lower():find("parry") or obj.Name:lower():find("attempt")) then
-            STATE.Remote = obj
-            break
+            STATE.Remote = obj; break
         end
     end
 end)
@@ -126,49 +112,29 @@ InnerSphere.Size = Vector3.new(10, 10, 10)
 InnerSphere.Parent = OuterSphere
 
 -- ============================================================
--- [ СИСТЕМА НОЧИ НА КАРТЕ ]
+-- [ НОЧЬ НА КАРТЕ ]
 -- ============================================================
 local originalLighting = {}
 local createdAtmosphere = nil
 
 local function SetNightMap(enabled)
     if enabled then
-        -- Сохраняем оригинальные настройки
         originalLighting = {
-            ClockTime = Lighting.ClockTime,
-            Brightness = Lighting.Brightness,
-            Ambient = Lighting.Ambient,
-            OutdoorAmbient = Lighting.OutdoorAmbient,
-            FogEnd = Lighting.FogEnd,
-            FogColor = Lighting.FogColor,
-            EnvironmentDiffuseScale = Lighting.EnvironmentDiffuseScale,
-            EnvironmentSpecularScale = Lighting.EnvironmentSpecularScale,
+            ClockTime = Lighting.ClockTime, Brightness = Lighting.Brightness,
+            Ambient = Lighting.Ambient, OutdoorAmbient = Lighting.OutdoorAmbient,
+            FogEnd = Lighting.FogEnd, FogColor = Lighting.FogColor,
         }
-        
-        -- Ставим ночь
-        Lighting.ClockTime = 0
-        Lighting.Brightness = 0.5
+        Lighting.ClockTime = 0; Lighting.Brightness = 0.5
         Lighting.Ambient = Color3.fromRGB(20, 20, 30)
         Lighting.OutdoorAmbient = Color3.fromRGB(30, 30, 40)
-        Lighting.FogEnd = 500
-        Lighting.FogColor = Color3.fromRGB(10, 10, 20)
-        Lighting.EnvironmentDiffuseScale = 0.1
-        Lighting.EnvironmentSpecularScale = 0.1
-        
-        -- Добавляем атмосферу (туман), если её нет
+        Lighting.FogEnd = 500; Lighting.FogColor = Color3.fromRGB(10, 10, 20)
         if not Lighting:FindFirstChildOfClass("Atmosphere") then
             local atm = Instance.new("Atmosphere")
-            atm.Density = 0.4
-            atm.Offset = 0.1
-            atm.Color = Color3.fromRGB(50, 50, 80)
+            atm.Density = 0.4; atm.Color = Color3.fromRGB(50, 50, 80)
             atm.Decay = Color3.fromRGB(20, 20, 40)
-            atm.Glare = 0
-            atm.Haze = 1
-            atm.Parent = Lighting
-            createdAtmosphere = atm
+            atm.Parent = Lighting; createdAtmosphere = atm
         end
     else
-        -- Возвращаем день
         if originalLighting.ClockTime then
             Lighting.ClockTime = originalLighting.ClockTime
             Lighting.Brightness = originalLighting.Brightness
@@ -176,13 +142,8 @@ local function SetNightMap(enabled)
             Lighting.OutdoorAmbient = originalLighting.OutdoorAmbient
             Lighting.FogEnd = originalLighting.FogEnd
             Lighting.FogColor = originalLighting.FogColor
-            Lighting.EnvironmentDiffuseScale = originalLighting.EnvironmentDiffuseScale
-            Lighting.EnvironmentSpecularScale = originalLighting.EnvironmentSpecularScale
         end
-        if createdAtmosphere then
-            createdAtmosphere:Destroy()
-            createdAtmosphere = nil
-        end
+        if createdAtmosphere then createdAtmosphere:Destroy(); createdAtmosphere = nil end
     end
 end
 
@@ -197,7 +158,8 @@ ScreenGui.DisplayOrder = 999
 ScreenGui.Parent = PGui
 
 local UI_Elements = {}
-local ApplyTheme      
+local ApplyTheme
+local RefreshProfileList -- forward declare
 
 local ClickSound = Instance.new("Sound")
 ClickSound.SoundId = CONFIG.SYSTEM.CLICK_SOUND
@@ -222,8 +184,8 @@ BtnStroke.Thickness = 1.5
 BtnStroke.Transparency = 0.2
 
 local Window = Instance.new("Frame")
-Window.Size = UDim2.new(0, 320, 0, 540)
-Window.Position = UDim2.new(0.5, -160, 0.5, -270)
+Window.Size = UDim2.new(0, 320, 0, 560)
+Window.Position = UDim2.new(0.5, -160, 0.5, -280)
 Window.BackgroundColor3 = CurrentTheme.BG
 Window.BackgroundTransparency = 0.1
 Window.Visible = false
@@ -289,7 +251,6 @@ Pages.BackgroundTransparency = 1
 Pages.BorderSizePixel = 0
 Pages.ScrollBarThickness = 2
 Pages.ScrollBarImageColor3 = CurrentTheme.ACCENT
-Pages.ScrollBarImageTransparency = 0.5
 Pages.CanvasSize = UDim2.new(0, 0, 0, 0)
 Pages.AutomaticCanvasSize = Enum.AutomaticSize.Y
 Pages.Parent = Window
@@ -365,9 +326,7 @@ end
 local dragging, dragStart, startPos = false, nil, nil
 Header.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        dragging = true
-        dragStart = input.Position
-        startPos = Window.Position
+        dragging = true; dragStart = input.Position; startPos = Window.Position
         input.Changed:Connect(function()
             if input.UserInputState == Enum.UserInputState.End then dragging = false end
         end)
@@ -386,13 +345,13 @@ ToggleBtn.Activated:Connect(function()
     ThemePanel.Visible = false
     if Window.Visible then
         Window.Size = UDim2.new(0, 320, 0, 0)
-        TweenService:Create(Window, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Size = UDim2.new(0, 320, 0, 540)}):Play()
+        TweenService:Create(Window, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Size = UDim2.new(0, 320, 0, 560)}):Play()
     end
 end)
 CloseBtn.Activated:Connect(function() PlayClick(); Window.Visible = false; ThemePanel.Visible = false end)
 
 -- ============================================================
--- [ UI ЭЛЕМЕНТЫ ]
+-- [ UI ХЕЛПЕРЫ ]
 -- ============================================================
 local PagesList, TabsList = {}, {}
 
@@ -458,8 +417,7 @@ local function CreateAsciiButton(parent, asciiText, initialState, callback)
     local isClicking = false
     Btn.Activated:Connect(function()
         if isClicking then return end
-        isClicking = true
-        PlayClick()
+        isClicking = true; PlayClick()
         initialState = not initialState
         callback(initialState)
         for _, el in ipairs(UI_Elements) do
@@ -470,8 +428,7 @@ local function CreateAsciiButton(parent, asciiText, initialState, callback)
             BackgroundTransparency = initialState and 0.2 or 0.4,
             TextColor3 = initialState and CurrentTheme.BG or CurrentTheme.TEXT
         }):Play()
-        task.wait(0.2)
-        isClicking = false
+        task.wait(0.2); isClicking = false
     end)
 end
 
@@ -516,8 +473,7 @@ local function CreateSwitch(parent, text, initialState, callback)
     
     ClickArea.Activated:Connect(function()
         if isClicking then return end
-        isClicking = true
-        PlayClick()
+        isClicking = true; PlayClick()
         initialState = not initialState
         callback(initialState)
         for _, el in ipairs(UI_Elements) do
@@ -529,8 +485,7 @@ local function CreateSwitch(parent, text, initialState, callback)
         TweenService:Create(Circle, TweenInfo.new(0.25, Enum.EasingStyle.Quad), {
             Position = initialState and UDim2.new(1, -20, 0, 2) or UDim2.new(0, 2, 0, 2)
         }):Play()
-        task.wait(0.2)
-        isClicking = false
+        task.wait(0.2); isClicking = false
     end)
 end
 
@@ -551,7 +506,6 @@ local function CreateButton(parent, text, callback)
         PlayClick()
         callback(Btn)
     end)
-    
     return Btn
 end
 
@@ -578,7 +532,7 @@ local function CreateColorPicker(parent, text, currentColor, callback)
     }
 
     local StartX = 0
-    for i, c in ipairs(Colors) do
+    for _, c in ipairs(Colors) do
         local ColorBtn = Instance.new("TextButton")
         ColorBtn.Size = UDim2.new(0, 20, 0, 20)
         ColorBtn.Position = UDim2.new(0, StartX, 0, 25)
@@ -593,32 +547,22 @@ local function CreateColorPicker(parent, text, currentColor, callback)
         Stroke.Transparency = (c == currentColor) and 0 or 0.5
 
         ColorBtn.Activated:Connect(function()
-            PlayClick()
-            callback(c)
+            PlayClick(); callback(c)
             for _, other in ipairs(Container:GetChildren()) do
                 if other:IsA("TextButton") then
                     local s = other:FindFirstChild("UIStroke")
-                    if s then
-                        s.Color = Color3.new(0,0,0)
-                        s.Thickness = 1
-                        s.Transparency = 0.5
-                    end
+                    if s then s.Color = Color3.new(0,0,0); s.Thickness = 1; s.Transparency = 0.5 end
                 end
             end
-            Stroke.Color = CurrentTheme.ACCENT
-            Stroke.Thickness = 2
-            Stroke.Transparency = 0
+            Stroke.Color = CurrentTheme.ACCENT; Stroke.Thickness = 2; Stroke.Transparency = 0
         end)
-        
         StartX = StartX + 24
     end
 end
 
 -- ============================================================
--- [ СБОРКА СТРАНИЦ ]
+-- [ СТРАНИЦЫ ]
 -- ============================================================
-
--- 1. Main Page
 local MainPage = CreateTab("Main", "🎯")
 local ParryAscii = [[
 ██████╗  █████╗ ██████╗ ██████╗ ██╗   ██╗
@@ -635,7 +579,6 @@ CreateSwitch(MainPage, "3D Sphere", STATE.ShowVisuals, function(v)
     InnerSphere.Transparency = (v and not STATE.HideInner) and 0.8 or 1
 end)
 
--- 2. Visual Page
 local VisPage = CreateTab("Visual", "🎨")
 CreateSwitch(VisPage, "Anti-Lag (Boost)", STATE.AntiLag, function(v) STATE.AntiLag = v end)
 CreateSwitch(VisPage, "Hide Inner Core", STATE.HideInner, function(v) 
@@ -644,56 +587,56 @@ CreateSwitch(VisPage, "Hide Inner Core", STATE.HideInner, function(v)
 end)
 CreateSwitch(VisPage, "Static Sphere (No Pulse)", STATE.StaticSphere, function(v) STATE.StaticSphere = v end)
 CreateSwitch(VisPage, "Night Mode (Cyberpunk Sphere)", STATE.NightModeSphere, function(v) STATE.NightModeSphere = v end)
-
--- НОВЫЙ ТУМБЛЕР: НОЧЬ НА КАРТЕ
 CreateSwitch(VisPage, "Night Map (Environment)", STATE.NightMap, function(v) 
-    STATE.NightMap = v 
-    SetNightMap(v)
+    STATE.NightMap = v; SetNightMap(v)
 end)
-
 CreateColorPicker(VisPage, "Outer Sphere Color", STATE.OuterColor, function(c) STATE.OuterColor = c end)
 CreateColorPicker(VisPage, "Inner Core Color", STATE.InnerColor, function(c) STATE.InnerColor = c end)
-
-CreateButton(VisPage, "Change UI Theme", function()
-    ThemePanel.Visible = not ThemePanel.Visible
-end)
+CreateButton(VisPage, "Change UI Theme", function() ThemePanel.Visible = not ThemePanel.Visible end)
 
 -- 3. Other Page
 local OtherPage = CreateTab("Other", "⚙️")
 
-local function SaveConfig()
+-- Текстовое поле
+local ProfileTextBox = Instance.new("TextBox")
+ProfileTextBox.Size = UDim2.new(1, 0, 0, 35)
+ProfileTextBox.BackgroundColor3 = CurrentTheme.OFF
+ProfileTextBox.BackgroundTransparency = 0.3
+ProfileTextBox.PlaceholderText = "Название профиля..."
+ProfileTextBox.Text = ""
+ProfileTextBox.TextColor3 = CurrentTheme.TEXT
+ProfileTextBox.Font = Enum.Font.GothamMedium
+ProfileTextBox.TextSize = 12
+ProfileTextBox.ClearTextOnFocus = false
+ProfileTextBox.Parent = OtherPage
+Instance.new("UICorner", ProfileTextBox).CornerRadius = UDim.new(0, 6)
+table.insert(UI_Elements, {btn = ProfileTextBox, type = "textbox"})
+
+-- Функция сохранения профиля
+local function SaveProfileToFile(pName)
     local data = {
-        Theme = CurrentThemeName,
-        Enabled = STATE.Enabled,
-        ShowVisuals = STATE.ShowVisuals,
-        AntiLag = STATE.AntiLag,
-        HideInner = STATE.HideInner,
-        StaticSphere = STATE.StaticSphere,
-        NightModeSphere = STATE.NightModeSphere,
-        NightMap = STATE.NightMap,
-        OuterColor = tostring(STATE.OuterColor),
-        InnerColor = tostring(STATE.InnerColor)
+        Theme = CurrentThemeName, Enabled = STATE.Enabled, ShowVisuals = STATE.ShowVisuals,
+        AntiLag = STATE.AntiLag, HideInner = STATE.HideInner, StaticSphere = STATE.StaticSphere,
+        NightModeSphere = STATE.NightModeSphere, NightMap = STATE.NightMap,
+        OuterColor = tostring(STATE.OuterColor), InnerColor = tostring(STATE.InnerColor)
     }
-    local success, err = pcall(function()
-        writefile("BB_Premium_Config.json", HttpService:JSONEncode(data))
+    local success = pcall(function()
+        writefile("BB_Profile_" .. pName .. ".json", HttpService:JSONEncode(data))
     end)
-    if success then
-        print("✅ [BB] Настройки успешно сохранены!")
-    else
-        print("❌ [BB] Ошибка сохранения (экзекутор не поддерживает writefile).")
-    end
+    if success then print("✅ [BB] Профиль '"..pName.."' сохранен!") 
+    else print("❌ [BB] Ошибка сохранения.") end
 end
 
-local function LoadConfig()
+-- Функция загрузки профиля
+local function LoadProfileFromFile(pName, showMsg)
     local success, data = pcall(function()
-        if isfile and isfile("BB_Premium_Config.json") then
-            return HttpService:JSONDecode(readfile("BB_Premium_Config.json"))
+        if isfile and isfile("BB_Profile_" .. pName .. ".json") then
+            return HttpService:JSONDecode(readfile("BB_Profile_" .. pName .. ".json"))
         end
     end)
     if success and data then
         CurrentThemeName = data.Theme or "Dark Metal"
         CurrentTheme = THEMES[CurrentThemeName] or THEMES["Dark Metal"]
-        
         STATE.Enabled = data.Enabled ~= false
         STATE.ShowVisuals = data.ShowVisuals ~= false
         STATE.AntiLag = data.AntiLag == true
@@ -701,18 +644,209 @@ local function LoadConfig()
         STATE.StaticSphere = data.StaticSphere == true
         STATE.NightModeSphere = data.NightModeSphere == true
         STATE.NightMap = data.NightMap == true
-        
         if ApplyTheme then ApplyTheme() end
-        print("✅ [BB] Настройки успешно загружены! (Требуется перезапуск для полного применения)")
+        if showMsg then print("✅ [BB] Профиль '"..pName.."' загружен!") end
     else
-        print("❌ [BB] Файл конфигурации не найден.")
+        if showMsg then print("❌ [BB] Профиль не найден.") end
     end
 end
 
-CreateButton(OtherPage, "Save Current Settings", SaveConfig)
-CreateButton(OtherPage, "Load Settings", LoadConfig)
-CreateButton(OtherPage, "Toggle Mouse Lock", function()
-    UserInputService.MouseIconEnabled = not UserInputService.MouseIconEnabled
+-- Кнопка сохранения (обновляет список после сохранения)
+local SaveBtn = CreateButton(OtherPage, "💾 Save Profile", function()
+    local pName = ProfileTextBox.Text ~= "" and ProfileTextBox.Text or "Default"
+    SaveProfileToFile(pName)
+    if RefreshProfileList then RefreshProfileList() end
+end)
+
+-- Заголовок "Saved Profiles" + кнопка Refresh
+local ProfileHeaderRow = Instance.new("Frame")
+ProfileHeaderRow.Size = UDim2.new(1, 0, 0, 25)
+ProfileHeaderRow.BackgroundTransparency = 1
+ProfileHeaderRow.Parent = OtherPage
+
+local ProfileHeaderLabel = Instance.new("TextLabel")
+ProfileHeaderLabel.Size = UDim2.new(1, -60, 1, 0)
+ProfileHeaderLabel.BackgroundTransparency = 1
+ProfileHeaderLabel.Text = "📁 Saved Profiles"
+ProfileHeaderLabel.TextColor3 = CurrentTheme.TEXT
+ProfileHeaderLabel.Font = Enum.Font.GothamBold
+ProfileHeaderLabel.TextSize = 12
+ProfileHeaderLabel.TextXAlignment = Enum.TextXAlignment.Left
+ProfileHeaderLabel.Parent = ProfileHeaderRow
+table.insert(UI_Elements, {btn = ProfileHeaderLabel, type = "label"})
+
+local RefreshBtn = Instance.new("TextButton")
+RefreshBtn.Size = UDim2.new(0, 55, 1, 0)
+RefreshBtn.Position = UDim2.new(1, -55, 0, 0)
+RefreshBtn.BackgroundColor3 = CurrentTheme.OFF
+RefreshBtn.Text = "⟳ Refresh"
+RefreshBtn.TextColor3 = CurrentTheme.TEXT
+RefreshBtn.Font = Enum.Font.GothamBold
+RefreshBtn.TextSize = 10
+RefreshBtn.Parent = ProfileHeaderRow
+Instance.new("UICorner", RefreshBtn).CornerRadius = UDim.new(0, 5)
+table.insert(UI_Elements, {btn = RefreshBtn, type = "button"})
+
+-- Список профилей
+local ProfileListFrame = Instance.new("ScrollingFrame")
+ProfileListFrame.Size = UDim2.new(1, 0, 0, 180)
+ProfileListFrame.BackgroundColor3 = CurrentTheme.OFF
+ProfileListFrame.BackgroundTransparency = 0.7
+ProfileListFrame.BorderSizePixel = 0
+ProfileListFrame.ScrollBarThickness = 2
+ProfileListFrame.ScrollBarImageColor3 = CurrentTheme.ACCENT
+ProfileListFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+ProfileListFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
+ProfileListFrame.Parent = OtherPage
+Instance.new("UICorner", ProfileListFrame).CornerRadius = UDim.new(0, 6)
+table.insert(UI_Elements, {btn = ProfileListFrame, type = "listframe"})
+
+local ListPadding = Instance.new("UIPadding")
+ListPadding.PaddingTop = UDim.new(0, 4)
+ListPadding.PaddingBottom = UDim.new(0, 4)
+ListPadding.PaddingLeft = UDim.new(0, 4)
+ListPadding.PaddingRight = UDim.new(0, 4)
+ListPadding.Parent = ProfileListFrame
+
+local ListLayout = Instance.new("UIListLayout")
+ListLayout.Padding = UDim.new(0, 4)
+ListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+ListLayout.Parent = ProfileListFrame
+
+-- Функция обновления списка
+RefreshProfileList = function()
+    -- Удаляем старые строки
+    for _, child in ipairs(ProfileListFrame:GetChildren()) do
+        if child:IsA("Frame") then child:Destroy() end
+    end
+    
+    -- Читаем список файлов
+    local files = {}
+    pcall(function()
+        if listfiles then
+            for _, f in ipairs(listfiles("")) do
+                local match = f:match("BB_Profile_(.+)%.json")
+                if match then table.insert(files, match) end
+            end
+        end
+    end)
+    
+    -- Читаем текущий autoload
+    local autoloadName = ""
+    pcall(function()
+        if isfile and isfile("BB_AutoLoad.txt") then
+            autoloadName = readfile("BB_AutoLoad.txt")
+        end
+    end)
+    
+    if #files == 0 then
+        local empty = Instance.new("TextLabel")
+        empty.Size = UDim2.new(1, 0, 0, 30)
+        empty.BackgroundTransparency = 1
+        empty.Text = "Нет сохраненных профилей"
+        empty.TextColor3 = CurrentTheme.TEXT
+        empty.Font = Enum.Font.Gotham
+        empty.TextSize = 11
+        empty.TextTransparency = 0.5
+        empty.Parent = ProfileListFrame
+        return
+    end
+    
+    for _, name in ipairs(files) do
+        local isAuto = (name == autoloadName)
+        local row = Instance.new("Frame")
+        row.Size = UDim2.new(1, 0, 0, 28)
+        row.BackgroundTransparency = 1
+        row.Parent = ProfileListFrame
+        
+        -- Кнопка загрузки (имя профиля)
+        local loadBtn = Instance.new("TextButton")
+        loadBtn.Size = UDim2.new(0.42, -2, 1, 0)
+        loadBtn.BackgroundColor3 = isAuto and CurrentTheme.ACCENT or CurrentTheme.OFF
+        loadBtn.Text = (isAuto and "★ " or "") .. name
+        loadBtn.TextColor3 = isAuto and CurrentTheme.BG or CurrentTheme.TEXT
+        loadBtn.Font = Enum.Font.GothamBold
+        loadBtn.TextSize = 10
+        loadBtn.Parent = row
+        Instance.new("UICorner", loadBtn).CornerRadius = UDim.new(0, 4)
+        loadBtn.Activated:Connect(function()
+            PlayClick()
+            ProfileTextBox.Text = name
+            LoadProfileFromFile(name, true)
+        end)
+        
+        -- Кнопка Auto-Load
+        local autoBtn = Instance.new("TextButton")
+        autoBtn.Size = UDim2.new(0.34, -2, 1, 0)
+        autoBtn.Position = UDim2.new(0.42, 2, 0, 0)
+        autoBtn.BackgroundColor3 = isAuto and Color3.fromRGB(100, 200, 100) or CurrentTheme.OFF
+        autoBtn.Text = isAuto and "✓ AUTO" or "SET AUTO"
+        autoBtn.TextColor3 = isAuto and Color3.new(0,0,0) or CurrentTheme.TEXT
+        autoBtn.Font = Enum.Font.GothamBold
+        autoBtn.TextSize = 9
+        autoBtn.Parent = row
+        Instance.new("UICorner", autoBtn).CornerRadius = UDim.new(0, 4)
+        autoBtn.Activated:Connect(function()
+            PlayClick()
+            if isAuto then
+                -- Отключаем авто-загрузку
+                pcall(function() if isfile("BB_AutoLoad.txt") then delfile("BB_AutoLoad.txt") end end)
+                print("🔕 Auto-Load отключен")
+            else
+                -- Ставим этот профиль на авто
+                pcall(function() writefile("BB_AutoLoad.txt", name) end)
+                print("✅ Auto-Load: "..name)
+            end
+            RefreshProfileList()
+        end)
+        
+        -- Кнопка удаления
+        local delBtn = Instance.new("TextButton")
+        delBtn.Size = UDim2.new(0.24, -2, 1, 0)
+        delBtn.Position = UDim2.new(0.76, 2, 0, 0)
+        delBtn.BackgroundColor3 = Color3.fromRGB(160, 40, 40)
+        delBtn.Text = "DEL"
+        delBtn.TextColor3 = Color3.new(1,1,1)
+        delBtn.Font = Enum.Font.GothamBold
+        delBtn.TextSize = 9
+        delBtn.Parent = row
+        Instance.new("UICorner", delBtn).CornerRadius = UDim.new(0, 4)
+        delBtn.Activated:Connect(function()
+            PlayClick()
+            pcall(function() delfile("BB_Profile_"..name..".json") end)
+            -- Если удаляем autoload, убираем и его
+            pcall(function()
+                if isfile("BB_AutoLoad.txt") and readfile("BB_AutoLoad.txt") == name then
+                    delfile("BB_AutoLoad.txt")
+                end
+            end)
+            print("🗑️ Удален профиль: "..name)
+            RefreshProfileList()
+        end)
+    end
+end
+
+RefreshBtn.Activated:Connect(function()
+    PlayClick()
+    RefreshProfileList()
+end)
+
+-- Инициализация списка
+task.spawn(function()
+    task.wait(0.5)
+    RefreshProfileList()
+end)
+
+-- Авто-загрузка при старте
+task.spawn(function()
+    task.wait(1)
+    pcall(function()
+        if isfile and isfile("BB_AutoLoad.txt") then
+            local autoName = readfile("BB_AutoLoad.txt")
+            LoadProfileFromFile(autoName, false)
+            print("✅ [BB] Авто-загрузка профиля: "..autoName)
+        end
+    end)
 end)
 
 -- ============================================================
@@ -765,30 +899,27 @@ ApplyTheme = function()
     DebugStroke.Color = CurrentTheme.ACCENT
     Pages.ScrollBarImageColor3 = CurrentTheme.ACCENT
     ThemePanel.ScrollBarImageColor3 = CurrentTheme.ACCENT
+    ProfileListFrame.ScrollBarImageColor3 = CurrentTheme.ACCENT
     
     for _, t in ipairs(TabsList) do
         if t.Page.Visible then
-            t.Btn.BackgroundColor3 = CurrentTheme.ACCENT
-            t.Btn.TextColor3 = CurrentTheme.BG
+            t.Btn.BackgroundColor3 = CurrentTheme.ACCENT; t.Btn.TextColor3 = CurrentTheme.BG
         else
-            t.Btn.BackgroundColor3 = CurrentTheme.OFF
-            t.Btn.TextColor3 = CurrentTheme.TEXT
+            t.Btn.BackgroundColor3 = CurrentTheme.OFF; t.Btn.TextColor3 = CurrentTheme.TEXT
         end
     end
     
     for _, el in ipairs(UI_Elements) do
-        if el.type == "label" then
-            el.btn.TextColor3 = CurrentTheme.TEXT
-        elseif el.type == "button" then
-            el.btn.BackgroundColor3 = CurrentTheme.OFF
-            el.btn.TextColor3 = CurrentTheme.TEXT
-        elseif el.type == "switch" then
-            el.btn.BackgroundColor3 = el.state and CurrentTheme.ACCENT or CurrentTheme.OFF
-        elseif el.type == "ascii" then
-            el.btn.BackgroundColor3 = el.state and CurrentTheme.ACCENT or CurrentTheme.OFF
-            el.btn.TextColor3 = el.state and CurrentTheme.BG or CurrentTheme.TEXT
+        if el.type == "label" then el.btn.TextColor3 = CurrentTheme.TEXT
+        elseif el.type == "button" then el.btn.BackgroundColor3 = CurrentTheme.OFF; el.btn.TextColor3 = CurrentTheme.TEXT
+        elseif el.type == "switch" then el.btn.BackgroundColor3 = el.state and CurrentTheme.ACCENT or CurrentTheme.OFF
+        elseif el.type == "ascii" then el.btn.BackgroundColor3 = el.state and CurrentTheme.ACCENT or CurrentTheme.OFF; el.btn.TextColor3 = el.state and CurrentTheme.BG or CurrentTheme.TEXT
+        elseif el.type == "textbox" then el.btn.BackgroundColor3 = CurrentTheme.OFF; el.btn.TextColor3 = CurrentTheme.TEXT
+        elseif el.type == "listframe" then el.btn.BackgroundColor3 = CurrentTheme.OFF
         end
     end
+    
+    if RefreshProfileList then RefreshProfileList() end
 end
 
 TabsList[1].Page.Visible = true
@@ -817,9 +948,7 @@ local function IsTargetingMe(ball)
         if v then
             if v == LP or v == LP.Name or v == LP.UserId or v == LP.Character or tostring(v) == LP.Name then
                 return true
-            else
-                return false 
-            end
+            else return false end
         end
     end
     return LP.Character and LP.Character:FindFirstChild("Highlight") ~= nil
@@ -883,19 +1012,21 @@ RunService.Heartbeat:Connect(function(dt)
             if dist > CONFIG.ZONE.MAX_DIST * 1.5 then STATE.IsArmed = true end
             
             local approachSpeed = 0
-            if STATE.PrevBallPos and dt > 0 then
+            local bv = ball.AssemblyLinearVelocity
+            if bv.Magnitude > 1 then
+                speed = bv.Magnitude
+                local dirToMe = (hrp.Position - bp).Unit
+                approachSpeed = bv:Dot(dirToMe)
+            elseif STATE.PrevBallPos and dt > 0 then
                 local moveVec = bp - STATE.PrevBallPos
                 speed = moveVec.Magnitude / dt
-                
                 if speed > 1 then
                     local dirToMe = (hrp.Position - bp).Unit
                     approachSpeed = moveVec.Unit:Dot(dirToMe) * speed
                 end
             end
             
-            if approachSpeed > 1 then
-                timeToImpact = dist / approachSpeed
-            end
+            if approachSpeed > 1 then timeToImpact = dist / approachSpeed end
 
             if IsTargetingMe(ball) then
                 zone = GetZone(speed)
@@ -905,9 +1036,16 @@ RunService.Heartbeat:Connect(function(dt)
                 if STATE.PrevBallPos then
                     hitTrajectory = getDistanceToSegment(hrp.Position, STATE.PrevBallPos, bp) <= zone
                 end
-                local predictHit = timeToImpact <= CONFIG.SYSTEM.PING_BUFFER
                 
-                if inZone or hitTrajectory or predictHit then
+                local predictedHit = false
+                if bv.Magnitude > 50 then
+                    local predictedPos = bp + bv * 0.1
+                    if (hrp.Position - predictedPos).Magnitude <= zone then predictedHit = true end
+                end
+                
+                local timePredict = timeToImpact <= CONFIG.SYSTEM.PING_BUFFER
+                
+                if inZone or hitTrajectory or predictedHit or timePredict then
                     status = "DANGER!"
                     targetColor = CONFIG.VISUALS.DANGER_COLOR
                     
@@ -917,11 +1055,7 @@ RunService.Heartbeat:Connect(function(dt)
                             task.wait(0.05)
                             VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.F, false, game)
                         end)
-                        
-                        if STATE.Remote then
-                            pcall(function() STATE.Remote:FireServer() end)
-                        end
-                        
+                        if STATE.Remote then pcall(function() STATE.Remote:FireServer() end) end
                         STATE.LastParry = tick()
                         STATE.IsArmed = false
                     end
@@ -935,14 +1069,18 @@ RunService.Heartbeat:Connect(function(dt)
         else
             STATE.IsArmed = true
             STATE.PrevBallPos = nil
+            zone = CONFIG.ZONE.MIN_DIST 
         end
 
         if render and STATE.ShowVisuals and OuterSphere and InnerSphere then
             if not STATE.StaticSphere then
                 PulseTime = PulseTime + (dt * CONFIG.VISUALS.PULSE_SPEED)
             end
-            local targetSize = zone * 2
+            
+            local targetSize = math.max(zone * 2, CONFIG.ZONE.MIN_DIST * 2)
             local currentSize = OuterSphere.Size.X
+            if currentSize < 5 then currentSize = targetSize end
+            
             local newSize = currentSize + (targetSize - currentSize) * math.exp(-10 * dt)
             local finalSize = STATE.StaticSphere and newSize or (newSize * (1 + math.sin(PulseTime) * 0.02))
             
@@ -993,6 +1131,7 @@ LP.CharacterAdded:Connect(function()
     STATE.IsArmed = true
     STATE.PrevBallPos = nil
     STATE.Ball = nil
+    if OuterSphere then OuterSphere.Size = Vector3.new(40,40,40) end
 end)
 
-print("✅ DEVELOPER EDITION v10.0 | Environment Night Mode Added.")
+print("✅ DEVELOPER EDITION v12.0 | Profile Manager UI Loaded.")
