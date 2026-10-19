@@ -1,172 +1,15 @@
 --[[
     ╔═══════════════════════════════════════════════════════════════════════════╗
-    ║   [ SECURE DEVELOPER EDITION v13.0 | AUTH SYSTEM INTEGRATED ]             ║
-    ║   • HWID & Key System                                                    ║
-    ║   • Premium UI (Themes, Profiles, Colors, Night Map)                     ║
-    ║   • Auto-Parry & Speed Prediction                                        ║
+    ║   [ DEVELOPER EDITION v12.0 | PROFILE MANAGER UI ]                        ║
+    ║   • Красивый список профилей с кнопками                                   ║
+    ║   • Авто-загрузка через выбор из списка                                   ║
+    ║   • Удаление профилей прямо из меню                                       ║
     ╚═══════════════════════════════════════════════════════════════════════════╝
 ]]
 
 -- ============================================================
--- [ 🛡️ 1. SECURITY MODULE | HWID, KEY SYSTEM & WATERMARK ]
+-- [ КОНФИГУРАЦИЯ ]
 -- ============================================================
-local HttpService = game:GetService("HttpService")
-local Players = game:GetService("Players")
-local LP = Players.LocalPlayer
-
--- Получение HWID (уникального ID устройства)
-local function GetHWID()
-    local hwid = "UNKNOWN_HWID"
-    pcall(function()
-        if gethwid then hwid = gethwid() 
-        elseif syn and syn.get_hwid then hwid = syn.get_hwid() 
-        elseif game.GetService and game:GetService("RbxAnalyticsService") then 
-            hwid = game:GetService("RbxAnalyticsService"):GetClientId() 
-        elseif identifyexecutor then hwid = identifyexecutor() .. "_" .. tostring(os.time()) end
-    end)
-    return hwid
-end
-
-local MY_HWID = GetHWID()
-local WATERMARK = "Protected_By_Developer | HWID: " .. string.sub(MY_HWID, 1, 8) .. "..."
-
-print("=========================================")
-print("🛡️ ЗАПУСК ЗАЩИЩЕННОГО СКРИПТА")
-print("📌 " .. WATERMARK)
-print("=========================================")
-
--- Функция проверки ключа (ТЕСТОВАЯ)
-local function ValidateKey(key)
-    -- ТЕСТОВЫЙ КЛЮЧ
-    local TEST_KEY = "BB-PREMIUM-2024"
-    
-    if key == TEST_KEY then
-        return true, "Успешная активация!"
-    end
-    
-    -- РЕАЛЬНАЯ ПРОВЕРКА (Раскомментируй, когда сделаешь API на Glitch/Replit)
-    -- local url = "https://твой-сайт.com/api/check?key="..key.."&hwid="..MY_HWID
-    -- local success, response = pcall(function() return game:HttpGet(url) end)
-    -- if success and response == "OK" then return true, "Авторизация пройдена!" end
-    
-    return false, "Неверный ключ!"
-end
-
--- Окно Авторизации
-local function ShowAuthUI()
-    local AuthGui = Instance.new("ScreenGui")
-    AuthGui.Name = "BB_Auth"
-    AuthGui.ResetOnSpawn = false
-    AuthGui.IgnoreGuiInset = true
-    AuthGui.DisplayOrder = 9999
-    AuthGui.Parent = LP:WaitForChild("PlayerGui")
-
-    local Frame = Instance.new("Frame")
-    Frame.Size = UDim2.new(0, 300, 0, 220)
-    Frame.Position = UDim2.new(0.5, -150, 0.5, -110)
-    Frame.BackgroundColor3 = Color3.fromRGB(15, 16, 20)
-    Frame.Parent = AuthGui
-    Instance.new("UICorner", Frame).CornerRadius = UDim.new(0, 12)
-    
-    local Stroke = Instance.new("UIStroke", Frame)
-    Stroke.Color = Color3.fromRGB(0, 200, 255)
-    Stroke.Thickness = 2
-
-    local Title = Instance.new("TextLabel")
-    Title.Size = UDim2.new(1, 0, 0, 40)
-    Title.BackgroundTransparency = 1
-    Title.Text = "SYSTEM AUTHORIZATION"
-    Title.TextColor3 = Color3.fromRGB(0, 200, 255)
-    Title.Font = Enum.Font.GothamBlack
-    Title.TextSize = 16
-    Title.Parent = Frame
-
-    local HWIDLabel = Instance.new("TextLabel")
-    HWIDLabel.Size = UDim2.new(1, -20, 0, 20)
-    HWIDLabel.Position = UDim2.new(0, 10, 0, 35)
-    HWIDLabel.BackgroundTransparency = 1
-    HWIDLabel.Text = "Ваш HWID: " .. string.sub(MY_HWID, 1, 16) .. "..."
-    HWIDLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
-    HWIDLabel.Font = Enum.Font.Code
-    HWIDLabel.TextSize = 10
-    HWIDLabel.TextXAlignment = Enum.TextXAlignment.Center
-    HWIDLabel.Parent = Frame
-
-    local TextBox = Instance.new("TextBox")
-    TextBox.Size = UDim2.new(1, -40, 0, 40)
-    TextBox.Position = UDim2.new(0, 20, 0, 65)
-    TextBox.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
-    TextBox.PlaceholderText = "Введите ключ доступа..."
-    TextBox.Text = ""
-    TextBox.TextColor3 = Color3.new(1,1,1)
-    TextBox.Font = Enum.Font.GothamMedium
-    TextBox.TextSize = 13
-    TextBox.Parent = Frame
-    Instance.new("UICorner", TextBox).CornerRadius = UDim.new(0, 6)
-
-    local StatusLabel = Instance.new("TextLabel")
-    StatusLabel.Size = UDim2.new(1, -40, 0, 20)
-    StatusLabel.Position = UDim2.new(0, 20, 0, 115)
-    StatusLabel.BackgroundTransparency = 1
-    StatusLabel.Text = ""
-    StatusLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
-    StatusLabel.Font = Enum.Font.GothamBold
-    StatusLabel.TextSize = 11
-    StatusLabel.Parent = Frame
-
-    local SubmitBtn = Instance.new("TextButton")
-    SubmitBtn.Size = UDim2.new(1, -40, 0, 45)
-    SubmitBtn.Position = UDim2.new(0, 20, 0, 150)
-    SubmitBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 255)
-    SubmitBtn.Text = "ВОЙТИ"
-    SubmitBtn.TextColor3 = Color3.fromRGB(0,0,0)
-    SubmitBtn.Font = Enum.Font.GothamBold
-    SubmitBtn.TextSize = 14
-    SubmitBtn.Parent = Frame
-    Instance.new("UICorner", SubmitBtn).CornerRadius = UDim.new(0, 6)
-
-    local isAuthenticated = false
-
-    SubmitBtn.Activated:Connect(function()
-        local key = TextBox.Text
-        if key == "" then StatusLabel.Text = "Введите ключ!"; return end
-        
-        StatusLabel.Text = "Проверка ключа..."
-        StatusLabel.TextColor3 = Color3.fromRGB(255, 200, 0)
-        
-        task.wait(0.5)
-        
-        local success, msg = ValidateKey(key)
-        if success then
-            StatusLabel.Text = msg
-            StatusLabel.TextColor3 = Color3.fromRGB(0, 255, 100)
-            task.wait(0.5)
-            AuthGui:Destroy()
-            isAuthenticated = true
-        else
-            StatusLabel.Text = msg
-            StatusLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
-        end
-    end)
-
-    -- ЖДЕМ, ПОКА ПОЛЬЗОВАТЕЛЬ НЕ ВВЕДЕТ КЛЮЧ
-    -- Эта строчка блокирует запуск всего остального скрипта
-    while not isAuthenticated do
-        task.wait(0.1)
-    end
-    return true
-end
-
--- ВЫЗОВ ОКНА АВТОРИЗАЦИИ
-if not ShowAuthUI() then
-    return -- Если ключ не введен, скрипт на этом завершится
-end
-
--- ============================================================
--- [ ⚙️ 2. MAIN SCRIPT CONFIGURATION & THEMES ]
--- ============================================================
--- (Далее идет твой огромный скрипт с сферой, меню, темами и т.д.)
-
 local CONFIG = {
     ZONE = {
         MIN_SPEED  = 50,   MIN_DIST  = 20,   
@@ -204,18 +47,24 @@ local THEMES = {
 local CurrentThemeName = "Dark Metal"
 local CurrentTheme = THEMES[CurrentThemeName]
 
+-- ============================================================
+-- [ СЕРВИСЫ ]
+-- ============================================================
+local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local HttpService = game:GetService("HttpService")
 local Lighting = game:GetService("Lighting")
 
+local LP = Players.LocalPlayer
 local PGui = LP:WaitForChild("PlayerGui")
 
 for _, v in ipairs(PGui:GetChildren()) do
-    if v.Name:match("^BB_") and v.Name ~= "BB_Auth" then v:Destroy() end
+    if v.Name:match("^BB_") then v:Destroy() end
 end
 if Workspace:FindFirstChild("AuraVisual") then Workspace.AuraVisual:Destroy() end
 
@@ -235,7 +84,7 @@ task.spawn(function()
 end)
 
 -- ============================================================
--- [ 3. 3D СФЕРА ]
+-- [ 3D СФЕРА ]
 -- ============================================================
 local OuterSphere = Instance.new("Part")
 OuterSphere.Name = "AuraVisual"
@@ -263,7 +112,7 @@ InnerSphere.Size = Vector3.new(10, 10, 10)
 InnerSphere.Parent = OuterSphere
 
 -- ============================================================
--- [ 4. СИСТЕМА НОЧИ ]
+-- [ НОЧЬ НА КАРТЕ ]
 -- ============================================================
 local originalLighting = {}
 local createdAtmosphere = nil
@@ -299,7 +148,7 @@ local function SetNightMap(enabled)
 end
 
 -- ============================================================
--- [ 5. UI ФРЕЙМВОРК ]
+-- [ UI ФРЕЙМВОРК ]
 -- ============================================================
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "BB_UI"
@@ -310,7 +159,7 @@ ScreenGui.Parent = PGui
 
 local UI_Elements = {}
 local ApplyTheme
-local RefreshProfileList
+local RefreshProfileList -- forward declare
 
 local ClickSound = Instance.new("Sound")
 ClickSound.SoundId = CONFIG.SYSTEM.CLICK_SOUND
@@ -502,7 +351,7 @@ end)
 CloseBtn.Activated:Connect(function() PlayClick(); Window.Visible = false; ThemePanel.Visible = false end)
 
 -- ============================================================
--- [ 6. UI ХЕЛПЕРЫ ]
+-- [ UI ХЕЛПЕРЫ ]
 -- ============================================================
 local PagesList, TabsList = {}, {}
 
@@ -712,7 +561,7 @@ local function CreateColorPicker(parent, text, currentColor, callback)
 end
 
 -- ============================================================
--- [ 7. СТРАНИЦЫ ]
+-- [ СТРАНИЦЫ ]
 -- ============================================================
 local MainPage = CreateTab("Main", "🎯")
 local ParryAscii = [[
@@ -745,8 +594,10 @@ CreateColorPicker(VisPage, "Outer Sphere Color", STATE.OuterColor, function(c) S
 CreateColorPicker(VisPage, "Inner Core Color", STATE.InnerColor, function(c) STATE.InnerColor = c end)
 CreateButton(VisPage, "Change UI Theme", function() ThemePanel.Visible = not ThemePanel.Visible end)
 
+-- 3. Other Page
 local OtherPage = CreateTab("Other", "⚙️")
 
+-- Текстовое поле
 local ProfileTextBox = Instance.new("TextBox")
 ProfileTextBox.Size = UDim2.new(1, 0, 0, 35)
 ProfileTextBox.BackgroundColor3 = CurrentTheme.OFF
@@ -761,6 +612,7 @@ ProfileTextBox.Parent = OtherPage
 Instance.new("UICorner", ProfileTextBox).CornerRadius = UDim.new(0, 6)
 table.insert(UI_Elements, {btn = ProfileTextBox, type = "textbox"})
 
+-- Функция сохранения профиля
 local function SaveProfileToFile(pName)
     local data = {
         Theme = CurrentThemeName, Enabled = STATE.Enabled, ShowVisuals = STATE.ShowVisuals,
@@ -775,6 +627,7 @@ local function SaveProfileToFile(pName)
     else print("❌ [BB] Ошибка сохранения.") end
 end
 
+-- Функция загрузки профиля
 local function LoadProfileFromFile(pName, showMsg)
     local success, data = pcall(function()
         if isfile and isfile("BB_Profile_" .. pName .. ".json") then
@@ -798,12 +651,14 @@ local function LoadProfileFromFile(pName, showMsg)
     end
 end
 
+-- Кнопка сохранения (обновляет список после сохранения)
 local SaveBtn = CreateButton(OtherPage, "💾 Save Profile", function()
     local pName = ProfileTextBox.Text ~= "" and ProfileTextBox.Text or "Default"
     SaveProfileToFile(pName)
     if RefreshProfileList then RefreshProfileList() end
 end)
 
+-- Заголовок "Saved Profiles" + кнопка Refresh
 local ProfileHeaderRow = Instance.new("Frame")
 ProfileHeaderRow.Size = UDim2.new(1, 0, 0, 25)
 ProfileHeaderRow.BackgroundTransparency = 1
@@ -832,6 +687,7 @@ RefreshBtn.Parent = ProfileHeaderRow
 Instance.new("UICorner", RefreshBtn).CornerRadius = UDim.new(0, 5)
 table.insert(UI_Elements, {btn = RefreshBtn, type = "button"})
 
+-- Список профилей
 local ProfileListFrame = Instance.new("ScrollingFrame")
 ProfileListFrame.Size = UDim2.new(1, 0, 0, 180)
 ProfileListFrame.BackgroundColor3 = CurrentTheme.OFF
@@ -857,11 +713,14 @@ ListLayout.Padding = UDim.new(0, 4)
 ListLayout.SortOrder = Enum.SortOrder.LayoutOrder
 ListLayout.Parent = ProfileListFrame
 
+-- Функция обновления списка
 RefreshProfileList = function()
+    -- Удаляем старые строки
     for _, child in ipairs(ProfileListFrame:GetChildren()) do
         if child:IsA("Frame") then child:Destroy() end
     end
     
+    -- Читаем список файлов
     local files = {}
     pcall(function()
         if listfiles then
@@ -872,6 +731,7 @@ RefreshProfileList = function()
         end
     end)
     
+    -- Читаем текущий autoload
     local autoloadName = ""
     pcall(function()
         if isfile and isfile("BB_AutoLoad.txt") then
@@ -899,6 +759,7 @@ RefreshProfileList = function()
         row.BackgroundTransparency = 1
         row.Parent = ProfileListFrame
         
+        -- Кнопка загрузки (имя профиля)
         local loadBtn = Instance.new("TextButton")
         loadBtn.Size = UDim2.new(0.42, -2, 1, 0)
         loadBtn.BackgroundColor3 = isAuto and CurrentTheme.ACCENT or CurrentTheme.OFF
@@ -914,6 +775,7 @@ RefreshProfileList = function()
             LoadProfileFromFile(name, true)
         end)
         
+        -- Кнопка Auto-Load
         local autoBtn = Instance.new("TextButton")
         autoBtn.Size = UDim2.new(0.34, -2, 1, 0)
         autoBtn.Position = UDim2.new(0.42, 2, 0, 0)
@@ -927,15 +789,18 @@ RefreshProfileList = function()
         autoBtn.Activated:Connect(function()
             PlayClick()
             if isAuto then
+                -- Отключаем авто-загрузку
                 pcall(function() if isfile("BB_AutoLoad.txt") then delfile("BB_AutoLoad.txt") end end)
                 print("🔕 Auto-Load отключен")
             else
+                -- Ставим этот профиль на авто
                 pcall(function() writefile("BB_AutoLoad.txt", name) end)
                 print("✅ Auto-Load: "..name)
             end
             RefreshProfileList()
         end)
         
+        -- Кнопка удаления
         local delBtn = Instance.new("TextButton")
         delBtn.Size = UDim2.new(0.24, -2, 1, 0)
         delBtn.Position = UDim2.new(0.76, 2, 0, 0)
@@ -949,6 +814,7 @@ RefreshProfileList = function()
         delBtn.Activated:Connect(function()
             PlayClick()
             pcall(function() delfile("BB_Profile_"..name..".json") end)
+            -- Если удаляем autoload, убираем и его
             pcall(function()
                 if isfile("BB_AutoLoad.txt") and readfile("BB_AutoLoad.txt") == name then
                     delfile("BB_AutoLoad.txt")
@@ -965,11 +831,13 @@ RefreshBtn.Activated:Connect(function()
     RefreshProfileList()
 end)
 
+-- Инициализация списка
 task.spawn(function()
     task.wait(0.5)
     RefreshProfileList()
 end)
 
+-- Авто-загрузка при старте
 task.spawn(function()
     task.wait(1)
     pcall(function()
@@ -982,7 +850,7 @@ task.spawn(function()
 end)
 
 -- ============================================================
--- [ 8. ПАНЕЛЬ ОТЛАДКИ ]
+-- [ ПАНЕЛЬ ОТЛАДКИ ]
 -- ============================================================
 local DebugGui = Instance.new("ScreenGui")
 DebugGui.Name = "BB_Debug"
@@ -1015,7 +883,7 @@ DebugLabel.Text = "Ожидание..."
 DebugLabel.Parent = DebugFrame
 
 -- ============================================================
--- [ 9. ПРИМЕНЕНИЕ ТЕМЫ ]
+-- [ ПРИМЕНЕНИЕ ТЕМЫ ]
 -- ============================================================
 ApplyTheme = function()
     Window.BackgroundColor3 = CurrentTheme.BG
@@ -1059,7 +927,7 @@ TabsList[1].Btn.BackgroundColor3 = CurrentTheme.ACCENT
 TabsList[1].Btn.TextColor3 = CurrentTheme.BG
 
 -- ============================================================
--- [ 10. ЛОГИКА ЯДРА ]
+-- [ ЛОГИКА ЯДРА ]
 -- ============================================================
 local function GetBall()
     if STATE.Ball and STATE.Ball.Parent then return STATE.Ball end
@@ -1266,4 +1134,4 @@ LP.CharacterAdded:Connect(function()
     if OuterSphere then OuterSphere.Size = Vector3.new(40,40,40) end
 end)
 
-print("✅ SECURE DEVELOPER EDITION v13.0 | Auth Success. Script Loaded.")
+print("✅ DEVELOPER EDITION v12.0 | Profile Manager UI Loaded.")
