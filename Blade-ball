@@ -1,9 +1,9 @@
 --[[
     ╔═══════════════════════════════════════════════════════════════════════╗
-    ║   BLADE BALL — LIGHT SPEED DEFENSE                                    ║
-    ║   • Ловит мячи на скорости света (триггер по времени)                 ║
-    ║   • Сфера вокруг тебя + сфера вокруг мяча                             ║
-    ║   • Срабатывание при касании сфер + запас 0.25 сек                    ║
+    ║   BLADE BALL — RE-ARMED & F-PRESS FIX                                 ║
+    ║   • Починен баг с зависанием (isArmed)                                ║
+    ║   • Нажатие F ровно 1 раз (запускает анимацию для сервера)            ║
+    ║   • Срабатывание за 0.35 сек до удара                                 ║
     ╚═══════════════════════════════════════════════════════════════════════╝
 ]]
 
@@ -12,8 +12,7 @@ print("▶️ 1. Запуск скрипта...")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local ContextActionService = game:GetService("ContextActionService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
 
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui", 10)
@@ -26,8 +25,7 @@ if Workspace:FindFirstChild("BallEffect") then Workspace.BallEffect:Destroy() en
 local CFG = {
     PARRY_RADIUS        = 25,        -- Радиус ТВОЕЙ сферы
     BALL_RADIUS         = 3,         -- Радиус сферы МЯЧА
-    BUFFER_DIST         = 20,        -- Отступ (сильно увеличен)
-    TIME_BUFFER         = 0.25,      -- Срабатывание за 0.25 сек до удара (защита от скорости света)
+    BUFFER_DIST         = 10,        
     
     PARRY_COOLDOWN      = 0.25,      
     PARRY_ENABLED       = true,
@@ -35,18 +33,9 @@ local CFG = {
     Y_OFFSET            = -0.5,
     COLOR_INSIDE        = Color3.fromRGB(255, 30, 30),
     COLOR_OUTSIDE       = Color3.fromRGB(30, 255, 50),
+    
+    TRIGGER_TIME        = 0.35,      -- Нажатие за 0.35 сек до удара
 }
-
--- 1. REMOTE
-local parryRemote = nil
-task.spawn(function()
-    for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
-        if obj:IsA("RemoteEvent") and (obj.Name:lower():find("parry") or obj.Name:lower():find("attempt") or obj.Name:lower():find("block")) then
-            parryRemote = obj
-            break
-        end
-    end
-end)
 
 -- 2. СФЕРА ИГРОКА
 local sphere = Instance.new("Part")
@@ -54,7 +43,6 @@ sphere.Name = "VisualEffect"
 sphere.Shape = Enum.PartType.Ball
 sphere.Anchored = true
 sphere.CanCollide = false
-sphere.CanTouch = false
 sphere.CanQuery = false
 sphere.CastShadow = false
 sphere.Massless = true
@@ -70,7 +58,6 @@ ballSphere.Name = "BallEffect"
 ballSphere.Shape = Enum.PartType.Ball
 ballSphere.Anchored = true
 ballSphere.CanCollide = false
-ballSphere.CanTouch = false
 ballSphere.CanQuery = false
 ballSphere.CastShadow = false
 ballSphere.Massless = true
@@ -192,7 +179,7 @@ Workspace.ChildAdded:Connect(function(o)
     end
 end)
 
--- 7. ПАРИРОВАНИЕ
+-- 7. ПАРИРОВАНИЕ (F)
 local lastParry = 0
 local lastAction = "None"
 local isArmed = true
@@ -202,20 +189,14 @@ local function executeParry()
     if not isArmed then return end
     if tick() - lastParry < CFG.PARRY_COOLDOWN then return end
 
-    local fired = false
-
+    -- Жмем F (запускает анимацию)
     pcall(function()
-        ContextActionService:CallFunction("Block", Enum.UserInputState.Begin, nil)
-        ContextActionService:CallFunction("Parry", Enum.UserInputState.Begin, nil)
-        fired = true
+        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.F, false, game)
+        task.wait(0.05)
+        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.F, false, game)
     end)
 
-    if parryRemote then
-        pcall(function() parryRemote:FireServer() end)
-        fired = true
-    end
-
-    lastAction = fired and "CAS + Remote" or "Failed"
+    lastAction = "Key F"
     lastParry = tick()
     isArmed = false
 end
@@ -256,14 +237,16 @@ RunService.Heartbeat:Connect(function(dt)
             local dist = (hrpPos - bp).Magnitude
             dbg_dist = dist
 
-            -- Перезаряжаем скрипт
-            if dist > (CFG.PARRY_RADIUS + CFG.BALL_RADIUS + CFG.BUFFER_DIST) * 1.5 then
-                isArmed = true
-            end
-
+            -- ПОЧИНЕНО: Если это новый мяч, скрипт заряжается заново
             if lastBall ~= ball then
                 prevPos = bp
                 lastBall = ball
+                isArmed = true 
+            end
+
+            -- ПОЧИНЕНО: Если мяч отлетел далеко, скрипт тоже заряжается
+            if dist > 50 then
+                isArmed = true
             end
 
             local speed = 0
@@ -285,15 +268,15 @@ RunService.Heartbeat:Connect(function(dt)
             local isTargetingMe = false
             local tVal = ball:GetAttribute("target")
             
-            if tVal and (tVal == LocalPlayer.Name or tostring(tVal) == LocalPlayer.Name) then 
+            -- Упрощенная проверка цели (работает даже если target это объект)
+            if tVal and (tostring(tVal):find(LocalPlayer.Name) or tVal == LocalPlayer) then 
                 isTargetingMe = true 
-            elseif approachSpeed > 1 or (speed > 1 and dist < 80) then
+            elseif approachSpeed > 2 or (speed > 5 and dist < 60) then
                 isTargetingMe = true 
             end
 
             if isTargetingMe then
-                -- Считаем время до удара
-                if approachSpeed > 1 then
+                if approachSpeed > 2 then
                     dbg_time = dist / approachSpeed
                 end
 
@@ -302,10 +285,8 @@ RunService.Heartbeat:Connect(function(dt)
                 local targetRadius = math.clamp(dist, CFG.PARRY_RADIUS, CFG.PARRY_RADIUS + 15)
                 targetDiameter = targetRadius * 2
                 
-                local collisionDist = CFG.PARRY_RADIUS + CFG.BALL_RADIUS + CFG.BUFFER_DIST
-                
-                -- ТРИГГЕР: либо сферы соприкоснулись, либо мяч летит быстрее 0.25 сек
-                if dist <= collisionDist or dbg_time <= CFG.TIME_BUFFER then
+                -- Триггер: нажатие при пересечении сфер ИЛИ когда времени мало
+                if dist <= (CFG.PARRY_RADIUS + CFG.BALL_RADIUS + CFG.BUFFER_DIST) or dbg_time <= CFG.TRIGGER_TIME then
                     executeParry()
                     if not isArmed then
                         dbg_status = "PARRY!"
@@ -317,6 +298,8 @@ RunService.Heartbeat:Connect(function(dt)
             ballSphere.CFrame = CFrame.new(bp)
         else
             isArmed = true
+            lastBall = nil
+            prevPos = nil
         end
 
         debugText.Text = string.format("Ball: %s\nDist: %.1f\nTime: %s\nArmed: %s\nStatus: %s\nMethod: %s", 
