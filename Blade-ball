@@ -8,11 +8,10 @@
     ║   ██║     ██║  ██║██║  ██║██║  ██║   ██║       ██║     ╚██████╔╝          ║
     ║   ╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝       ╚═╝      ╚═════╝           ║
     ║                                                                           ║
-    ║   [ ULTIMATE PREMIUM EDITION | v14.0 ]                                    ║
-    ║                                                                           ║
-    ║   • Glassmorphism UI (Стеклянный интерфейс)                               ║
+    ║   [ CANDY EDITION | v15.0 | ULTRA-FAST PARRY ]                            ║
     ║   • 12 Premium Themes (6 Dark / 6 Light)                                  ║
-    ║   • Predictive Parry & Anti-Close Spam                                    ║
+    ║   • Human Delay: 0.10 - 0.15s (x1.5 Faster)                               ║
+    ║   • Anti-Close Spam & Predictive Hit                                      ║
     ║   • Camera Lock & Profile Manager                                         ║
     ║   • Smart Debug HUD & Right Ctrl Toggle                                   ║
     ╚═══════════════════════════════════════════════════════════════════════════╝
@@ -48,9 +47,13 @@ if Workspace:FindFirstChild("AuraVisual") then Workspace.AuraVisual:Destroy() en
 local CONFIG = {
     -- Логика парирования
     CLOSE_DIST       = 45,     -- Дистанция "ближнего боя" (спам)
-    COOLDOWN         = 0,      -- 0 = без задержки (макс. скорость)
+    COOLDOWN         = 0.12,   -- Кулдаун между парированиями
     PING_SAFE        = 0.35,   -- Компенсация пинга (350мс)
     PREDICT_TIME     = 0.15,   -- Предсказание позиции мяча (150мс)
+    
+    -- Человеческая задержка (x1.5 быстрее)
+    HUMAN_DELAY_MIN  = 0.10,   -- Мин. задержка (100 мс)
+    HUMAN_DELAY_MAX  = 0.15,   -- Макс. задержка (150 мс)
     
     -- Визуал сферы
     SPHERE_MIN       = 40,     -- Мин. диаметр сферы
@@ -900,42 +903,50 @@ UserInputService.InputBegan:Connect(function(input, gpe)
 end)
 
 -- ============================================================
--- [ 16. ЛОГИКА ПАРИРОВАНИЯ ]
+-- [ 16. ЛОГИКА ПАРИРОВАНИЯ (HUMAN DELAY 0.10-0.15s) ]
 -- ============================================================
 local function TriggerParry()
     local now = tick()
+    -- Защита от спама
     if now - STATE.LastParry < CONFIG.COOLDOWN then return end
     STATE.LastParry = now
 
-    if not STATE.BlockButton or not STATE.BlockButton.Parent then
-        STATE.BlockButton = FindBlockButton()
-    end
+    task.spawn(function()
+        -- 1. ИМИТАЦИЯ ЧЕЛОВЕЧЕСКОЙ РЕАКЦИИ (x1.5 быстрее)
+        local delay = math.random(CONFIG.HUMAN_DELAY_MIN * 1000, CONFIG.HUMAN_DELAY_MAX * 1000) / 1000
+        task.wait(delay)
 
-    if STATE.BlockButton and getconnections then
-        local success = pcall(function()
-            local connections = getconnections(STATE.BlockButton.Activated)
-            for _, c in ipairs(connections) do
-                if c.Fire then c:Fire() end
-            end
-        end)
-        if success then 
-            STATE.ParryMethod = "Button"
-            return 
+        -- 2. ВЫПОЛНЕНИЕ ПАРИРОВАНИЯ
+        if not STATE.BlockButton or not STATE.BlockButton.Parent then
+            STATE.BlockButton = FindBlockButton()
         end
-    end
 
-    if STATE.Remote then
-        pcall(function() STATE.Remote:FireServer() end)
-        STATE.ParryMethod = "Remote"
-        return
-    end
+        if STATE.BlockButton and getconnections then
+            local success = pcall(function()
+                local connections = getconnections(STATE.BlockButton.Activated)
+                for _, c in ipairs(connections) do
+                    if c.Fire then c:Fire() end
+                end
+            end)
+            if success then 
+                STATE.ParryMethod = "Button"
+                return 
+            end
+        end
 
-    pcall(function()
-        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.F, false, game)
-        task.wait(0.02)
-        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.F, false, game)
+        if STATE.Remote then
+            pcall(function() STATE.Remote:FireServer() end)
+            STATE.ParryMethod = "Remote"
+            return
+        end
+
+        pcall(function()
+            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.F, false, game)
+            task.wait(0.02)
+            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.F, false, game)
+        end)
+        STATE.ParryMethod = "VIM"
     end)
-    STATE.ParryMethod = "VIM"
 end
 
 local function GetBall()
@@ -1125,4 +1136,4 @@ LocalPlayer.CharacterAdded:Connect(function()
     end
 end)
 
-print(">>> [BB] ULTIMATE PREMIUM EDITION v14.0 LOADED SUCCESSFULLY!")
+print(">>> [BB] CANDY EDITION v15.0 LOADED! (Human Delay: 0.10-0.15s)")
