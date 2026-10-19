@@ -1,22 +1,199 @@
-local function Parry()
-    -- Пытаемся найти кнопку блока в интерфейсе
-    local blockButton = player.PlayerGui:FindFirstChild("Hotbar") and player.PlayerGui.Hotbar:FindFirstChild("Block")
-    
-    if blockButton then
-        -- Если есть getconnections (поддерживается не всеми экзекуторами)
-        if getconnections then
-            for _, connection in pairs(getconnections(blockButton.Activated)) do
-                connection:Fire()
-            end
-            -- Можно также попробовать MouseButton1Click, MouseButton1Down
-            for _, connection in pairs(getconnections(blockButton.MouseButton1Click)) do
-                connection:Fire()
-            end
-        else
-            -- Запасной вариант: VirtualInputManager (если getconnections нет)
-            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.F, false, game)
-            task.wait(0.05)
-            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.F, false, game)
+--[[
+    ╔═══════════════════════════════════════════════════════════════════════════╗
+    ║   [ BLADE BALL | ANTI-CLOSE SPAM PARRY v13.0 ]                            ║
+    ║   • Умный спам в ближнем бою (защита от зажима)                           ║
+    ║   • Использование getconnections для мгновенного клика                    ║
+    ║   • Предсказание по времени и пингу                                       ║
+    ╚═══════════════════════════════════════════════════════════════════════════╝
+]]
+
+print(">>> [BB] Запуск Anti-Close Spam Parry...")
+
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local LP = Players.LocalPlayer
+local PGui = LP:WaitForChild("PlayerGui")
+
+if PGui:FindFirstChild("BB_AntiSpam") then PGui.BB_AntiSpam:Destroy() end
+
+-- ============================================================
+-- [ НАСТРОЙКИ ]
+-- ============================================================
+local SETTINGS = {
+    ENABLED = true,
+    CLOSE_COMBAT_DIST = 25, -- Если мяч ближе 25 стабсов, начинаем спамить
+    PARRY_COOLDOWN = 0.1,   -- Кулдаун между нажатиями (0.1 сек - очень быстро)
+}
+
+local STATE = {
+    LastParry = 0,
+    Ball = nil,
+    Remote = nil,
+    BlockButton = nil
+}
+
+-- ============================================================
+-- [ ПОИСК REMOTE И КНОПКИ БЛОКА ]
+-- ============================================================
+-- 1. Ищем RemoteEvent
+task.spawn(function()
+    for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
+        if obj:IsA("RemoteEvent") and (obj.Name:lower():find("parry") or obj.Name:lower():find("block") or obj.Name:lower():find("attempt")) then
+            STATE.Remote = obj
+            print(">>> [BB] Найден Remote:", obj.Name)
+            break
         end
     end
+end)
+
+-- 2. Ищем кнопку блока на экране (для getconnections)
+local function FindBlockButton()
+    -- Ищем в стандартном Hotbar или в MobileControls
+    for _, gui in ipairs(PGui:GetDescendants()) do
+        if gui:IsA("TextButton") or gui:IsA("ImageButton") then
+            local name = gui.Name:lower()
+            if name:find("block") or name:find("parry") or name:find("shield") then
+                return gui
+            end
+        end
+    end
+    return nil
 end
+
+-- ============================================================
+-- [ ФУНКЦИЯ ПАРИРОВАНИЯ ]
+-- ============================================================
+local function TriggerParry()
+    local now = tick()
+    if now - STATE.LastParry < SETTINGS.PARRY_COOLDOWN then return end
+    STATE.LastParry = now
+
+    -- МЕТОД 1: getconnections (Самый быстрый и надежный)
+    if not STATE.BlockButton or not STATE.BlockButton.Parent then
+        STATE.BlockButton = FindBlockButton()
+    end
+
+    if STATE.BlockButton and getconnections then
+        local success = pcall(function()
+            local connections = getconnections(STATE.BlockButton.Activated)
+            for _, c in ipairs(connections) do
+                if c.Fire then c:Fire() end
+            end
+            local mConnections = getconnections(STATE.BlockButton.MouseButton1Click)
+            for _, c in ipairs(mConnections) do
+                if c.Fire then c:Fire() end
+            end
+        end)
+        if success then return end -- Если сработало, выходим
+    end
+
+    -- МЕТОД 2: RemoteEvent
+    if STATE.Remote then
+        pcall(function() STATE.Remote:FireServer() end)
+        return
+    end
+
+    -- МЕТОД 3: VirtualInputManager (Запасной, если ничего не нашли)
+    pcall(function()
+        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.F, false, game)
+        task.wait(0.02)
+        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.F, false, game)
+    end)
+end
+
+-- ============================================================
+-- [ ПОИСК МЯЧА ]
+-- ============================================================
+local function GetBall()
+    if STATE.Ball and STATE.Ball.Parent then return STATE.Ball end
+    local bf = Workspace:FindFirstChild("Balls")
+    if bf then
+        for _, o in ipairs(bf:GetChildren()) do
+            if o:IsA("BasePart") then STATE.Ball = o; return o end
+        end
+    end
+    return nil
+end
+
+-- ============================================================
+-- [ ГЛАВНЫЙ ЦИКЛ ]
+-- ============================================================
+RunService.Heartbeat:Connect(function()
+    if not SETTINGS.ENABLED then return end
+
+    local char = LP.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+    if not hrp or not humanoid or humanoid.Health <= 0 then return end
+
+    local ball = GetBall()
+    if not ball then return end
+
+    local dist = (hrp.Position - ball.Position).Magnitude
+    
+    -- Проверка, нацелен ли мяч на нас
+    local isTargeting = false
+    local tVal = ball:GetAttribute("target")
+    if tVal and (tostring(tVal):find(LP.Name) or tVal == LP) then
+        isTargeting = true
+    elseif char:FindFirstChild("Highlight") then
+        isTargeting = true
+    elseif dist < 40 then
+        -- Если мяч близко, считаем его угрозой, даже если атрибут не обновился
+        isTargeting = true 
+    end
+
+    if isTargeting then
+        -- Вычисляем скорость и время до удара
+        local speed = ball.AssemblyLinearVelocity.Magnitude
+        local timeToImpact = 999
+        if speed > 1 then
+            timeToImpact = dist / speed
+        end
+
+        -- Логика: Если мяч близко (меньше 25 стабсов) ИЛИ летит очень быстро (меньше 0.2 сек) -> СПАМ
+        if dist <= SETTINGS.CLOSE_COMBAT_DIST or timeToImpact <= 0.2 then
+            TriggerParry()
+        end
+    end
+end)
+
+-- ============================================================
+-- [ МИНИ-ИНТЕРФЕЙС ]
+-- ============================================================
+local gui = Instance.new("ScreenGui")
+gui.Name = "BB_AntiSpam"
+gui.ResetOnSpawn = false
+gui.Parent = PGui
+
+local statusLabel = Instance.new("TextLabel")
+statusLabel.Size = UDim2.new(0, 200, 0, 30)
+statusLabel.Position = UDim2.new(0, 10, 0, 10)
+statusLabel.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+statusLabel.BackgroundTransparency = 0.5
+statusLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
+statusLabel.Font = Enum.Font.Code
+statusLabel.TextSize = 12
+statusLabel.Text = "[BB] Anti-Spam Active"
+statusLabel.Parent = gui
+
+task.spawn(function()
+    while task.wait(0.1) do
+        if STATE.BlockButton then
+            statusLabel.Text = "[BB] Parry: Button"
+            statusLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
+        elseif STATE.Remote then
+            statusLabel.Text = "[BB] Parry: Remote"
+            statusLabel.TextColor3 = Color3.fromRGB(0, 200, 255)
+        else
+            statusLabel.Text = "[BB] Parry: VirtualInput"
+            statusLabel.TextColor3 = Color3.fromRGB(255, 200, 0)
+        end
+    end
+end)
+
+print(">>> [BB] Скрипт готов. Защита от ближнего спама активна.")
