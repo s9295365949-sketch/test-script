@@ -1,25 +1,26 @@
 --[[
     ╔═══════════════════════════════════════════════════════════════════════╗
-    ║   BLADE BALL — FRAME-PERFECT PARRY                                    ║
-    ║   • Вычисляет скорость мяча по разнице координат (игнорирует баги)    ║
-    ║   • Предсказывает удар с учетом пинга                                 ║
-    ║   • Защита от спама и бана                                            ║
+    ║   BLADE BALL — SWEPT COLLISION PARRY (NO MISS)                        ║
+    ║   • Проверка траектории (не пропустит мяч на любой скорости)          ║
+    ║   • Гарантированный парир при пересечении границы сферы               ║
+    ║   • Защита от спама                                                   ║
     ╚═══════════════════════════════════════════════════════════════════════╝
 ]]
 
 print("⏳ [BB] Запуск...")
 
 local CFG = {
-    PARRY_RADIUS        = 25,        -- Зона парирования
-    MAX_RADIUS          = 35,        -- Размер сферы
-    PARRY_COOLDOWN      = 0.30,      
+    PARRY_RADIUS        = 25,        -- Радиус сферы (зона парирования)
+    MAX_RADIUS          = 35,        -- Максимальный размер сферы
+    PARRY_COOLDOWN      = 0.15,      -- Кулдаун, чтобы не спамить
     PARRY_ENABLED       = true,
     SPHERE_VISIBLE      = true,
     Y_OFFSET            = -0.5,
     COLOR_INSIDE        = Color3.fromRGB(255, 30, 30),
     COLOR_OUTSIDE       = Color3.fromRGB(30, 255, 50),
     
-    PING_SAFETY         = 0.08,      -- Запас на пинг (80 мс)
+    -- Запас на пинг для предсказания
+    PING_SAFETY         = 0.06,      
 }
 
 local Players           = game:GetService("Players")
@@ -58,7 +59,7 @@ task.spawn(function()
     end
 end)
 
--- 3. СФЕРА (В WORKSPACE)
+-- 3. СФЕРА
 local sphere = Instance.new("Part")
 sphere.Name = "AuraVisual"
 sphere.Shape = Enum.PartType.Ball
@@ -93,14 +94,16 @@ end)
 Workspace.ChildRemoved:Connect(function(o) if o == cachedBall then cachedBall = nil end end)
 
 -- 5. ПАРИРОВАНИЕ
-local armed = true
 local lastParry = 0
 local lastAction = "None"
 
 local function executeParry()
     if not CFG.PARRY_ENABLED or not parryRemote then return end
+    -- Проверка кулдауна (не чаще 1 раза в 0.15 сек)
+    if tick() - lastParry < CFG.PARRY_COOLDOWN then return end
+
     pcall(function() parryRemote:FireServer() end)
-    lastAction = "Fired (Ping: " .. math.floor(pingCache * 1000) .. "ms)"
+    lastAction = "Fired"
     lastParry = tick()
 end
 
@@ -111,7 +114,7 @@ screenGui.ResetOnSpawn = false
 screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
 
 local debugText = Instance.new("TextLabel")
-debugText.Size = UDim2.new(0, 250, 0, 120)
+debugText.Size = UDim2.new(0, 250, 0, 110)
 debugText.Position = UDim2.new(0, 10, 0, 60) 
 debugText.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 debugText.BackgroundTransparency = 0.5
@@ -174,7 +177,18 @@ end)
 menuBtn.MouseButton1Click:Connect(function() menuFrame.Visible = not menuFrame.Visible end)
 closeMenu.MouseButton1Click:Connect(function() menuFrame.Visible = false end)
 
--- 8. ГЛАВНЫЙ ЦИКЛ
+-- 8. МАТЕМАТИКА: Расстояние от точки до отрезка (Траектория мяча)
+local function getDistanceToSegment(p, a, b)
+    local ab = b - a
+    local ap = p - a
+    local abLenSq = ab:Dot(ab)
+    if abLenSq == 0 then return (p - a).Magnitude end
+    local t = math.clamp(ap:Dot(ab) / abLenSq, 0, 1)
+    local closest = a + ab * t
+    return (p - closest).Magnitude
+end
+
+-- 9. ГЛАВНЫЙ ЦИКЛ
 local state = { diameter = CFG.MAX_RADIUS * 2, color = CFG.COLOR_OUTSIDE, lastFlash = 0 }
 local function damp(cur, tgt, lambda, dt) return tgt + (cur - tgt) * math.exp(-lambda * dt) end
 local function clamp01(x) return math.clamp(x, 0, 1) end
@@ -202,8 +216,7 @@ RunService.Heartbeat:Connect(function(dt)
     
     local dbg_ball = "NO"
     local dbg_dist = 0
-    local dbg_approach = 0
-    local dbg_time = 999
+    local dbg_status = "Safe"
 
     if ball then
         dbg_ball = "YES"
@@ -215,72 +228,66 @@ RunService.Heartbeat:Connect(function(dt)
         if lastBall ~= ball then
             prevBallPos = ballPos
             lastBall = ball
-            armed = true
         end
-        
-        -- ВЫЧИСЛЕНИЕ СКОРОСТИ ЧЕРЕЗ РАЗНИЦУ КООРДИНАТ (Работает всегда)
+
+        -- ВЫЧИСЛЕНИЕ СКОРОСТИ (для предсказания)
         local approach = 0
         if prevBallPos and dt > 0 then
             local moveVec = ballPos - prevBallPos
-            local speed = moveVec.Magnitude / dt
-            
-            -- Если мяч реально летит (скорость > 5)
-            if speed > 5 then
+            if moveVec.Magnitude > 0.1 then
                 local dirToMe = (hrpPos - ballPos).Unit
                 approach = moveVec:Dot(dirToMe) / dt
             end
         end
-        prevBallPos = ballPos
-        dbg_approach = approach
 
-        -- Время до удара
-        if approach > 1 then
-            dbg_time = dist / approach
+        -- 1. ПРОВЕРКА ТРАЕКТОРИИ (Swept Collision)
+        -- Считаем, пересек ли мяч сферу между прошлым и текущим кадром
+        local hitTrajectory = false
+        if prevBallPos then
+            local distanceToPath = getDistanceToSegment(hrpPos, prevBallPos, ballPos)
+            if distanceToPath <= CFG.PARRY_RADIUS then
+                hitTrajectory = true
+            end
         end
 
-        -- Проверка цели
+        -- 2. ПРОВЕРКА ВНУТРИ СФЕРЫ
+        local hitInside = (dist <= CFG.PARRY_RADIUS)
+
+        -- 3. ПРЕДСКАЗАНИЕ (с учетом пинга)
+        local pingDelay = pingCache + CFG.PING_SAFETY
+        local timeInside = (dist - CFG.PARRY_RADIUS) / math.max(approach, 1)
+        local willBeInside = (approach > 0) and (timeInside <= pingDelay)
+
+        -- Проверка цели (мяч летит в нас?)
         local targeting = false
         local tVal = ball:GetAttribute("target") or ball:GetAttribute("Target")
-        if tVal and (tVal == LocalPlayer.Name or tostring(tVal) == LocalPlayer.Name) then 
-            targeting = true 
-        elseif Character:FindFirstChild("Highlight") then 
-            targeting = true 
-        elseif approach > 10 and dist < 80 then 
-            targeting = true 
-        end
+        if tVal and (tVal == LocalPlayer.Name or tostring(tVal) == LocalPlayer.Name) then targeting = true
+        elseif Character:FindFirstChild("Highlight") then targeting = true
+        elseif approach > 10 and dist < 80 then targeting = true end
 
-        -- Логика парирования
+        -- Если цель наша и есть любое из условий - ПАРИРУЕМ
         if targeting then
             local targetRadius = math.clamp(dist, CFG.PARRY_RADIUS, CFG.MAX_RADIUS)
             tgtDiameter = targetRadius * 2
-            tgtColor = (dist <= CFG.PARRY_RADIUS) and CFG.COLOR_INSIDE or CFG.COLOR_OUTSIDE
+            tgtColor = (hitInside or hitTrajectory) and CFG.COLOR_INSIDE or CFG.COLOR_OUTSIDE
 
-            local pingDelay = pingCache + CFG.PING_SAFETY
-            local timeInsideZone = (dist - CFG.PARRY_RADIUS) / math.max(approach, 1)
-            
-            local isInside = dist <= CFG.PARRY_RADIUS
-            local willBeInside = (approach > 0) and (timeInsideZone <= pingDelay)
-            
-            if (isInside or willBeInside) and armed then
+            if hitTrajectory or hitInside or willBeInside then
                 executeParry()
-                armed = false 
                 state.lastFlash = tick()
+                dbg_status = hitTrajectory and "Hit Path!" or "Hit Inside!"
             end
         end
-    end
 
-    -- Перезарядка, если мяч улетел
-    if ball and (hrpPos - ball.Position).Magnitude > CFG.PARRY_RADIUS * 3 then
-        armed = true
+        prevBallPos = ballPos
+    else
+        lastBall = nil
+        prevBallPos = nil
     end
-    if not ball then armed = true end
 
     -- Отладчик
     debugText.Text = string.format(
-        "Ball: %s\nDist: %.1f\nAppr: %.1f\nTime: %s\nArmed: %s\nMethod: %s", 
-        dbg_ball, dbg_dist, dbg_approach, 
-        (dbg_time > 900 and "N/A" or string.format("%.2fs", dbg_time)), 
-        tostring(armed), lastAction)
+        "Ball: %s\nDist: %.1f\nStatus: %s\nMethod: %s", 
+        dbg_ball, dbg_dist, dbg_status, lastAction)
 
     -- Визуал
     state.diameter = damp(state.diameter, tgtDiameter, 14, dt)
@@ -303,3 +310,4 @@ LocalPlayer.CharacterAdded:Connect(function(newChar)
     lastBall = nil
     prevBallPos = nil
 end)
+
