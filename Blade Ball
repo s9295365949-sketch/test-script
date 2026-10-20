@@ -22,9 +22,9 @@
     ║   • VirtualInputManager — БЕЗ ИЗМЕНЕНИЙ                                   ║
     ╚═══════════════════════════════════════════════════════════════════════════╝
     ╔═══════════════════════════════════════════════════════════════════════════╗
-    ║   CANDY EDITION | v15.4 | HUMANIZED + ANTI-SPAM + SWEPT HIT               ║
+    ║   CANDY EDITION | v15.2 | HUMANIZED + ANTI-SPAM + SWEPT HIT               ║
     ║   • Human Delay: 0.19-0.32s (normal distribution)                         ║
-    ║   • Anti-spam (другие игроки вблизи) + трекинг мячей                      ║
+    ║   • Anti-spam (другие игроки вблизи) + трекинг мячей                       ║
     ║   • Сфера/ядро: минимум вблизи                                            ║
     ║   • Скрытие сферы меча при target=me                                      ║
     ║   • Outer touch → shrink, Inner touch → instant parry                     ║
