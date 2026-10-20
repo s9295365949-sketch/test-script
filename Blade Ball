@@ -39,8 +39,6 @@ local oldAura=W:FindFirstChild("AuraVisual"); if oldAura then oldAura:Destroy() 
 local C={CLOSE_DIST=45,COOLDOWN=0.12,PING_SAFE=0.50,PREDICT_TIME_BASE=0.15,PREDICT_TIME_JITTER=0.08,HUMAN_DELAY_MIN=0.19,HUMAN_DELAY_MAX=0.32,SLOW_REACTION_CHANCE=0.12,REST_CHANCE=0.03,MIN_PARRY_INTERVAL=0.25,PARRY_COOLDOWN_JITTER=0.10,BALL_TRACK_TIME=0.6,CLOSE_SPAM_DIST=22,CLOSE_SPAM_SKIP_CHANCE=0.20,NEAREST_PLAYER_FACTOR=0.7,SPHERE_MIN=2.7,SPHERE_MAX=79,CORE_RATIO=0.11,OUTER_R=0,OUTER_G=255,OUTER_B=50,INNER_R=0,INNER_G=255,INNER_B=200}
 local DC={} for k,v in pairs(C) do DC[k]=v end
 local SAFE={HUMAN_DELAY_MIN=0.12,HUMAN_DELAY_MAX_GAP=0.02,REST_CHANCE=0.01,CLOSE_SPAM_DIST=10,PING_SAFE=0.20,COOLDOWN=0.10}
-local SPHERE_SCALE=1.15
-local CORE_SCALE=1.09
 local S={Enabled=true,ShowVisuals=true,ShowDebug=true,AntiLag=false,HideInner=false,StaticSphere=false,NightModeSphere=false,NightMap=false,CameraLock=false,OuterColor=Color3.fromRGB(0,255,50),InnerColor=Color3.fromRGB(0,255,200),IsArmed=true,LastParry=0,Ball=nil,PrevBallPos=nil,Frames=0,Remote=nil,ParryMethod="N/A",BlockButton=nil,ParryHistory={},LastDelay=0,LastMiss=false,SpamSkips=0,TotalParries=0}
 
 local TH={["Premium Dark"]={BG=Color3.fromRGB(15,16,20),HEADER=Color3.fromRGB(22,24,30),ACCENT=Color3.fromRGB(0,200,255),TEXT=Color3.fromRGB(240,240,240),OFF=Color3.fromRGB(40,44,52)},["Cyber Neon"]={BG=Color3.fromRGB(20,5,25),HEADER=Color3.fromRGB(35,10,45),ACCENT=Color3.fromRGB(255,0,200),TEXT=Color3.fromRGB(255,200,255),OFF=Color3.fromRGB(60,20,70)},["Crimson Void"]={BG=Color3.fromRGB(25,5,5),HEADER=Color3.fromRGB(45,10,10),ACCENT=Color3.fromRGB(255,60,60),TEXT=Color3.fromRGB(255,200,200),OFF=Color3.fromRGB(70,15,15)},["Dark Metal"]={BG=Color3.fromRGB(15,16,20),HEADER=Color3.fromRGB(22,24,30),ACCENT=Color3.fromRGB(180,180,190),TEXT=Color3.fromRGB(240,240,240),OFF=Color3.fromRGB(40,44,52)},["Obsidian Night"]={BG=Color3.fromRGB(10,10,15),HEADER=Color3.fromRGB(18,18,25),ACCENT=Color3.fromRGB(150,100,255),TEXT=Color3.fromRGB(220,210,255),OFF=Color3.fromRGB(35,30,50)},["Midnight Ocean"]={BG=Color3.fromRGB(5,15,30),HEADER=Color3.fromRGB(10,25,45),ACCENT=Color3.fromRGB(0,255,200),TEXT=Color3.fromRGB(200,240,255),OFF=Color3.fromRGB(20,40,60)},["Light Emerald"]={BG=Color3.fromRGB(240,245,240),HEADER=Color3.fromRGB(220,235,220),ACCENT=Color3.fromRGB(0,180,100),TEXT=Color3.fromRGB(20,40,20),OFF=Color3.fromRGB(200,215,200)},["Pearl Elegance"]={BG=Color3.fromRGB(250,248,245),HEADER=Color3.fromRGB(240,235,230),ACCENT=Color3.fromRGB(200,150,50),TEXT=Color3.fromRGB(40,30,20),OFF=Color3.fromRGB(220,215,210)},["Arctic Frost"]={BG=Color3.fromRGB(230,245,255),HEADER=Color3.fromRGB(210,230,255),ACCENT=Color3.fromRGB(50,150,255),TEXT=Color3.fromRGB(20,40,60),OFF=Color3.fromRGB(190,210,230)},["Sunset Blossom"]={BG=Color3.fromRGB(255,240,245),HEADER=Color3.fromRGB(250,225,235),ACCENT=Color3.fromRGB(255,100,150),TEXT=Color3.fromRGB(60,20,30),OFF=Color3.fromRGB(230,210,220)},["Cloudy Silver"]={BG=Color3.fromRGB(245,245,250),HEADER=Color3.fromRGB(230,230,240),ACCENT=Color3.fromRGB(100,100,120),TEXT=Color3.fromRGB(30,30,40),OFF=Color3.fromRGB(210,210,220)},["Amber Glow"]={BG=Color3.fromRGB(255,250,235),HEADER=Color3.fromRGB(250,240,210),ACCENT=Color3.fromRGB(230,150,0),TEXT=Color3.fromRGB(50,40,10),OFF=Color3.fromRGB(225,215,195)}}
@@ -67,9 +65,8 @@ Loader()
 task.spawn(function() for _,o in ipairs(RS:GetDescendants()) do if o:IsA("RemoteEvent") then local n=o.Name:lower();if n:find("parry") or n:find("block") or n:find("attempt") then S.Remote=o;break end end end end)
 local function FB() if S.BlockButton and S.BlockButton.Parent then return S.BlockButton end;S.BlockButton=nil;for _,g in ipairs(PG:GetDescendants()) do if g:IsA("TextButton") or g:IsA("ImageButton") then local n=g.Name:lower();if n:find("block") or n:find("parry") or n:find("shield") then S.BlockButton=g;return g end end end end
 
--- === Initial sizes: sphere 40 -> 46 (+15%), core 9.2 -> 10.0 (+9%, rounded to tenths) ===
-local OS=Instance.new("Part");OS.Name="AuraVisual";OS.Shape=Enum.PartType.Ball;OS.Anchored=true;OS.CanCollide=false;OS.CanQuery=false;OS.CastShadow=false;OS.Material=Enum.Material.ForceField;OS.Color=S.OuterColor;OS.Transparency=0.65;OS.Size=Vector3.new(46,46,46);OS.Parent=W
-local IS=Instance.new("Part");IS.Shape=Enum.PartType.Ball;IS.Anchored=true;IS.CanCollide=false;IS.CanQuery=false;IS.CastShadow=false;IS.Material=Enum.Material.Neon;IS.Color=S.InnerColor;IS.Transparency=0.7;IS.Size=Vector3.new(10,10,10);IS.Parent=OS
+local OS=Instance.new("Part");OS.Name="AuraVisual";OS.Shape=Enum.PartType.Ball;OS.Anchored=true;OS.CanCollide=false;OS.CanQuery=false;OS.CastShadow=false;OS.Material=Enum.Material.ForceField;OS.Color=S.OuterColor;OS.Transparency=0.65;OS.Size=Vector3.new(40,40,40);OS.Parent=W
+local IS=Instance.new("Part");IS.Shape=Enum.PartType.Ball;IS.Anchored=true;IS.CanCollide=false;IS.CanQuery=false;IS.CastShadow=false;IS.Material=Enum.Material.Neon;IS.Color=S.InnerColor;IS.Transparency=0.7;IS.Size=Vector3.new(9.2,9.2,9.2);IS.Parent=OS
 
 local OL,CA={},nil
 local function NM(e)
@@ -357,18 +354,13 @@ R.Heartbeat:Connect(function(dt)
         if rd and S.ShowVisuals then
             PTm+=dt*2.5
             local ts=cl(math.max(dist*1.5,C.SPHERE_MIN),C.SPHERE_MIN,C.SPHERE_MAX)
-            -- logical size recovers from scaled OS.Size
-            local cur=OS.Size.X/SPHERE_SCALE;local ns=cur+(ts-cur)*math.exp(-10*dt);local fs=S.StaticSphere and ns or ns*(1+math.sin(PTm)*0.02)
-            -- +15% sphere, rounded to tenths
-            local dispFs=math.floor(fs*SPHERE_SCALE*10+0.5)/10
-            OS.Size=Vector3.new(dispFs,dispFs,dispFs);OS.CFrame=CFrame.new(h.Position+Vector3.new(0,-0.5,0))
+            local cur=OS.Size.X;local ns=cur+(ts-cur)*math.exp(-10*dt);local fs=S.StaticSphere and ns or ns*(1+math.sin(PTm)*0.02)
+            OS.Size=Vector3.new(fs,fs,fs);OS.CFrame=CFrame.new(h.Position+Vector3.new(0,-0.5,0))
             if fs<=C.SPHERE_MIN*1.5 or S.HideInner then IS.Transparency=1 else IS.Transparency=S.NightModeSphere and 0.2 or 0.7 end
             if S.NightModeSphere then OS.Material=Enum.Material.Neon;OS.Transparency=0.5;if tc~=Color3.fromRGB(255,50,50) then tc=Color3.fromRGB(20,0,30) end else OS.Material=Enum.Material.ForceField;OS.Transparency=0.65 end
             OS.Color=OS.Color:Lerp(tc,cl(10*dt,0,1))
             if tc==Color3.fromRGB(255,50,50) then IS.Color=IS.Color:Lerp(Color3.fromRGB(255,50,50),cl(10*dt,0,1)) else local fi=S.NightModeSphere and Color3.fromRGB(255,0,255) or S.InnerColor;IS.Color=IS.Color:Lerp(fi,cl(10*dt,0,1)) end
-            -- +9% core, rounded to tenths
-            local coreSize=math.floor(fs*C.CORE_RATIO*CORE_SCALE*10+0.5)/10
-            IS.CFrame=OS.CFrame*CFrame.Angles(PTm,PTm,0);IS.Size=Vector3.new(coreSize,coreSize,coreSize)
+            IS.CFrame=OS.CFrame*CFrame.Angles(PTm,PTm,0);IS.Size=Vector3.new(fs*C.CORE_RATIO,fs*C.CORE_RATIO,fs*C.CORE_RATIO)
         end
         if DL then
             if DL.Status then DL.Status.Text=st;DL.Status.TextColor3=st=="DANGER!" and Color3.fromRGB(255,60,60) or (st=="Incoming" and Color3.fromRGB(255,200,0) or Color3.fromRGB(0,255,100)) end
@@ -385,4 +377,4 @@ end)
 
 LP.CharacterAdded:Connect(function() S.IsArmed=true;S.PrevBallPos=nil;S.Ball=nil;S.CameraLock=false;if CAM.CameraType==Enum.CameraType.Scriptable then CAM.CameraType=Enum.CameraType.Custom end end)
 
-print(">>> [BB] v15.5 LOADED | React: "..string.format("%.0f-%.0fms",C.HUMAN_DELAY_MIN*1000,C.HUMAN_DELAY_MAX*1000).." | Sphere x1.15 | Core x1.09 (round 0.1)")
+print(">>> [BB] v15.5 LOADED | React: "..string.format("%.0f-%.0fms",C.HUMAN_DELAY_MIN*1000,C.HUMAN_DELAY_MAX*1000).." | No miss | No spam-skip | Candy mark")
