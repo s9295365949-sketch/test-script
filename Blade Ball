@@ -8,7 +8,7 @@
     ║   ██║     ██║  ██║██║  ██║██║  ██║   ██║       ██║     ╚██████╔╝          ║
     ║   ╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝       ╚═╝      ╚═════╝           ║
     ║                                                                           ║
-    ║   [ CANDY EDITION | v15.7 | ULTRA-FAST PARRY ]                            ║
+    ║   [ CANDY EDITION | v15.8 | ULTRA-FAST PARRY ]                            ║
     ║   • 12 Premium Themes (6 Dark / 6 Light)                                  ║
     ║   • Human Delay: 0.10 - 0.15s (x1.5 Faster)                               ║
     ║   • Anti-Close Spam & Predictive Hit                                      ║
@@ -22,7 +22,7 @@
     ║   • VirtualInputManager — БЕЗ ИЗМЕНЕНИЙ                                   ║
     ╚═══════════════════════════════════════════════════════════════════════════╝
     ╔═══════════════════════════════════════════════════════════════════════════╗
-    ║   CANDY EDITION | v15.7 | HUMANIZED + ANTI-SPAM + SWEPT HIT               ║
+    ║   CANDY EDITION | v15.8 | HUMANIZED + ANTI-SPAM + SWEPT HIT               ║
     ║   • Human Delay: 0.19-0.32s (normal distribution)                         ║
     ║   • Anti-spam (другие игроки вблизи) + трекинг мячей                       ║
     ║   • Сфера/ядро: минимум вблизи                                            ║
@@ -36,9 +36,11 @@ local LP,PG,CAM = P.LocalPlayer, P.LocalPlayer:WaitForChild("PlayerGui",10), W.C
 for _,v in ipairs(PG:GetChildren()) do if v.Name:match("^BB_") then v:Destroy() end end
 local oldAura=W:FindFirstChild("AuraVisual"); if oldAura then oldAura:Destroy() end
 
-local C={CLOSE_DIST=45,COOLDOWN=0.12,PING_SAFE=0.50,PREDICT_TIME_BASE=0.15,PREDICT_TIME_JITTER=0.08,HUMAN_DELAY_MIN=0.19,HUMAN_DELAY_MAX=0.32,SLOW_REACTION_CHANCE=0.12,REST_CHANCE=0.03,MIN_PARRY_INTERVAL=0.25,PARRY_COOLDOWN_JITTER=0.10,BALL_TRACK_TIME=0.6,CLOSE_SPAM_DIST=22,CLOSE_SPAM_SKIP_CHANCE=0.20,NEAREST_PLAYER_FACTOR=0.7,SPHERE_MIN=2.9,SPHERE_MAX=79,CORE_RATIO=0.118,OUTER_R=0,OUTER_G=255,OUTER_B=50,INNER_R=0,INNER_G=255,INNER_B=200}
+local C={CLOSE_DIST=45,COOLDOWN=0.12,PING_SAFE=0.50,PREDICT_TIME_BASE=0.15,PREDICT_TIME_JITTER=0.08,HUMAN_DELAY_MIN=0.19,HUMAN_DELAY_MAX=0.32,SLOW_REACTION_CHANCE=0.12,REST_CHANCE=0.03,MIN_PARRY_INTERVAL=0.25,PARRY_COOLDOWN_JITTER=0.10,BALL_TRACK_TIME=0.6,CLOSE_SPAM_DIST=22,CLOSE_SPAM_SKIP_CHANCE=0.20,NEAREST_PLAYER_FACTOR=0.7,SPHERE_MIN=2.7,SPHERE_MAX=79,CORE_RATIO=0.11,OUTER_R=0,OUTER_G=255,OUTER_B=50,INNER_R=0,INNER_G=255,INNER_B=200}
 local DC={} for k,v in pairs(C) do DC[k]=v end
 local SAFE={HUMAN_DELAY_MIN=0.12,HUMAN_DELAY_MAX_GAP=0.02,REST_CHANCE=0.01,CLOSE_SPAM_DIST=10,PING_SAFE=0.20,COOLDOWN=0.10}
+local SPHERE_SCALE=1.15
+local CORE_SCALE=1.09
 local S={Enabled=true,ShowVisuals=true,ShowDebug=true,AntiLag=false,HideInner=false,StaticSphere=false,NightModeSphere=false,NightMap=false,CameraLock=false,OuterColor=Color3.fromRGB(0,255,50),InnerColor=Color3.fromRGB(0,255,200),IsArmed=true,LastParry=0,Ball=nil,PrevBallPos=nil,Frames=0,Remote=nil,ParryMethod="N/A",BlockButton=nil,ParryHistory={},LastDelay=0,LastMiss=false,SpamSkips=0,TotalParries=0}
 
 local TH={["Premium Dark"]={BG=Color3.fromRGB(15,16,20),HEADER=Color3.fromRGB(22,24,30),ACCENT=Color3.fromRGB(0,200,255),TEXT=Color3.fromRGB(240,240,240),OFF=Color3.fromRGB(40,44,52)},["Cyber Neon"]={BG=Color3.fromRGB(20,5,25),HEADER=Color3.fromRGB(35,10,45),ACCENT=Color3.fromRGB(255,0,200),TEXT=Color3.fromRGB(255,200,255),OFF=Color3.fromRGB(60,20,70)},["Crimson Void"]={BG=Color3.fromRGB(25,5,5),HEADER=Color3.fromRGB(45,10,10),ACCENT=Color3.fromRGB(255,60,60),TEXT=Color3.fromRGB(255,200,200),OFF=Color3.fromRGB(70,15,15)},["Dark Metal"]={BG=Color3.fromRGB(15,16,20),HEADER=Color3.fromRGB(22,24,30),ACCENT=Color3.fromRGB(180,180,190),TEXT=Color3.fromRGB(240,240,240),OFF=Color3.fromRGB(40,44,52)},["Obsidian Night"]={BG=Color3.fromRGB(10,10,15),HEADER=Color3.fromRGB(18,18,25),ACCENT=Color3.fromRGB(150,100,255),TEXT=Color3.fromRGB(220,210,255),OFF=Color3.fromRGB(35,30,50)},["Midnight Ocean"]={BG=Color3.fromRGB(5,15,30),HEADER=Color3.fromRGB(10,25,45),ACCENT=Color3.fromRGB(0,255,200),TEXT=Color3.fromRGB(200,240,255),OFF=Color3.fromRGB(20,40,60)},["Light Emerald"]={BG=Color3.fromRGB(240,245,240),HEADER=Color3.fromRGB(220,235,220),ACCENT=Color3.fromRGB(0,180,100),TEXT=Color3.fromRGB(20,40,20),OFF=Color3.fromRGB(200,215,200)},["Pearl Elegance"]={BG=Color3.fromRGB(250,248,245),HEADER=Color3.fromRGB(240,235,230),ACCENT=Color3.fromRGB(200,150,50),TEXT=Color3.fromRGB(40,30,20),OFF=Color3.fromRGB(220,215,210)},["Arctic Frost"]={BG=Color3.fromRGB(230,245,255),HEADER=Color3.fromRGB(210,230,255),ACCENT=Color3.fromRGB(50,150,255),TEXT=Color3.fromRGB(20,40,60),OFF=Color3.fromRGB(190,210,230)},["Sunset Blossom"]={BG=Color3.fromRGB(255,240,245),HEADER=Color3.fromRGB(250,225,235),ACCENT=Color3.fromRGB(255,100,150),TEXT=Color3.fromRGB(60,20,30),OFF=Color3.fromRGB(230,210,220)},["Cloudy Silver"]={BG=Color3.fromRGB(245,245,250),HEADER=Color3.fromRGB(230,230,240),ACCENT=Color3.fromRGB(100,100,120),TEXT=Color3.fromRGB(30,30,40),OFF=Color3.fromRGB(210,210,220)},["Amber Glow"]={BG=Color3.fromRGB(255,250,235),HEADER=Color3.fromRGB(250,240,210),ACCENT=Color3.fromRGB(230,150,0),TEXT=Color3.fromRGB(50,40,10),OFF=Color3.fromRGB(225,215,195)}}
@@ -65,8 +67,9 @@ Loader()
 task.spawn(function() for _,o in ipairs(RS:GetDescendants()) do if o:IsA("RemoteEvent") then local n=o.Name:lower();if n:find("parry") or n:find("block") or n:find("attempt") then S.Remote=o;break end end end end)
 local function FB() if S.BlockButton and S.BlockButton.Parent then return S.BlockButton end;S.BlockButton=nil;for _,g in ipairs(PG:GetDescendants()) do if g:IsA("TextButton") or g:IsA("ImageButton") then local n=g.Name:lower();if n:find("block") or n:find("parry") or n:find("shield") then S.BlockButton=g;return g end end end end
 
-local OS=Instance.new("Part");OS.Name="AuraVisual";OS.Shape=Enum.PartType.Ball;OS.Anchored=true;OS.CanCollide=false;OS.CanQuery=false;OS.CastShadow=false;OS.Material=Enum.Material.ForceField;OS.Color=S.OuterColor;OS.Transparency=0.65;OS.Size=Vector3.new(40,40,40);OS.Parent=W
-local IS=Instance.new("Part");IS.Shape=Enum.PartType.Ball;IS.Anchored=true;IS.CanCollide=false;IS.CanQuery=false;IS.CastShadow=false;IS.Material=Enum.Material.Neon;IS.Color=S.InnerColor;IS.Transparency=0.7;IS.Size=Vector3.new(9.2,9.2,9.2);IS.Parent=OS
+-- === Initial sizes: sphere 40 -> 46 (+15%), core 9.2 -> 10.0 (+9%, rounded to tenths) ===
+local OS=Instance.new("Part");OS.Name="AuraVisual";OS.Shape=Enum.PartType.Ball;OS.Anchored=true;OS.CanCollide=false;OS.CanQuery=false;OS.CastShadow=false;OS.Material=Enum.Material.ForceField;OS.Color=S.OuterColor;OS.Transparency=0.65;OS.Size=Vector3.new(46,46,46);OS.Parent=W
+local IS=Instance.new("Part");IS.Shape=Enum.PartType.Ball;IS.Anchored=true;IS.CanCollide=false;IS.CanQuery=false;IS.CastShadow=false;IS.Material=Enum.Material.Neon;IS.Color=S.InnerColor;IS.Transparency=0.7;IS.Size=Vector3.new(10,10,10);IS.Parent=OS
 
 local OL,CA={},nil
 local function NM(e)
@@ -92,6 +95,7 @@ local TL=Instance.new("UIListLayout");TL.FillDirection=Enum.FillDirection.Horizo
 local Pg=Instance.new("Frame");Pg.Size=UDim2.new(1,-20,1,-120);Pg.Position=UDim2.new(0,10,0,110);Pg.BackgroundTransparency=1;Pg.Parent=Win
 local PL,Tabs={},{}
 
+-- Candy watermark (top-right of window, rotated 40°)
 local Candy=Instance.new("Frame");Candy.Name="CandyMark";Candy.Size=UDim2.new(0,64,0,64);Candy.Position=UDim2.new(1,-78,0,68);Candy.BackgroundTransparency=1;Candy.Rotation=40;Candy.ZIndex=10;Candy.Parent=Win
 local function MKC(sz,pos,rot,corner,col,tp)
     local f=Instance.new("Frame");f.Size=sz;f.Position=pos;f.Rotation=rot;f.BackgroundColor3=col or Color3.fromRGB(180,180,180);f.BackgroundTransparency=tp or 0.55;f.BorderSizePixel=0;f.ZIndex=10;f.Parent=Candy
@@ -185,7 +189,7 @@ local function SaveP()
 end
 local function LoadP(pN)
     local ok,d=pcall(function() if isfile and isfile(PF.."/"..pN..".json") then return HS:JSONDecode(readfile(PF.."/"..pN..".json")) end end)
-    if ok and d then CTN=d.Theme or "Premium Dark";CT=TH[CTN] or TH["Premium Dark"];S.Enabled=d.Enabled~=false;S.ShowVisuals=d.ShowVisuals~=false;S.ShowDebug=d.ShowDebug~=false;S.AntiLag=d.AntiLag==true;S.HideInner=d.HideInner==true;S.StaticSphere=d.StaticSphere==true;S.NightModeSphere=d.NightModeSphere==true;S.NightMap=d.NightMap==true;S.CameraLock=d.CameraLock==true;if d.Config then for k,v in pairs(d.Config) do if C[k]~=nil and k~="SPHERE_MIN" and k~="CORE_RATIO" then C[k]=v;if SR[k] then SR[k].set(v) end end end end;if AT then AT() end end
+    if ok and d then CTN=d.Theme or "Premium Dark";CT=TH[CTN] or TH["Premium Dark"];S.Enabled=d.Enabled~=false;S.ShowVisuals=d.ShowVisuals~=false;S.ShowDebug=d.ShowDebug~=false;S.AntiLag=d.AntiLag==true;S.HideInner=d.HideInner==true;S.StaticSphere=d.StaticSphere==true;S.NightModeSphere=d.NightModeSphere==true;S.NightMap=d.NightMap==true;S.CameraLock=d.CameraLock==true;if d.Config then for k,v in pairs(d.Config) do if C[k]~=nil then C[k]=v;if SR[k] then SR[k].set(v) end end end end;if AT then AT() end end
 end
 CBtn(OP,40,"Save Profile",SaveP,Color3.fromRGB(60,180,100))
 local PLF=Instance.new("ScrollingFrame");PLF.Size=UDim2.new(1,0,0,160);PLF.Position=UDim2.new(0,0,0,80);PLF.BackgroundColor3=CT.OFF;PLF.BackgroundTransparency=0.7;PLF.BorderSizePixel=0;PLF.ScrollBarThickness=2;PLF.CanvasSize=UDim2.new(0,0,0,0);PLF.AutomaticCanvasSize=Enum.AutomaticSize.Y;PLF.Parent=OP;Instance.new("UICorner",PLF).CornerRadius=UDim.new(0,6);table.insert(UE,{btn=PLF,type="listframe"})
@@ -229,9 +233,9 @@ CSlider(SSc,"Ping Safe",0.10,1.0,"PING_SAFE",false,function(v) return string.for
 CSlider(SSc,"Predict Base",0.05,0.5,"PREDICT_TIME_BASE",false,function(v) return string.format("%.0fms",v*1000) end)
 CSlider(SSc,"Predict Jitter",0,0.3,"PREDICT_TIME_JITTER",false,function(v) return string.format("%.0fms",v*1000) end)
 CSec(SSc,"VISUALS")
-CSlider(SSc,"Sphere Min",1,50,"SPHERE_MIN",false,function(v) return string.format("%.1f",v) end)
+CSlider(SSc,"Sphere Min",1,50,"SPHERE_MIN",true,function(v) return string.format("%.1f",v) end)
 CSlider(SSc,"Sphere Max",20,200,"SPHERE_MAX",true,function(v) return string.format("%.0f",v) end)
-CSlider(SSc,"Core Ratio",0.05,0.5,"CORE_RATIO",false,function(v) return string.format("%.3f",v) end)
+CSlider(SSc,"Core Ratio",0.05,0.5,"CORE_RATIO",false,function(v) return string.format("%.2f",v) end)
 CSec(SSc,"COLORS")
 SLCb["OUTER_R"]=SyncO;SLCb["OUTER_G"]=SyncO;SLCb["OUTER_B"]=SyncO;SLCb["INNER_R"]=SyncI;SLCb["INNER_G"]=SyncI;SLCb["INNER_B"]=SyncI
 CSlider(SSc,"Outer R",0,255,"OUTER_R",true,function(v) return string.format("%.0f",v) end)
@@ -353,13 +357,18 @@ R.Heartbeat:Connect(function(dt)
         if rd and S.ShowVisuals then
             PTm+=dt*2.5
             local ts=cl(math.max(dist*1.5,C.SPHERE_MIN),C.SPHERE_MIN,C.SPHERE_MAX)
-            local cur=OS.Size.X;local ns=cur+(ts-cur)*math.exp(-10*dt);local fs=S.StaticSphere and ns or ns*(1+math.sin(PTm)*0.02)
-            OS.Size=Vector3.new(fs,fs,fs);OS.CFrame=CFrame.new(h.Position+Vector3.new(0,-0.5,0))
+            -- logical size recovers from scaled OS.Size
+            local cur=OS.Size.X/SPHERE_SCALE;local ns=cur+(ts-cur)*math.exp(-10*dt);local fs=S.StaticSphere and ns or ns*(1+math.sin(PTm)*0.02)
+            -- +15% sphere, rounded to tenths
+            local dispFs=math.floor(fs*SPHERE_SCALE*10+0.5)/10
+            OS.Size=Vector3.new(dispFs,dispFs,dispFs);OS.CFrame=CFrame.new(h.Position+Vector3.new(0,-0.5,0))
             if fs<=C.SPHERE_MIN*1.5 or S.HideInner then IS.Transparency=1 else IS.Transparency=S.NightModeSphere and 0.2 or 0.7 end
             if S.NightModeSphere then OS.Material=Enum.Material.Neon;OS.Transparency=0.5;if tc~=Color3.fromRGB(255,50,50) then tc=Color3.fromRGB(20,0,30) end else OS.Material=Enum.Material.ForceField;OS.Transparency=0.65 end
             OS.Color=OS.Color:Lerp(tc,cl(10*dt,0,1))
             if tc==Color3.fromRGB(255,50,50) then IS.Color=IS.Color:Lerp(Color3.fromRGB(255,50,50),cl(10*dt,0,1)) else local fi=S.NightModeSphere and Color3.fromRGB(255,0,255) or S.InnerColor;IS.Color=IS.Color:Lerp(fi,cl(10*dt,0,1)) end
-            IS.CFrame=OS.CFrame*CFrame.Angles(PTm,PTm,0);IS.Size=Vector3.new(fs*C.CORE_RATIO,fs*C.CORE_RATIO,fs*C.CORE_RATIO)
+            -- +9% core, rounded to tenths
+            local coreSize=math.floor(fs*C.CORE_RATIO*CORE_SCALE*10+0.5)/10
+            IS.CFrame=OS.CFrame*CFrame.Angles(PTm,PTm,0);IS.Size=Vector3.new(coreSize,coreSize,coreSize)
         end
         if DL then
             if DL.Status then DL.Status.Text=st;DL.Status.TextColor3=st=="DANGER!" and Color3.fromRGB(255,60,60) or (st=="Incoming" and Color3.fromRGB(255,200,0) or Color3.fromRGB(0,255,100)) end
@@ -376,4 +385,4 @@ end)
 
 LP.CharacterAdded:Connect(function() S.IsArmed=true;S.PrevBallPos=nil;S.Ball=nil;S.CameraLock=false;if CAM.CameraType==Enum.CameraType.Scriptable then CAM.CameraType=Enum.CameraType.Custom end end)
 
-print(">>> [BB] v15.6 LOADED | Sphere Min: "..C.SPHERE_MIN.." | Core: "..C.CORE_RATIO.." | Candy mark")
+print(">>> [BB] v15.5 LOADED | React: "..string.format("%.0f-%.0fms",C.HUMAN_DELAY_MIN*1000,C.HUMAN_DELAY_MAX*1000).." | Sphere x1.15 | Core x1.09 (round 0.1)")
