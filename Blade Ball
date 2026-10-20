@@ -8,385 +8,1243 @@
     ║   ██║     ██║  ██║██║  ██║██║  ██║   ██║       ██║     ╚██████╔╝          ║
     ║   ╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝       ╚═╝      ╚═════╝           ║
     ║                                                                           ║
-    ║   [ CANDY EDITION | v15.0 | ULTRA-FAST PARRY ]                            ║
+    ║   [ CANDY EDITION | v15.4 | ULTRA-FAST PARRY ]                            ║
     ║   • 12 Premium Themes (6 Dark / 6 Light)                                  ║
     ║   • Human Delay: 0.10 - 0.15s (x1.5 Faster)                               ║
     ║   • Anti-Close Spam & Predictive Hit                                      ║
     ║   • Camera Lock & Profile Manager                                         ║
-    ║   • Smart Debug HUD & Right Ctrl Toggle                                   ║
+    ║   • Smart Debug HUD & Right Ctrl Toggle                                    ║
+    ║     • Human Delay: 0.19-0.32s (normal distribution)                        ║
+    ║   • Anti-spam (другие игроки вблизи) + трекинг мячей                       ║
+    ║   • Сфера/ядро: минимум вблизи                                            ║
+    ║   • Скрытие сферы меча при target=me                                      ║
+    ║   • Outer touch → shrink, Inner touch → instant parry                     ║
+    ║   • VirtualInputManager — БЕЗ ИЗМЕНЕНИЙ                                   ║
+    ╚═══════════════════════════════════════════════════════════════════════════╝
+    ╔═══════════════════════════════════════════════════════════════════════════╗
+    ║   CANDY EDITION | v15.4 | HUMANIZED + ANTI-SPAM + SWEPT HIT               ║
+    ║   • Human Delay: 0.19-0.32s (normal distribution)                         ║
+    ║   • Anti-spam (другие игроки вблизи) + трекинг мячей                      ║
+    ║   • Сфера/ядро: минимум вблизи                                            ║
+    ║   • Скрытие сферы меча при target=me                                      ║
+    ║   • Outer touch → shrink, Inner touch → instant parry                     ║
+    ║   • VirtualInputManager — БЕЗ ИЗМЕНЕНИЙ                                   ║
     ╚═══════════════════════════════════════════════════════════════════════════╝
 ]]
---[[ CANDY EDITION | v15.3 | HUMANIZED + ANTISPAM + SWORD AURA + SETTINGS ]]
-local P,R,W,T,UI,RS,HS,LG,VIM = game:GetService("Players"),game:GetService("RunService"),game:GetService("Workspace"),game:GetService("TweenService"),game:GetService("UserInputService"),game:GetService("ReplicatedStorage"),game:GetService("HttpService"),game:GetService("Lighting"),game:GetService("VirtualInputManager")
-local LP,PG,CAM = P.LocalPlayer, P.LocalPlayer:WaitForChild("PlayerGui",10), W.CurrentCamera
-for _,v in ipairs(PG:GetChildren()) do if v.Name:match("^BB_") then v:Destroy() end end
-for _,n in ipairs({"AuraVisual","SwordAura"}) do local o=W:FindFirstChild(n); if o then o:Destroy() end end
 
-local C={CLOSE_DIST=45,COOLDOWN=0.12,PING_SAFE=0.50,PREDICT_TIME_BASE=0.15,PREDICT_TIME_JITTER=0.08,HUMAN_DELAY_MIN=0.19,HUMAN_DELAY_MAX=0.32,SLOW_REACTION_CHANCE=0.12,REST_CHANCE=0.03,MISS_CHANCE=0.08,MIN_PARRY_INTERVAL=0.25,PARRY_COOLDOWN_JITTER=0.10,BALL_TRACK_TIME=0.6,SPAM_SKIP_CHANCE=0.30,CLOSE_SPAM_DIST=22,CLOSE_SPAM_SKIP_CHANCE=0.20,NEAREST_PLAYER_FACTOR=0.7,SPHERE_MIN=3,SPHERE_MAX=90,CORE_RATIO=0.10,SWORD_SPHERE_SIZE=2.0,SWORD_TIP_OFFSET=0.0,PARRY_ZONE_RADIUS=1.5}
-local DC={} for k,v in pairs(C) do DC[k]=v end
-local S={Enabled=true,ShowVisuals=true,AntiLag=false,HideInner=false,StaticSphere=false,NightModeSphere=false,NightMap=false,CameraLock=false,OuterColor=Color3.fromRGB(0,255,50),InnerColor=Color3.fromRGB(0,255,200),IsArmed=true,LastParry=0,Ball=nil,PrevBallPos=nil,Frames=0,Remote=nil,ParryMethod="N/A",BlockButton=nil,ParryHistory={},LastDelay=0,LastMiss=false,SpamSkips=0,TotalParries=0,SwordShrink=false,LastSwordParry=0}
+-- ============================================================
+-- [ 1. СЕРВИСЫ ]
+-- ============================================================
+local CoreGui           = game:GetService("CoreGui")
+local Players           = game:GetService("Players")
+local RunService        = game:GetService("RunService")
+local Workspace         = game:GetService("Workspace")
+local TweenService      = game:GetService("TweenService")
+local UserInputService  = game:GetService("UserInputService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local HttpService       = game:GetService("HttpService")
+local Lighting          = game:GetService("Lighting")
+local VirtualInputManager = game:GetService("VirtualInputManager")
 
-local TH={["Premium Dark"]={BG=Color3.fromRGB(15,16,20),HEADER=Color3.fromRGB(22,24,30),ACCENT=Color3.fromRGB(0,200,255),TEXT=Color3.fromRGB(240,240,240),OFF=Color3.fromRGB(40,44,52)},["Cyber Neon"]={BG=Color3.fromRGB(20,5,25),HEADER=Color3.fromRGB(35,10,45),ACCENT=Color3.fromRGB(255,0,200),TEXT=Color3.fromRGB(255,200,255),OFF=Color3.fromRGB(60,20,70)},["Crimson Void"]={BG=Color3.fromRGB(25,5,5),HEADER=Color3.fromRGB(45,10,10),ACCENT=Color3.fromRGB(255,60,60),TEXT=Color3.fromRGB(255,200,200),OFF=Color3.fromRGB(70,15,15)},["Dark Metal"]={BG=Color3.fromRGB(15,16,20),HEADER=Color3.fromRGB(22,24,30),ACCENT=Color3.fromRGB(180,180,190),TEXT=Color3.fromRGB(240,240,240),OFF=Color3.fromRGB(40,44,52)},["Obsidian Night"]={BG=Color3.fromRGB(10,10,15),HEADER=Color3.fromRGB(18,18,25),ACCENT=Color3.fromRGB(150,100,255),TEXT=Color3.fromRGB(220,210,255),OFF=Color3.fromRGB(35,30,50)},["Midnight Ocean"]={BG=Color3.fromRGB(5,15,30),HEADER=Color3.fromRGB(10,25,45),ACCENT=Color3.fromRGB(0,255,200),TEXT=Color3.fromRGB(200,240,255),OFF=Color3.fromRGB(20,40,60)},["Light Emerald"]={BG=Color3.fromRGB(240,245,240),HEADER=Color3.fromRGB(220,235,220),ACCENT=Color3.fromRGB(0,180,100),TEXT=Color3.fromRGB(20,40,20),OFF=Color3.fromRGB(200,215,200)},["Pearl Elegance"]={BG=Color3.fromRGB(250,248,245),HEADER=Color3.fromRGB(240,235,230),ACCENT=Color3.fromRGB(200,150,50),TEXT=Color3.fromRGB(40,30,20),OFF=Color3.fromRGB(220,215,210)},["Arctic Frost"]={BG=Color3.fromRGB(230,245,255),HEADER=Color3.fromRGB(210,230,255),ACCENT=Color3.fromRGB(50,150,255),TEXT=Color3.fromRGB(20,40,60),OFF=Color3.fromRGB(190,210,230)},["Sunset Blossom"]={BG=Color3.fromRGB(255,240,245),HEADER=Color3.fromRGB(250,225,235),ACCENT=Color3.fromRGB(255,100,150),TEXT=Color3.fromRGB(60,20,30),OFF=Color3.fromRGB(230,210,220)},["Cloudy Silver"]={BG=Color3.fromRGB(245,245,250),HEADER=Color3.fromRGB(230,230,240),ACCENT=Color3.fromRGB(100,100,120),TEXT=Color3.fromRGB(30,30,40),OFF=Color3.fromRGB(210,210,220)},["Amber Glow"]={BG=Color3.fromRGB(255,250,235),HEADER=Color3.fromRGB(250,240,210),ACCENT=Color3.fromRGB(230,150,0),TEXT=Color3.fromRGB(50,40,10),OFF=Color3.fromRGB(225,215,195)}}
-local CTN,CT="Premium Dark",TH["Premium Dark"]
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui   = LocalPlayer:WaitForChild("PlayerGui", 10)
+local Camera      = Workspace.CurrentCamera
 
-local function cl(v,a,b) if v<a then return a elseif v>b then return b else return v end end
-local function HD() local u1=math.max(1e-10,math.random());local u2=math.random();local z=math.sqrt(-2*math.log(u1))*math.cos(2*math.pi*u2);local m=(C.HUMAN_DELAY_MIN+C.HUMAN_DELAY_MAX)/2;local s=(C.HUMAN_DELAY_MAX-C.HUMAN_DELAY_MIN)/4;return cl(m+z*s,C.HUMAN_DELAY_MIN*0.85,C.HUMAN_DELAY_MAX*1.25) end
-local function PT() return math.max(0.02,C.PREDICT_TIME_BASE+(math.random()*2-1)*C.PREDICT_TIME_JITTER) end
+for _, v in ipairs(PlayerGui:GetChildren()) do
+    if v.Name:match("^BB_") then v:Destroy() end
+end
+if Workspace:FindFirstChild("AuraVisual") then Workspace.AuraVisual:Destroy() end
 
--- LOADER
-local function Loader()
-    local L=Instance.new("ScreenGui"); L.Name="BB_Loader"; L.ResetOnSpawn=false; L.IgnoreGuiInset=true; L.DisplayOrder=10000; L.Parent=PG
-    local B=Instance.new("Frame"); B.Size=UDim2.new(1,0,1,0); B.BackgroundColor3=Color3.fromRGB(10,10,12); B.Parent=L
-    local Lo=Instance.new("TextLabel"); Lo.Size=UDim2.new(1,0,0,100); Lo.Position=UDim2.new(0,0,0.5,-60); Lo.BackgroundTransparency=1; Lo.Text="BLADE BALL\nPREMIUM"; Lo.TextColor3=Color3.fromRGB(0,200,255); Lo.Font=Enum.Font.GothamBlack; Lo.TextSize=30; Lo.Parent=B
-    local BB=Instance.new("Frame"); BB.Size=UDim2.new(0,300,0,6); BB.Position=UDim2.new(0.5,-150,0.5,60); BB.BackgroundColor3=Color3.fromRGB(40,40,45); BB.Parent=B; Instance.new("UICorner",BB).CornerRadius=UDim.new(1,0)
-    local BF=Instance.new("Frame"); BF.Size=UDim2.new(0,0,1,0); BF.BackgroundColor3=Color3.fromRGB(0,200,255); BF.Parent=BB; Instance.new("UICorner",BF).CornerRadius=UDim.new(1,0)
-    local ST=Instance.new("TextLabel"); ST.Size=UDim2.new(1,0,0,20); ST.Position=UDim2.new(0,0,0.5,80); ST.BackgroundTransparency=1; ST.Text="Инициализация..."; ST.TextColor3=Color3.fromRGB(150,150,150); ST.Font=Enum.Font.GothamMedium; ST.TextSize=12; ST.Parent=B
+-- ============================================================
+-- [ 2. КОНФИГУРАЦИЯ ]
+-- ============================================================
+local CONFIG = {
+    CLOSE_DIST       = 45,
+    COOLDOWN         = 0.12,
+    PING_SAFE        = 0.50,
+
+    PREDICT_TIME_BASE   = 0.15,
+    PREDICT_TIME_JITTER = 0.08,
+
+    HUMAN_DELAY_MIN        = 0.19,
+    HUMAN_DELAY_MAX        = 0.32,
+    SLOW_REACTION_CHANCE   = 0.12,
+    REST_CHANCE            = 0.03,
+    MISS_CHANCE            = 0.08,
+
+    MIN_PARRY_INTERVAL     = 0.25,
+    PARRY_COOLDOWN_JITTER  = 0.10,
+    BALL_TRACK_TIME        = 0.6,
+    SPAM_SKIP_CHANCE       = 0.30,
+    CLOSE_SPAM_DIST        = 22,
+    CLOSE_SPAM_SKIP_CHANCE = 0.20,
+    NEAREST_PLAYER_FACTOR  = 0.7,
+
+    SPHERE_MIN       = 3,
+    SPHERE_MAX       = 90,
+    CORE_RATIO       = 0.10,
+}
+
+-- ============================================================
+-- [ 3. СОСТОЯНИЕ ]
+-- ============================================================
+local STATE = {
+    Enabled = true,
+    ShowVisuals = true,
+    AntiLag = false,
+    HideInner = false,
+    StaticSphere = false,
+    NightModeSphere = false,
+    NightMap = false,
+    CameraLock = false,
+    OuterColor = Color3.fromRGB(0, 255, 50),
+    InnerColor = Color3.fromRGB(0, 255, 200),
+    IsArmed = true,
+    LastParry = 0,
+    Ball = nil,
+    PrevBallPos = nil,
+    Frames = 0,
+    Remote = nil,
+    ParryMethod = "N/A",
+    BlockButton = nil,
+    ParryHistory = {},
+    LastDelay = 0,
+    LastMiss = false,
+    SpamSkips = 0,
+    TotalParries = 0,
+    ShrinkFactor = 1.0,
+    ShrinkUntil = 0,
+    SwordSphereHidden = false,
+    _hiddenSwordParts = {},
+}
+
+-- ============================================================
+-- [ 4. ТЕМЫ ]
+-- ============================================================
+local THEMES = {
+    ["Premium Dark"]   = { BG = Color3.fromRGB(15, 16, 20),  HEADER = Color3.fromRGB(22, 24, 30),  ACCENT = Color3.fromRGB(0, 200, 255), TEXT = Color3.fromRGB(240, 240, 240), OFF = Color3.fromRGB(40, 44, 52) },
+    ["Cyber Neon"]     = { BG = Color3.fromRGB(20, 5, 25),   HEADER = Color3.fromRGB(35, 10, 45),  ACCENT = Color3.fromRGB(255, 0, 200), TEXT = Color3.fromRGB(255, 200, 255), OFF = Color3.fromRGB(60, 20, 70) },
+    ["Crimson Void"]   = { BG = Color3.fromRGB(25, 5, 5),    HEADER = Color3.fromRGB(45, 10, 10),  ACCENT = Color3.fromRGB(255, 60, 60), TEXT = Color3.fromRGB(255, 200, 200), OFF = Color3.fromRGB(70, 15, 15) },
+    ["Dark Metal"]     = { BG = Color3.fromRGB(15, 16, 20),  HEADER = Color3.fromRGB(22, 24, 30),  ACCENT = Color3.fromRGB(180, 180, 190), TEXT = Color3.fromRGB(240, 240, 240), OFF = Color3.fromRGB(40, 44, 52) },
+    ["Obsidian Night"] = { BG = Color3.fromRGB(10, 10, 15),  HEADER = Color3.fromRGB(18, 18, 25),  ACCENT = Color3.fromRGB(150, 100, 255), TEXT = Color3.fromRGB(220, 210, 255), OFF = Color3.fromRGB(35, 30, 50) },
+    ["Midnight Ocean"] = { BG = Color3.fromRGB(5, 15, 30),   HEADER = Color3.fromRGB(10, 25, 45),  ACCENT = Color3.fromRGB(0, 255, 200), TEXT = Color3.fromRGB(200, 240, 255), OFF = Color3.fromRGB(20, 40, 60) },
+    ["Light Emerald"]  = { BG = Color3.fromRGB(240, 245, 240), HEADER = Color3.fromRGB(220, 235, 220), ACCENT = Color3.fromRGB(0, 180, 100), TEXT = Color3.fromRGB(20, 40, 20), OFF = Color3.fromRGB(200, 215, 200) },
+    ["Pearl Elegance"] = { BG = Color3.fromRGB(250, 248, 245), HEADER = Color3.fromRGB(240, 235, 230), ACCENT = Color3.fromRGB(200, 150, 50), TEXT = Color3.fromRGB(40, 30, 20), OFF = Color3.fromRGB(220, 215, 210) },
+    ["Arctic Frost"]   = { BG = Color3.fromRGB(230, 245, 255), HEADER = Color3.fromRGB(210, 230, 255), ACCENT = Color3.fromRGB(50, 150, 255), TEXT = Color3.fromRGB(20, 40, 60), OFF = Color3.fromRGB(190, 210, 230) },
+    ["Sunset Blossom"] = { BG = Color3.fromRGB(255, 240, 245), HEADER = Color3.fromRGB(250, 225, 235), ACCENT = Color3.fromRGB(255, 100, 150), TEXT = Color3.fromRGB(60, 20, 30), OFF = Color3.fromRGB(230, 210, 220) },
+    ["Cloudy Silver"]  = { BG = Color3.fromRGB(245, 245, 250), HEADER = Color3.fromRGB(230, 230, 240), ACCENT = Color3.fromRGB(100, 100, 120), TEXT = Color3.fromRGB(30, 30, 40), OFF = Color3.fromRGB(210, 210, 220) },
+    ["Amber Glow"]     = { BG = Color3.fromRGB(255, 250, 235), HEADER = Color3.fromRGB(250, 240, 210), ACCENT = Color3.fromRGB(230, 150, 0), TEXT = Color3.fromRGB(50, 40, 10), OFF = Color3.fromRGB(225, 215, 195) }
+}
+local CurrentThemeName = "Premium Dark"
+local CurrentTheme     = THEMES[CurrentThemeName]
+
+-- ============================================================
+-- [ 5. УТИЛИТЫ ]
+-- ============================================================
+local function clamp(val, min, max)
+    if val < min then return min end
+    if val > max then return max end
+    return val
+end
+
+local function humanDelay()
+    local u1 = math.max(1e-10, math.random())
+    local u2 = math.random()
+    local z = math.sqrt(-2 * math.log(u1)) * math.cos(2 * math.pi * u2)
+    local mean = (CONFIG.HUMAN_DELAY_MIN + CONFIG.HUMAN_DELAY_MAX) / 2
+    local std  = (CONFIG.HUMAN_DELAY_MAX - CONFIG.HUMAN_DELAY_MIN) / 4
+    return clamp(mean + z * std, CONFIG.HUMAN_DELAY_MIN * 0.85, CONFIG.HUMAN_DELAY_MAX * 1.25)
+end
+
+local function getPredictTime()
+    local jitter = (math.random() * 2 - 1) * CONFIG.PREDICT_TIME_JITTER
+    return math.max(0.02, CONFIG.PREDICT_TIME_BASE + jitter)
+end
+
+-- ============================================================
+-- [ 6. ЭКРАН ЗАГРУЗКИ ]
+-- ============================================================
+local function ShowLoader()
+    local LoaderGui = Instance.new("ScreenGui")
+    LoaderGui.Name = "BB_Loader"; LoaderGui.ResetOnSpawn = false
+    LoaderGui.IgnoreGuiInset = true; LoaderGui.DisplayOrder = 10000
+    LoaderGui.Parent = PlayerGui
+
+    local Bg = Instance.new("Frame")
+    Bg.Size = UDim2.new(1, 0, 1, 0)
+    Bg.BackgroundColor3 = Color3.fromRGB(10, 10, 12)
+    Bg.Parent = LoaderGui
+
+    local Logo = Instance.new("TextLabel")
+    Logo.Size = UDim2.new(1, 0, 0, 100); Logo.Position = UDim2.new(0, 0, 0.5, -60)
+    Logo.BackgroundTransparency = 1; Logo.Text = "BLADE BALL\nPREMIUM"
+    Logo.TextColor3 = Color3.fromRGB(0, 200, 255); Logo.Font = Enum.Font.GothamBlack
+    Logo.TextSize = 30; Logo.Parent = Bg
+
+    local BarBg = Instance.new("Frame")
+    BarBg.Size = UDim2.new(0, 300, 0, 6); BarBg.Position = UDim2.new(0.5, -150, 0.5, 60)
+    BarBg.BackgroundColor3 = Color3.fromRGB(40, 40, 45); BarBg.Parent = Bg
+    Instance.new("UICorner", BarBg).CornerRadius = UDim.new(1, 0)
+
+    local BarFill = Instance.new("Frame")
+    BarFill.Size = UDim2.new(0, 0, 1, 0)
+    BarFill.BackgroundColor3 = Color3.fromRGB(0, 200, 255); BarFill.Parent = BarBg
+    Instance.new("UICorner", BarFill).CornerRadius = UDim.new(1, 0)
+
+    local StatusText = Instance.new("TextLabel")
+    StatusText.Size = UDim2.new(1, 0, 0, 20); StatusText.Position = UDim2.new(0, 0, 0.5, 80)
+    StatusText.BackgroundTransparency = 1; StatusText.Text = "Инициализация..."
+    StatusText.TextColor3 = Color3.fromRGB(150, 150, 150); StatusText.Font = Enum.Font.GothamMedium
+    StatusText.TextSize = 12; StatusText.Parent = Bg
+
     task.spawn(function()
-        local steps={{"Загрузка модулей...",0.4},{"Поиск скрытых событий...",0.6},{"Применение конфигурации...",0.4},{"Готово!",0.3}}
-        for i,s in ipairs(steps) do ST.Text=s[1]; T:Create(BF,TweenInfo.new(s[2],Enum.EasingStyle.Quad),{Size=UDim2.new(i/#steps,0,1,0)}):Play(); task.wait(s[2]) end
+        local steps = {
+            {text = "Загрузка модулей...",   time = 0.4},
+            {text = "Поиск скрытых событий...", time = 0.6},
+            {text = "Применение конфигурации...", time = 0.4},
+            {text = "Готово!",               time = 0.3}
+        }
+        for i, step in ipairs(steps) do
+            StatusText.Text = step.text
+            TweenService:Create(BarFill, TweenInfo.new(step.time, Enum.EasingStyle.Quad), { Size = UDim2.new(i / #steps, 0, 1, 0) }):Play()
+            task.wait(step.time)
+        end
         task.wait(0.3)
-        T:Create(B,TweenInfo.new(0.5),{BackgroundTransparency=1}):Play(); T:Create(Lo,TweenInfo.new(0.5),{TextTransparency=1}):Play()
-        T:Create(BB,TweenInfo.new(0.5),{BackgroundTransparency=1}):Play(); T:Create(BF,TweenInfo.new(0.5),{BackgroundTransparency=1}):Play()
-        T:Create(ST,TweenInfo.new(0.5),{TextTransparency=1}):Play(); task.wait(0.5); L:Destroy()
+        TweenService:Create(Bg, TweenInfo.new(0.5), {BackgroundTransparency = 1}):Play()
+        TweenService:Create(Logo, TweenInfo.new(0.5), {TextTransparency = 1}):Play()
+        TweenService:Create(BarBg, TweenInfo.new(0.5), {BackgroundTransparency = 1}):Play()
+        TweenService:Create(BarFill, TweenInfo.new(0.5), {BackgroundTransparency = 1}):Play()
+        TweenService:Create(StatusText, TweenInfo.new(0.5), {TextTransparency = 1}):Play()
+        task.wait(0.5)
+        LoaderGui:Destroy()
     end)
 end
-Loader()
+ShowLoader()
 
--- FINDERS
-task.spawn(function() for _,o in ipairs(RS:GetDescendants()) do if o:IsA("RemoteEvent") then local n=o.Name:lower(); if n:find("parry") or n:find("block") or n:find("attempt") then S.Remote=o; break end end end end)
-local function FB() if S.BlockButton and S.BlockButton.Parent then return S.BlockButton end; S.BlockButton=nil; for _,g in ipairs(PG:GetDescendants()) do if g:IsA("TextButton") or g:IsA("ImageButton") then local n=g.Name:lower(); if n:find("block") or n:find("parry") or n:find("shield") then S.BlockButton=g; return g end end end end
-local function GS() local ch=LP.Character; if not ch then return nil end; for _,t in ipairs(ch:GetChildren()) do if t:IsA("Tool") then local h=t:FindFirstChild("Handle"); if h and h:IsA("BasePart") then return h end; for _,p in ipairs(t:GetDescendants()) do if p:IsA("BasePart") then return p end end end end; for _,p in ipairs(ch:GetDescendants()) do if p:IsA("BasePart") then local n=p.Name:lower(); if n:find("sword") or n:find("blade") or n:find("katana") then return p end end end end
+-- ============================================================
+-- [ 7. REMOTE + КНОПКА ]
+-- ============================================================
+task.spawn(function()
+    for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
+        if obj:IsA("RemoteEvent") and (obj.Name:lower():find("parry") or obj.Name:lower():find("block") or obj.Name:lower():find("attempt")) then
+            STATE.Remote = obj; break
+        end
+    end
+end)
 
--- SPHERES
-local OS=Instance.new("Part"); OS.Name="AuraVisual"; OS.Shape=Enum.PartType.Ball; OS.Anchored=true; OS.CanCollide=false; OS.CanQuery=false; OS.CastShadow=false; OS.Material=Enum.Material.ForceField; OS.Color=S.OuterColor; OS.Transparency=0.65; OS.Size=Vector3.new(40,40,40); OS.Parent=W
-local IS=Instance.new("Part"); IS.Shape=Enum.PartType.Ball; IS.Anchored=true; IS.CanCollide=false; IS.CanQuery=false; IS.CastShadow=false; IS.Material=Enum.Material.Neon; IS.Color=S.InnerColor; IS.Transparency=0.7; IS.Size=Vector3.new(9.2,9.2,9.2); IS.Parent=OS
-local SS=Instance.new("Part"); SS.Name="SwordAura"; SS.Shape=Enum.PartType.Ball; SS.Anchored=true; SS.CanCollide=false; SS.CanQuery=false; SS.CastShadow=false; SS.Material=Enum.Material.Neon; SS.Color=Color3.fromRGB(255,255,150); SS.Transparency=1; SS.Size=Vector3.new(C.SWORD_SPHERE_SIZE,C.SWORD_SPHERE_SIZE,C.SWORD_SPHERE_SIZE); SS.Parent=W
+local function FindBlockButton()
+    if STATE.BlockButton and STATE.BlockButton.Parent then return STATE.BlockButton end
+    STATE.BlockButton = nil
+    for _, gui in ipairs(PlayerGui:GetDescendants()) do
+        if gui:IsA("TextButton") or gui:IsA("ImageButton") then
+            local name = gui.Name:lower()
+            if name:find("block") or name:find("parry") or name:find("shield") then
+                STATE.BlockButton = gui; return gui
+            end
+        end
+    end
+    return nil
+end
 
--- NIGHT
-local OL,CA={},nil
-local function NM(e)
-    if e then
-        OL={ClockTime=LG.ClockTime,Brightness=LG.Brightness,Ambient=LG.Ambient,OutdoorAmbient=LG.OutdoorAmbient,FogEnd=LG.FogEnd,FogColor=LG.FogColor}
-        LG.ClockTime=0; LG.Brightness=0.5; LG.Ambient=Color3.fromRGB(20,20,30); LG.OutdoorAmbient=Color3.fromRGB(30,30,40); LG.FogEnd=500; LG.FogColor=Color3.fromRGB(10,10,20)
-        if not LG:FindFirstChildOfClass("Atmosphere") then local a=Instance.new("Atmosphere"); a.Density=0.4; a.Color=Color3.fromRGB(50,50,80); a.Decay=Color3.fromRGB(20,20,40); a.Parent=LG; CA=a end
-    else
-        if OL.ClockTime then for k,v in pairs(OL) do LG[k]=v end end
-        if CA then CA:Destroy(); CA=nil end
+-- ============================================================
+-- [ 8. АНТИ-СПАМ ХЕЛПЕРЫ ]
+-- ============================================================
+local function cleanParryHistory()
+    local now = tick()
+    for ball, t in pairs(STATE.ParryHistory) do
+        if now - t > CONFIG.BALL_TRACK_TIME then STATE.ParryHistory[ball] = nil end
     end
 end
 
--- UI
-local SG=Instance.new("ScreenGui"); SG.Name="BB_UI"; SG.ResetOnSpawn=false; SG.DisplayOrder=999; SG.Parent=PG
-local UE={}; local AT
-local CS=Instance.new("Sound"); CS.SoundId="rbxassetid://6895079853"; CS.Volume=0.3; CS.Parent=SG
-local function PC() pcall(function() CS:Play() end) end
-
-local TB=Instance.new("TextButton"); TB.Size=UDim2.new(0,45,0,45); TB.Position=UDim2.new(1,-60,0.5,-22); TB.BackgroundColor3=CT.BG; TB.BackgroundTransparency=0.2; TB.Text="BB"; TB.TextSize=16; TB.TextColor3=CT.ACCENT; TB.Font=Enum.Font.GothamBlack; TB.Parent=SG; Instance.new("UICorner",TB).CornerRadius=UDim.new(1,0)
-local BS=Instance.new("UIStroke",TB); BS.Color=CT.ACCENT; BS.Thickness=1.5; BS.Transparency=0.2
-
-local Win=Instance.new("Frame"); Win.Size=UDim2.new(0,340,0,520); Win.Position=UDim2.new(0.5,-170,0.5,-260); Win.BackgroundColor3=CT.BG; Win.BackgroundTransparency=0.1; Win.Visible=false; Win.Parent=SG; Instance.new("UICorner",Win).CornerRadius=UDim.new(0,12)
-local WS=Instance.new("UIStroke",Win); WS.Color=CT.ACCENT; WS.Thickness=1.5; WS.Transparency=0.4
-
-local HD_=Instance.new("Frame"); HD_.Size=UDim2.new(1,0,0,60); HD_.BackgroundColor3=CT.HEADER; HD_.BackgroundTransparency=0.1; HD_.Parent=Win; Instance.new("UICorner",HD_).CornerRadius=UDim.new(0,12)
-local TT=Instance.new("TextLabel"); TT.Size=UDim2.new(1,-10,1,0); TT.Position=UDim2.new(0,10,0,0); TT.BackgroundTransparency=1; TT.Text="PREMIUM PARRY"; TT.TextColor3=CT.ACCENT; TT.Font=Enum.Font.GothamBlack; TT.TextSize=18; TT.TextXAlignment=Enum.TextXAlignment.Left; TT.Parent=HD_
-local CB=Instance.new("TextButton"); CB.Size=UDim2.new(0,25,0,25); CB.Position=UDim2.new(1,-32,0,8); CB.BackgroundColor3=Color3.fromRGB(255,60,60); CB.Text="X"; CB.TextColor3=Color3.new(1,1,1); CB.Font=Enum.Font.GothamBold; CB.Parent=HD_; Instance.new("UICorner",CB).CornerRadius=UDim.new(0,6)
-local TC=Instance.new("Frame"); TC.Size=UDim2.new(1,-20,0,35); TC.Position=UDim2.new(0,10,0,70); TC.BackgroundTransparency=1; TC.Parent=Win
-local TL=Instance.new("UIListLayout"); TL.FillDirection=Enum.FillDirection.Horizontal; TL.Padding=UDim.new(0,4); TL.Parent=TC
-local Pg=Instance.new("Frame"); Pg.Size=UDim2.new(1,-20,1,-120); Pg.Position=UDim2.new(0,10,0,110); Pg.BackgroundTransparency=1; Pg.Parent=Win
-local PL,Tabs={},{}
-
-local function CTab(name,icon)
-    local p=Instance.new("Frame"); p.Size=UDim2.new(1,0,1,0); p.BackgroundTransparency=1; p.Visible=false; p.Parent=Pg
-    local l=Instance.new("UIListLayout"); l.Padding=UDim.new(0,10); l.HorizontalAlignment=Enum.HorizontalAlignment.Center; l.Parent=p
-    local b=Instance.new("TextButton"); b.Size=UDim2.new(0.24,-4,1,0); b.BackgroundColor3=CT.OFF; b.BackgroundTransparency=0.3; b.Text=icon.." "..name; b.TextColor3=CT.TEXT; b.Font=Enum.Font.GothamBold; b.TextSize=10; b.Parent=TC; Instance.new("UICorner",b).CornerRadius=UDim.new(0,6)
-    table.insert(PL,p); table.insert(Tabs,{Btn=b,Page=p})
-    b.MouseButton1Click:Connect(function()
-        PC(); for _,t in ipairs(Tabs) do t.Page.Visible=false; T:Create(t.Btn,TweenInfo.new(0.2),{BackgroundColor3=CT.OFF,TextColor3=CT.TEXT}):Play() end
-        p.Visible=true; T:Create(b,TweenInfo.new(0.2),{BackgroundColor3=CT.ACCENT,TextColor3=CT.BG}):Play()
-    end)
-    return p
-end
-
-local function CTog(parent,yPos,text,key,cb)
-    local c=Instance.new("Frame"); c.Size=UDim2.new(1,0,0,35); c.Position=UDim2.new(0,0,0,yPos); c.BackgroundTransparency=1; c.Parent=parent
-    local l=Instance.new("TextLabel"); l.Size=UDim2.new(1,-50,1,0); l.BackgroundTransparency=1; l.Text=text; l.TextColor3=CT.TEXT; l.Font=Enum.Font.GothamBold; l.TextSize=13; l.TextXAlignment=Enum.TextXAlignment.Left; l.Parent=c; table.insert(UE,{btn=l,type="label"})
-    local sw=Instance.new("Frame"); sw.Size=UDim2.new(0,40,0,22); sw.Position=UDim2.new(1,-40,0.5,-11); sw.BackgroundColor3=S[key] and CT.ACCENT or CT.OFF; sw.Parent=c; Instance.new("UICorner",sw).CornerRadius=UDim.new(1,0); table.insert(UE,{btn=sw,type="switch",state=S[key]})
-    local k=Instance.new("Frame"); k.Size=UDim2.new(0,18,0,18); k.Position=S[key] and UDim2.new(1,-20,0.5,-9) or UDim2.new(0,2,0.5,-9); k.BackgroundColor3=Color3.fromRGB(255,255,255); k.Parent=sw; Instance.new("UICorner",k).CornerRadius=UDim.new(1,0)
-    local h=Instance.new("TextButton"); h.Size=UDim2.new(1,0,1,0); h.BackgroundTransparency=1; h.Text=""; h.Parent=c
-    h.MouseButton1Click:Connect(function()
-        PC(); S[key]=not S[key]; sw.BackgroundColor3=S[key] and CT.ACCENT or CT.OFF
-        local tp=S[key] and UDim2.new(1,-20,0.5,-9) or UDim2.new(0,2,0.5,-9); T:Create(k,TweenInfo.new(0.2,Enum.EasingStyle.Quad),{Position=tp}):Play()
-        if cb then cb(S[key]) end
-    end)
-end
-
-local function CBtn(parent,yPos,text,cb,color)
-    local b=Instance.new("TextButton"); b.Size=UDim2.new(1,0,0,35); b.Position=UDim2.new(0,0,0,yPos); b.BackgroundColor3=color or CT.OFF; b.BackgroundTransparency=0.3; b.Text=text; b.TextColor3=CT.TEXT; b.Font=Enum.Font.GothamBold; b.TextSize=12; b.Parent=parent; Instance.new("UICorner",b).CornerRadius=UDim.new(0,6); table.insert(UE,{btn=b,type="button"})
-    b.MouseButton1Click:Connect(function() PC(); b.BackgroundTransparency=0; task.wait(0.1); b.BackgroundTransparency=0.3; cb() end)
-end
-
-local SR={}; local AS=nil
-UI.InputChanged:Connect(function(i) if AS and (i.UserInputType==Enum.UserInputType.MouseMovement or i.UserInputType==Enum.UserInputType.Touch) then AS.update(i.Position.X) end end)
-UI.InputEnded:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then AS=nil end end)
-
-local function CSlider(parent,text,mn,mx,key,int,fmt)
-    local c=Instance.new("Frame"); c.Size=UDim2.new(1,0,0,52); c.BackgroundTransparency=1; c.Parent=parent
-    local l=Instance.new("TextLabel"); l.Size=UDim2.new(0.55,0,0,18); l.BackgroundTransparency=1; l.Text=text; l.TextColor3=CT.TEXT; l.Font=Enum.Font.GothamBold; l.TextSize=12; l.TextXAlignment=Enum.TextXAlignment.Left; l.Parent=c
-    local v=Instance.new("TextLabel"); v.Size=UDim2.new(0.45,0,0,18); v.Position=UDim2.new(0.55,0,0,0); v.BackgroundTransparency=1; v.TextColor3=CT.ACCENT; v.Font=Enum.Font.Code; v.TextSize=12; v.TextXAlignment=Enum.TextXAlignment.Right; v.Parent=c
-    local tr=Instance.new("Frame"); tr.Size=UDim2.new(1,0,0,8); tr.Position=UDim2.new(0,0,0,28); tr.BackgroundColor3=CT.OFF; tr.Parent=c; Instance.new("UICorner",tr).CornerRadius=UDim.new(1,0)
-    local fl=Instance.new("Frame"); fl.Size=UDim2.new(0,0,1,0); fl.BackgroundColor3=CT.ACCENT; fl.Parent=tr; Instance.new("UICorner",fl).CornerRadius=UDim.new(1,0)
-    local kb=Instance.new("Frame"); kb.Size=UDim2.new(0,14,0,14); kb.Position=UDim2.new(0,-7,0.5,-7); kb.BackgroundColor3=Color3.fromRGB(255,255,255); kb.Parent=tr; Instance.new("UICorner",kb).CornerRadius=UDim.new(1,0)
-    local function sv(val)
-        val=cl(val,mn,mx); if int then val=math.floor(val+0.5) else val=math.floor(val*1000+0.5)/1000 end
-        local p=(val-mn)/(mx-mn); fl.Size=UDim2.new(p,0,1,0); kb.Position=UDim2.new(p,-7,0.5,-7); v.Text=fmt and fmt(val) or tostring(val); C[key]=val
-    end
-    sv(C[key])
-    local function ux(x) local p=cl((x-tr.AbsolutePosition.X)/tr.AbsoluteSize.X,0,1); sv(mn+p*(mx-mn)) end
-    tr.InputBegan:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then AS={update=ux}; ux(i.Position.X) end end)
-    table.insert(UE,{btn=l,type="label"}); table.insert(UE,{btn=v,type="value_label"}); table.insert(UE,{btn=tr,type="listframe"}); table.insert(UE,{btn=fl,type="slider_fill"})
-    SR[key]={set=sv}
-end
-
-local function CSec(parent,text)
-    local l=Instance.new("TextLabel"); l.Size=UDim2.new(1,0,0,26); l.BackgroundTransparency=1; l.Text="▸ "..text; l.TextColor3=CT.ACCENT; l.Font=Enum.Font.GothamBlack; l.TextSize=12; l.TextXAlignment=Enum.TextXAlignment.Left; l.Parent=parent; table.insert(UE,{btn=l,type="section"})
-end
-
--- PAGES
-local MP=CTab("MAIN","🎯")
-CTog(MP,0,"Auto Parry (Master)","Enabled")
-CTog(MP,40,"3D Sphere Visual","ShowVisuals",function(v) OS.Transparency=v and 0.65 or 1; IS.Transparency=v and 0.7 or 1; SS.Transparency=v and 0.4 or 1 end)
-CTog(MP,80,"Camera Lock","CameraLock",function(v) if not v then CAM.CameraType=Enum.CameraType.Custom end end)
-CBtn(MP,130,"Apply Visuals",function() print(">>> [BB] Visuals applied.") end,Color3.fromRGB(60,180,100))
-
-local VP=CTab("VISUAL","🎨")
-CTog(VP,0,"Anti-Lag","AntiLag")
-CTog(VP,40,"Night Mode (Sphere)","NightModeSphere")
-CTog(VP,80,"Night Map (Env)","NightMap",function(v) S.NightMap=v; NM(v) end)
-CTog(VP,120,"Static Sphere","StaticSphere")
-local ThL=Instance.new("TextLabel"); ThL.Size=UDim2.new(1,0,0,20); ThL.Position=UDim2.new(0,0,0,160); ThL.BackgroundTransparency=1; ThL.Text="Тема (6 Dark / 6 Light):"; ThL.TextColor3=CT.TEXT; ThL.Font=Enum.Font.GothamBold; ThL.TextSize=12; ThL.TextXAlignment=Enum.TextXAlignment.Left; ThL.Parent=VP; table.insert(UE,{btn=ThL,type="label"})
-local ThS=Instance.new("ScrollingFrame"); ThS.Size=UDim2.new(1,0,0,180); ThS.Position=UDim2.new(0,0,0,185); ThS.BackgroundColor3=CT.OFF; ThS.BackgroundTransparency=0.7; ThS.BorderSizePixel=0; ThS.ScrollBarThickness=2; ThS.CanvasSize=UDim2.new(0,0,0,0); ThS.AutomaticCanvasSize=Enum.AutomaticSize.Y; ThS.Parent=VP; Instance.new("UICorner",ThS).CornerRadius=UDim.new(0,6); table.insert(UE,{btn=ThS,type="listframe"})
-local ThLy=Instance.new("UIListLayout"); ThLy.Padding=UDim.new(0,4); ThLy.SortOrder=Enum.SortOrder.Name; ThLy.Parent=ThS
-for name,data in pairs(TH) do
-    local b=Instance.new("TextButton"); b.Size=UDim2.new(0.95,0,0,28); b.BackgroundColor3=data.BG; b.BackgroundTransparency=0.3; b.Text=""; b.Parent=ThS; Instance.new("UICorner",b).CornerRadius=UDim.new(0,4)
-    local pr=Instance.new("Frame"); pr.Size=UDim2.new(0,18,0,18); pr.Position=UDim2.new(0,5,0.5,-9); pr.BackgroundColor3=data.ACCENT; pr.Parent=b; Instance.new("UICorner",pr).CornerRadius=UDim.new(0,3)
-    local lb=Instance.new("TextLabel"); lb.Size=UDim2.new(1,-30,1,0); lb.Position=UDim2.new(0,28,0,0); lb.BackgroundTransparency=1; lb.Text=name; lb.TextColor3=data.TEXT; lb.Font=Enum.Font.GothamBold; lb.TextSize=11; lb.TextXAlignment=Enum.TextXAlignment.Left; lb.Parent=b
-    b.MouseButton1Click:Connect(function() PC(); CTN=name; CT=data; if AT then AT() end end)
-end
-
-local OP=CTab("OTHER","⚙️")
-local PF="BB_Profiles"; pcall(function() if makefolder and not isfolder(PF) then makefolder(PF) end end)
-local PTb=Instance.new("TextBox"); PTb.Size=UDim2.new(1,0,0,35); PTb.BackgroundColor3=CT.OFF; PTb.BackgroundTransparency=0.3; PTb.PlaceholderText="Profile Name..."; PTb.Text=""; PTb.TextColor3=CT.TEXT; PTb.Font=Enum.Font.GothamMedium; PTb.TextSize=12; PTb.Parent=OP; Instance.new("UICorner",PTb).CornerRadius=UDim.new(0,6); table.insert(UE,{btn=PTb,type="textbox"})
-local function SaveP()
-    local pN=PTb.Text~="" and PTb.Text or "Default"
-    local d={Theme=CTN,Enabled=S.Enabled,ShowVisuals=S.ShowVisuals,AntiLag=S.AntiLag,HideInner=S.HideInner,StaticSphere=S.StaticSphere,NightModeSphere=S.NightModeSphere,NightMap=S.NightMap,CameraLock=S.CameraLock}
-    pcall(function() writefile(PF.."/"..pN..".json",HS:JSONEncode(d)) end); if _G.BB_R then _G.BB_R() end
-end
-local function LoadP(pN)
-    local ok,d=pcall(function() if isfile and isfile(PF.."/"..pN..".json") then return HS:JSONDecode(readfile(PF.."/"..pN..".json")) end end)
-    if ok and d then CTN=d.Theme or "Premium Dark"; CT=TH[CTN] or TH["Premium Dark"]; S.Enabled=d.Enabled~=false; S.ShowVisuals=d.ShowVisuals~=false; S.AntiLag=d.AntiLag==true; S.NightMap=d.NightMap==true; S.CameraLock=d.CameraLock==true; if AT then AT() end end
-end
-CBtn(OP,40,"Save Profile",SaveP,Color3.fromRGB(60,180,100))
-local PLF=Instance.new("ScrollingFrame"); PLF.Size=UDim2.new(1,0,0,160); PLF.Position=UDim2.new(0,0,0,80); PLF.BackgroundColor3=CT.OFF; PLF.BackgroundTransparency=0.7; PLF.BorderSizePixel=0; PLF.ScrollBarThickness=2; PLF.CanvasSize=UDim2.new(0,0,0,0); PLF.AutomaticCanvasSize=Enum.AutomaticSize.Y; PLF.Parent=OP; Instance.new("UICorner",PLF).CornerRadius=UDim.new(0,6); table.insert(UE,{btn=PLF,type="listframe"})
-local LL=Instance.new("UIListLayout"); LL.Padding=UDim.new(0,4); LL.Parent=PLF
-_G.BB_R=function()
-    for _,c in ipairs(PLF:GetChildren()) do if c:IsA("Frame") then c:Destroy() end end
-    local aN=""; pcall(function() if isfile and isfile("BB_AutoLoad.txt") then aN=readfile("BB_AutoLoad.txt") end end)
-    local fs={}; pcall(function() if listfiles then for _,f in ipairs(listfiles(PF)) do local m=f:match("(.+)%.json"); if m then table.insert(fs,m) end end end end)
-    if #fs==0 then local e=Instance.new("TextLabel"); e.Size=UDim2.new(1,0,0,25); e.BackgroundTransparency=1; e.Text="No profiles"; e.TextColor3=CT.TEXT; e.Font=Enum.Font.Gotham; e.TextSize=11; e.Parent=PLF; return end
-    table.sort(fs)
-    if aN~="" then for i,v in ipairs(fs) do if v==aN then table.remove(fs,i); table.insert(fs,1,v); break end end end
-    for _,name in ipairs(fs) do
-        local isA=(name==aN); local r=Instance.new("Frame"); r.Size=UDim2.new(1,0,0,25); r.BackgroundTransparency=1; r.Parent=PLF
-        local lb=Instance.new("TextButton"); lb.Size=UDim2.new(0.6,-2,1,0); lb.BackgroundColor3=isA and CT.ACCENT or CT.OFF; lb.Text=(isA and "★ " or "")..name; lb.TextColor3=isA and CT.BG or CT.TEXT; lb.Font=Enum.Font.GothamBold; lb.TextSize=10; lb.Parent=r; Instance.new("UICorner",lb).CornerRadius=UDim.new(0,4); lb.MouseButton1Click:Connect(function() PC(); LoadP(name) end)
-        local ab=Instance.new("TextButton"); ab.Size=UDim2.new(0.4,-2,1,0); ab.Position=UDim2.new(0.6,2,0,0); ab.BackgroundColor3=isA and Color3.fromRGB(60,180,100) or CT.OFF; ab.Text=isA and "✓ AUTO" or "SET AUTO"; ab.TextColor3=isA and Color3.new(0,0,0) or CT.TEXT; ab.Font=Enum.Font.GothamBold; ab.TextSize=9; ab.Parent=r; Instance.new("UICorner",ab).CornerRadius=UDim.new(0,4); ab.MouseButton1Click:Connect(function() PC(); if isA then pcall(function() delfile("BB_AutoLoad.txt") end) else pcall(function() writefile("BB_AutoLoad.txt",name) end) end; _G.BB_R() end)
-    end
-end
-task.spawn(function() task.wait(1); _G.BB_R() end)
-
--- SETTINGS PAGE
-local SPg=Instance.new("Frame"); SPg.Size=UDim2.new(1,0,1,0); SPg.BackgroundTransparency=1; SPg.Visible=false; SPg.Parent=Pg
-local SSc=Instance.new("ScrollingFrame"); SSc.Size=UDim2.new(1,0,1,0); SSc.BackgroundTransparency=1; SSc.BorderSizePixel=0; SSc.ScrollBarThickness=3; SSc.ScrollBarImageColor3=CT.ACCENT; SSc.CanvasSize=UDim2.new(0,0,0,0); SSc.AutomaticCanvasSize=Enum.AutomaticSize.Y; SSc.Parent=SPg
-local SLy=Instance.new("UIListLayout"); SLy.Padding=UDim.new(0,4); SLy.Parent=SSc
-local SB=Instance.new("TextButton"); SB.Size=UDim2.new(0.24,-4,1,0); SB.BackgroundColor3=CT.OFF; SB.BackgroundTransparency=0.3; SB.Text="🛠️ SET"; SB.TextColor3=CT.TEXT; SB.Font=Enum.Font.GothamBold; SB.TextSize=10; SB.Parent=TC; Instance.new("UICorner",SB).CornerRadius=UDim.new(0,6)
-table.insert(PL,SPg); table.insert(Tabs,{Btn=SB,Page=SPg})
-SB.MouseButton1Click:Connect(function() PC(); for _,t in ipairs(Tabs) do t.Page.Visible=false; T:Create(t.Btn,TweenInfo.new(0.2),{BackgroundColor3=CT.OFF,TextColor3=CT.TEXT}):Play() end; SPg.Visible=true; T:Create(SB,TweenInfo.new(0.2),{BackgroundColor3=CT.ACCENT,TextColor3=CT.BG}):Play() end)
-
-CSec(SSc,"REACTION")
-CSlider(SSc,"Human Delay Min",0.05,0.5,"HUMAN_DELAY_MIN",false,function(v) return string.format("%.0fms",v*1000) end)
-CSlider(SSc,"Human Delay Max",0.10,0.8,"HUMAN_DELAY_MAX",false,function(v) return string.format("%.0fms",v*1000) end)
-CSlider(SSc,"Slow Reaction",0,0.5,"SLOW_REACTION_CHANCE",false,function(v) return string.format("%.0f%%",v*100) end)
-CSlider(SSc,"Miss Chance",0,0.5,"MISS_CHANCE",false,function(v) return string.format("%.0f%%",v*100) end)
-CSlider(SSc,"Rest Chance",0,0.3,"REST_CHANCE",false,function(v) return string.format("%.0f%%",v*100) end)
-CSec(SSc,"ANTI-SPAM")
-CSlider(SSc,"Spam Skip Chance",0,1,"SPAM_SKIP_CHANCE",false,function(v) return string.format("%.0f%%",v*100) end)
-CSlider(SSc,"Close Spam Skip",0,1,"CLOSE_SPAM_SKIP_CHANCE",false,function(v) return string.format("%.0f%%",v*100) end)
-CSlider(SSc,"Close Spam Dist",5,60,"CLOSE_SPAM_DIST",true,function(v) return string.format("%.0f",v) end)
-CSlider(SSc,"Min Parry Interval",0,1,"MIN_PARRY_INTERVAL",false,function(v) return string.format("%.2fs",v) end)
-CSlider(SSc,"Ball Track Time",0.1,2,"BALL_TRACK_TIME",false,function(v) return string.format("%.2fs",v) end)
-CSlider(SSc,"Cooldown Jitter",0,0.5,"PARRY_COOLDOWN_JITTER",false,function(v) return string.format("%.2fs",v) end)
-CSlider(SSc,"Nearest Factor",0.3,1.0,"NEAREST_PLAYER_FACTOR",false,function(v) return string.format("%.2f",v) end)
-CSec(SSc,"DETECTION")
-CSlider(SSc,"Close Dist",10,100,"CLOSE_DIST",true,function(v) return string.format("%.0f",v) end)
-CSlider(SSc,"Ping Safe",0.10,1.0,"PING_SAFE",false,function(v) return string.format("%.2fs",v) end)
-CSlider(SSc,"Predict Base",0.05,0.5,"PREDICT_TIME_BASE",false,function(v) return string.format("%.0fms",v*1000) end)
-CSlider(SSc,"Predict Jitter",0,0.3,"PREDICT_TIME_JITTER",false,function(v) return string.format("%.0fms",v*1000) end)
-CSec(SSc,"VISUALS")
-CSlider(SSc,"Sphere Min",1,50,"SPHERE_MIN",true,function(v) return string.format("%.0f",v) end)
-CSlider(SSc,"Sphere Max",20,200,"SPHERE_MAX",true,function(v) return string.format("%.0f",v) end)
-CSlider(SSc,"Core Ratio",0.05,0.5,"CORE_RATIO",false,function(v) return string.format("%.2f",v) end)
-CSlider(SSc,"Sword Sphere Size",0.5,10,"SWORD_SPHERE_SIZE",false,function(v) return string.format("%.1f",v) end)
-CSlider(SSc,"Parry Zone Radius",0.5,5,"PARRY_ZONE_RADIUS",false,function(v) return string.format("%.1f",v) end)
-CSec(SSc,"ACTIONS")
-CBtn(SSc,0,"Reset All to Defaults",function() for k,v in pairs(DC) do if SR[k] then SR[k].set(v) else C[k]=v end end; print(">>> [BB] Settings reset.") end,Color3.fromRGB(180,100,60))
-
--- DEBUG
-local DG=Instance.new("ScreenGui"); DG.Name="BB_Debug"; DG.ResetOnSpawn=false; DG.DisplayOrder=1000; DG.Parent=PG
-local DF=Instance.new("Frame"); DF.Size=UDim2.new(0,240,0,232); DF.Position=UDim2.new(0,15,0,15); DF.BackgroundColor3=CT.BG; DF.BackgroundTransparency=0.15; DF.BorderSizePixel=0; DF.Parent=DG; Instance.new("UICorner",DF).CornerRadius=UDim.new(0,10)
-local DS=Instance.new("UIStroke",DF); DS.Color=CT.ACCENT; DS.Thickness=1.5; DS.Transparency=0.3
-local DH=Instance.new("TextLabel"); DH.Size=UDim2.new(1,-20,0,22); DH.Position=UDim2.new(0,12,0,5); DH.BackgroundTransparency=1; DH.Text="◈ PARRY STATS"; DH.TextColor3=CT.ACCENT; DH.Font=Enum.Font.GothamBlack; DH.TextSize=12; DH.TextXAlignment=Enum.TextXAlignment.Left; DH.Parent=DF
-local AL=Instance.new("Frame"); AL.Size=UDim2.new(1,-24,0,1); AL.Position=UDim2.new(0,12,0,28); AL.BackgroundColor3=CT.ACCENT; AL.BorderSizePixel=0; AL.BackgroundTransparency=0.5; AL.Parent=DF
-local DL={}
-local rD={{"Status","Safe",34},{"Speed","0",55},{"Time","N/A",76},{"Distance","0.0",97},{"Armed","true",118},{"Parry","N/A",139},{"Delay","0ms",160},{"Skips","0",181},{"Sword","—",202}}
-for _,r in ipairs(rD) do
-    local k=Instance.new("TextLabel"); k.Size=UDim2.new(0.45,0,0,16); k.Position=UDim2.new(0,14,0,r[3]); k.BackgroundTransparency=1; k.Text=r[1]; k.TextColor3=Color3.fromRGB(140,140,150); k.Font=Enum.Font.GothamBold; k.TextSize=11; k.TextXAlignment=Enum.TextXAlignment.Left; k.Parent=DF
-    local v=Instance.new("TextLabel"); v.Size=UDim2.new(0.55,-14,0,16); v.Position=UDim2.new(0.45,0,0,r[3]); v.BackgroundTransparency=1; v.Text=r[2]; v.TextColor3=Color3.fromRGB(240,240,240); v.Font=Enum.Font.Code; v.TextSize=11; v.TextXAlignment=Enum.TextXAlignment.Right; v.Parent=DF
-    DL[r[1]]=v
-end
-
--- APPLY THEME
-AT=function()
-    Win.BackgroundColor3=CT.BG; HD_.BackgroundColor3=CT.HEADER; WS.Color=CT.ACCENT; TT.TextColor3=CT.ACCENT; BS.Color=CT.ACCENT; TB.TextColor3=CT.ACCENT
-    DF.BackgroundColor3=CT.BG; DS.Color=CT.ACCENT; DH.TextColor3=CT.ACCENT; AL.BackgroundColor3=CT.ACCENT
-    for _,t in ipairs(Tabs) do if t.Page.Visible then t.Btn.BackgroundColor3=CT.ACCENT; t.Btn.TextColor3=CT.BG else t.Btn.BackgroundColor3=CT.OFF; t.Btn.TextColor3=CT.TEXT end end
-    for _,el in ipairs(UE) do
-        local t=el.type
-        if t=="label" then el.btn.TextColor3=CT.TEXT
-        elseif t=="button" then el.btn.BackgroundColor3=CT.OFF; el.btn.TextColor3=CT.TEXT
-        elseif t=="switch" then el.btn.BackgroundColor3=el.state and CT.ACCENT or CT.OFF
-        elseif t=="textbox" then el.btn.BackgroundColor3=CT.OFF; el.btn.TextColor3=CT.TEXT
-        elseif t=="listframe" then el.btn.BackgroundColor3=CT.OFF
-        elseif t=="slider_fill" then el.btn.BackgroundColor3=CT.ACCENT
-        elseif t=="value_label" then el.btn.TextColor3=CT.ACCENT
-        elseif t=="section" then el.btn.TextColor3=CT.ACCENT end
-    end
-end
-Tabs[1].Page.Visible=true; Tabs[1].Btn.BackgroundColor3=CT.ACCENT; Tabs[1].Btn.TextColor3=CT.BG
-
--- DRAG/TOGGLE
-local dr,ds,sp=false,nil,nil
-HD_.InputBegan:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then dr=true; ds=i.Position; sp=Win.Position end end)
-UI.InputChanged:Connect(function(i) if dr and (i.UserInputType==Enum.UserInputType.MouseMovement or i.UserInputType==Enum.UserInputType.Touch) then local d=i.Position-ds; Win.Position=UDim2.new(sp.X.Scale,sp.X.Offset+d.X,sp.Y.Scale,sp.Y.Offset+d.Y) end end)
-UI.InputEnded:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then dr=false end end)
-local function OT() PC(); Win.Visible=not Win.Visible; if Win.Visible then Win.Size=UDim2.new(0,340,0,0); T:Create(Win,TweenInfo.new(0.3,Enum.EasingStyle.Back,Enum.EasingDirection.Out),{Size=UDim2.new(0,340,0,520)}):Play() end end
-TB.MouseButton1Click:Connect(OT); CB.MouseButton1Click:Connect(function() PC(); Win.Visible=false end)
-UI.InputBegan:Connect(function(i,g) if g then return end; if i.KeyCode==Enum.KeyCode.RightControl then OT() end end)
-
--- ANTI-SPAM
-local function CPH() local n=tick(); for b,t in pairs(S.ParryHistory) do if n-t>C.BALL_TRACK_TIME then S.ParryHistory[b]=nil end end end
-local function WRP(b) if not b then return false end; local t=S.ParryHistory[b]; if not t then return false end; if tick()-t<C.BALL_TRACK_TIME then return true end; S.ParryHistory[b]=nil; return false end
-local function NPB(b) local n,nd=nil,math.huge; for _,p in ipairs(P:GetPlayers()) do if p~=LP and p.Character then local h=p.Character:FindFirstChild("HumanoidRootPart"); if h then local d=(h.Position-b.Position).Magnitude; if d<nd then n,nd=p,d end end end end; return n,nd end
-local function SSP(b,md)
-    if WRP(b) then S.ParryMethod="Skip (tracked)"; return true end
-    local _,nd=NPB(b); if nd~=math.huge and nd<md*C.NEAREST_PLAYER_FACTOR then if math.random()<C.SPAM_SKIP_CHANCE then S.ParryMethod="Skip (other)"; S.SpamSkips+=1; return true end end
-    if md<=C.CLOSE_SPAM_DIST and math.random()<C.CLOSE_SPAM_SKIP_CHANCE then S.ParryMethod="Skip (close)"; S.SpamSkips+=1; return true end
+local function wasRecentlyParried(ball)
+    if not ball then return false end
+    local t = STATE.ParryHistory[ball]
+    if not t then return false end
+    if tick() - t < CONFIG.BALL_TRACK_TIME then return true end
+    STATE.ParryHistory[ball] = nil
     return false
 end
 
--- TRIGGER
-local function TP(b,ovr)
-    local n=tick(); local cd=C.COOLDOWN+math.random()*C.PARRY_COOLDOWN_JITTER
-    if n-S.LastParry<cd then return end; if n-S.LastParry<C.MIN_PARRY_INTERVAL then return end
-    if b and ovr==nil then local ch=LP.Character; local h=ch and ch:FindFirstChild("HumanoidRootPart"); if h then local md=(b.Position-h.Position).Magnitude; if SSP(b,md) then return end end end
-    S.LastParry=n; if b then S.ParryHistory[b]=n end; S.TotalParries+=1; CPH()
-    task.spawn(function()
-        local d
-        if ovr~=nil then d=ovr elseif math.random()<C.SLOW_REACTION_CHANCE then d=C.HUMAN_DELAY_MAX*(1.1+math.random()*0.4) else d=HD() end
-        S.LastDelay=d; if d>0 then task.wait(d) end
-        if ovr==nil and math.random()<C.MISS_CHANCE then S.LastMiss=true; S.ParryMethod="Miss"; return end; S.LastMiss=false
-        if not S.BlockButton or not S.BlockButton.Parent then S.BlockButton=FB() end
-        if S.BlockButton and getconnections then local ok=pcall(function() local cc=getconnections(S.BlockButton.Activated); for _,x in ipairs(cc) do if x.Fire then x:Fire() end end end); if ok then S.ParryMethod=ovr~=nil and "Sword-Core" or "Button"; return end end
-        if S.Remote then pcall(function() S.Remote:FireServer() end); S.ParryMethod=ovr~=nil and "Sword-Core" or "Remote"; return end
-        pcall(function() VIM:SendKeyEvent(true,Enum.KeyCode.F,false,game); task.wait(0.02); VIM:SendKeyEvent(false,Enum.KeyCode.F,false,game) end); S.ParryMethod=ovr~=nil and "Sword-Core" or "VIM"
+local function getNearestPlayerToBall(ball)
+    local nearest, nearestDist = nil, math.huge
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer and plr.Character then
+            local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                local d = (hrp.Position - ball.Position).Magnitude
+                if d < nearestDist then nearest, nearestDist = plr, d end
+            end
+        end
+    end
+    return nearest, nearestDist
+end
+
+local function shouldSkipParry(ball, myDist)
+    if wasRecentlyParried(ball) then
+        STATE.ParryMethod = "Skip (tracked)"; return true
+    end
+    local _, nearestDist = getNearestPlayerToBall(ball)
+    if nearestDist ~= math.huge and nearestDist < myDist * CONFIG.NEAREST_PLAYER_FACTOR then
+        if math.random() < CONFIG.SPAM_SKIP_CHANCE then
+            STATE.ParryMethod = "Skip (other)"; STATE.SpamSkips += 1; return true
+        end
+    end
+    if myDist <= CONFIG.CLOSE_SPAM_DIST and math.random() < CONFIG.CLOSE_SPAM_SKIP_CHANCE then
+        STATE.ParryMethod = "Skip (close)"; STATE.SpamSkips += 1; return true
+    end
+    return false
+end
+
+-- ============================================================
+-- [ 9. СФЕРА + ЯДРО ]
+-- ============================================================
+local OuterSphere = Instance.new("Part")
+OuterSphere.Name = "AuraVisual"
+OuterSphere.Shape = Enum.PartType.Ball
+OuterSphere.Anchored = true; OuterSphere.CanCollide = false; OuterSphere.CanQuery = false
+OuterSphere.CastShadow = false; OuterSphere.Material = Enum.Material.ForceField
+OuterSphere.Color = STATE.OuterColor; OuterSphere.Transparency = 0.65
+OuterSphere.Size = Vector3.new(CONFIG.SPHERE_MIN, CONFIG.SPHERE_MIN, CONFIG.SPHERE_MIN)
+OuterSphere.Parent = Workspace
+
+local InnerSphere = Instance.new("Part")
+InnerSphere.Shape = Enum.PartType.Ball
+InnerSphere.Anchored = true; InnerSphere.CanCollide = false; InnerSphere.CanQuery = false
+InnerSphere.CastShadow = false; InnerSphere.Material = Enum.Material.Neon
+InnerSphere.Color = STATE.InnerColor; InnerSphere.Transparency = 0.7
+InnerSphere.Size = Vector3.new(CONFIG.SPHERE_MIN * CONFIG.CORE_RATIO, CONFIG.SPHERE_MIN * CONFIG.CORE_RATIO, CONFIG.SPHERE_MIN * CONFIG.CORE_RATIO)
+InnerSphere.Parent = OuterSphere
+
+-- ============================================================
+-- [ 10. СКРЫТИЕ СФЕРЫ МЕЧА + SWEPT HIT ]
+-- ============================================================
+local function setSwordSphereHidden(hide)
+    if STATE.SwordSphereHidden == hide then return end
+    STATE.SwordSphereHidden = hide
+
+    local char = LocalPlayer.Character
+    if not char then return end
+
+    local containers = {char}
+    local bp = LocalPlayer:FindFirstChild("Backpack")
+    if bp then table.insert(containers, bp) end
+
+    for _, container in ipairs(containers) do
+        for _, obj in ipairs(container:GetDescendants()) do
+            if obj:IsA("BasePart") then
+                local n = obj.Name:lower()
+                if n:find("sphere") or n:find("orb") or n:find("aura") or n:find("glow") then
+                    if obj ~= OuterSphere and obj ~= InnerSphere then
+                        if hide then
+                            if not STATE._hiddenSwordParts[obj] then
+                                STATE._hiddenSwordParts[obj] = {
+                                    transparency = obj.Transparency, canCollide = obj.CanCollide,
+                                    canTouch = obj.CanTouch, canQuery = obj.CanQuery,
+                                }
+                            end
+                            obj.Transparency = 1; obj.CanCollide = false
+                            obj.CanTouch = false; obj.CanQuery = false
+                        else
+                            local saved = STATE._hiddenSwordParts[obj]
+                            if saved and obj.Parent then
+                                obj.Transparency = saved.transparency
+                                obj.CanCollide = saved.canCollide
+                                obj.CanTouch = saved.canTouch
+                                obj.CanQuery = saved.canQuery
+                            end
+                            STATE._hiddenSwordParts[obj] = nil
+                        end
+                    end
+                end
+            elseif obj:IsA("ParticleEmitter") or obj:IsA("Beam") then
+                local p = obj.Parent
+                if p and (p:IsA("Tool") or p:IsA("BasePart")) then
+                    if obj.Name:lower():find("sphere") or obj.Name:lower():find("orb")
+                       or obj.Name:lower():find("aura") or p:IsA("Tool") then
+                        obj.Enabled = not hide
+                    end
+                end
+            end
+        end
+    end
+end
+
+local function sweptHitSphere(prevPos, currPos, center, radius)
+    local d = currPos - prevPos
+    local f = prevPos - center
+    local a = d:Dot(d)
+    if a < 1e-10 then return f.Magnitude <= radius end
+    local b = 2 * f:Dot(d)
+    local c = f:Dot(f) - radius * radius
+    local disc = b * b - 4 * a * c
+    if disc < 0 then return false end
+    local sqrtDisc = math.sqrt(disc)
+    local t1 = (-b - sqrtDisc) / (2 * a)
+    local t2 = (-b + sqrtDisc) / (2 * a)
+    return not (t1 > 1 or t2 < 0)
+end
+
+-- ============================================================
+-- [ 11. НОЧЬ ]
+-- ============================================================
+local originalLighting = {}
+local createdAtmosphere = nil
+local function SetNightMap(enabled)
+    if enabled then
+        originalLighting = {
+            ClockTime = Lighting.ClockTime, Brightness = Lighting.Brightness,
+            Ambient = Lighting.Ambient, OutdoorAmbient = Lighting.OutdoorAmbient,
+            FogEnd = Lighting.FogEnd, FogColor = Lighting.FogColor,
+        }
+        Lighting.ClockTime = 0; Lighting.Brightness = 0.5
+        Lighting.Ambient = Color3.fromRGB(20, 20, 30)
+        Lighting.OutdoorAmbient = Color3.fromRGB(30, 30, 40)
+        Lighting.FogEnd = 500; Lighting.FogColor = Color3.fromRGB(10, 10, 20)
+        if not Lighting:FindFirstChildOfClass("Atmosphere") then
+            local atm = Instance.new("Atmosphere")
+            atm.Density = 0.4; atm.Color = Color3.fromRGB(50, 50, 80)
+            atm.Decay = Color3.fromRGB(20, 20, 40); atm.Parent = Lighting
+            createdAtmosphere = atm
+        end
+    else
+        if originalLighting.ClockTime then
+            Lighting.ClockTime = originalLighting.ClockTime
+            Lighting.Brightness = originalLighting.Brightness
+            Lighting.Ambient = originalLighting.Ambient
+            Lighting.OutdoorAmbient = originalLighting.OutdoorAmbient
+            Lighting.FogEnd = originalLighting.FogEnd
+            Lighting.FogColor = originalLighting.FogColor
+        end
+        if createdAtmosphere then createdAtmosphere:Destroy(); createdAtmosphere = nil end
+    end
+end
+
+-- ============================================================
+-- [ 12. UI ФРЕЙМВОРК ]
+-- ============================================================
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "BB_UI"; ScreenGui.ResetOnSpawn = false
+ScreenGui.DisplayOrder = 999; ScreenGui.Parent = PlayerGui
+
+local UI_Elements = {}
+local ApplyTheme
+local ClickSound = Instance.new("Sound")
+ClickSound.SoundId = "rbxassetid://6895079853"; ClickSound.Volume = 0.3; ClickSound.Parent = ScreenGui
+local function PlayClick() pcall(function() ClickSound:Play() end) end
+
+local ToggleBtn = Instance.new("TextButton")
+ToggleBtn.Size = UDim2.new(0, 45, 0, 45); ToggleBtn.Position = UDim2.new(1, -60, 0.5, -22)
+ToggleBtn.BackgroundColor3 = CurrentTheme.BG; ToggleBtn.BackgroundTransparency = 0.2
+ToggleBtn.Text = "BB"; ToggleBtn.TextSize = 16; ToggleBtn.TextColor3 = CurrentTheme.ACCENT
+ToggleBtn.Font = Enum.Font.GothamBlack; ToggleBtn.Parent = ScreenGui
+Instance.new("UICorner", ToggleBtn).CornerRadius = UDim.new(1, 0)
+local BtnStroke = Instance.new("UIStroke", ToggleBtn)
+BtnStroke.Color = CurrentTheme.ACCENT; BtnStroke.Thickness = 1.5; BtnStroke.Transparency = 0.2
+
+local Window = Instance.new("Frame")
+Window.Size = UDim2.new(0, 320, 0, 500); Window.Position = UDim2.new(0.5, -160, 0.5, -250)
+Window.BackgroundColor3 = CurrentTheme.BG; Window.BackgroundTransparency = 0.1
+Window.Visible = false; Window.Parent = ScreenGui
+Instance.new("UICorner", Window).CornerRadius = UDim.new(0, 12)
+local WinStroke = Instance.new("UIStroke", Window)
+WinStroke.Color = CurrentTheme.ACCENT; WinStroke.Thickness = 1.5; WinStroke.Transparency = 0.4
+
+local Header = Instance.new("Frame")
+Header.Size = UDim2.new(1, 0, 0, 60); Header.BackgroundColor3 = CurrentTheme.HEADER
+Header.BackgroundTransparency = 0.1; Header.Parent = Window
+Instance.new("UICorner", Header).CornerRadius = UDim.new(0, 12)
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, -10, 1, 0); Title.Position = UDim2.new(0, 10, 0, 0)
+Title.BackgroundTransparency = 1; Title.Text = "PREMIUM PARRY"
+Title.TextColor3 = CurrentTheme.ACCENT; Title.Font = Enum.Font.GothamBlack
+Title.TextSize = 18; Title.TextXAlignment = Enum.TextXAlignment.Left; Title.Parent = Header
+
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Size = UDim2.new(0, 25, 0, 25); CloseBtn.Position = UDim2.new(1, -32, 0, 8)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(255, 60, 60); CloseBtn.Text = "X"
+CloseBtn.TextColor3 = Color3.new(1,1,1); CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.Parent = Header
+Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(0, 6)
+
+local TabContainer = Instance.new("Frame")
+TabContainer.Size = UDim2.new(1, -20, 0, 35); TabContainer.Position = UDim2.new(0, 10, 0, 70)
+TabContainer.BackgroundTransparency = 1; TabContainer.Parent = Window
+local TabLayout = Instance.new("UIListLayout")
+TabLayout.FillDirection = Enum.FillDirection.Horizontal
+TabLayout.Padding = UDim.new(0, 5); TabLayout.Parent = TabContainer
+
+local Pages = Instance.new("Frame")
+Pages.Size = UDim2.new(1, -20, 1, -120); Pages.Position = UDim2.new(0, 10, 0, 110)
+Pages.BackgroundTransparency = 1; Pages.Parent = Window
+
+local PagesList, TabsList = {}, {}
+
+local function CreateTab(name, icon)
+    local Page = Instance.new("Frame")
+    Page.Size = UDim2.new(1, 0, 1, 0); Page.BackgroundTransparency = 1
+    Page.Visible = false; Page.Parent = Pages
+    local Layout = Instance.new("UIListLayout")
+    Layout.Padding = UDim.new(0, 10); Layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    Layout.Parent = Page
+
+    local TabBtn = Instance.new("TextButton")
+    TabBtn.Size = UDim2.new(0.33, -4, 1, 0); TabBtn.BackgroundColor3 = CurrentTheme.OFF
+    TabBtn.BackgroundTransparency = 0.3; TabBtn.Text = icon .. " " .. name
+    TabBtn.TextColor3 = CurrentTheme.TEXT; TabBtn.Font = Enum.Font.GothamBold
+    TabBtn.TextSize = 11; TabBtn.Parent = TabContainer
+    Instance.new("UICorner", TabBtn).CornerRadius = UDim.new(0, 6)
+
+    table.insert(PagesList, Page)
+    table.insert(TabsList, {Btn = TabBtn, Page = Page})
+
+    TabBtn.MouseButton1Click:Connect(function()
+        PlayClick()
+        for _, t in ipairs(TabsList) do
+            t.Page.Visible = false
+            TweenService:Create(t.Btn, TweenInfo.new(0.2), {BackgroundColor3 = CurrentTheme.OFF, TextColor3 = CurrentTheme.TEXT}):Play()
+        end
+        Page.Visible = true
+        TweenService:Create(TabBtn, TweenInfo.new(0.2), {BackgroundColor3 = CurrentTheme.ACCENT, TextColor3 = CurrentTheme.BG}):Play()
+    end)
+    return Page
+end
+
+local function CreateToggle(parent, yPos, text, stateKey, callback)
+    local Container = Instance.new("Frame")
+    Container.Size = UDim2.new(1, 0, 0, 35); Container.Position = UDim2.new(0, 0, 0, yPos)
+    Container.BackgroundTransparency = 1; Container.Parent = parent
+
+    local Label = Instance.new("TextLabel")
+    Label.Size = UDim2.new(1, -50, 1, 0); Label.BackgroundTransparency = 1
+    Label.Text = text; Label.TextColor3 = CurrentTheme.TEXT
+    Label.Font = Enum.Font.GothamBold; Label.TextSize = 13
+    Label.TextXAlignment = Enum.TextXAlignment.Left; Label.Parent = Container
+    table.insert(UI_Elements, {btn = Label, type = "label"})
+
+    local SwitchBg = Instance.new("Frame")
+    SwitchBg.Size = UDim2.new(0, 40, 0, 22); SwitchBg.Position = UDim2.new(1, -40, 0.5, -11)
+    SwitchBg.BackgroundColor3 = STATE[stateKey] and CurrentTheme.ACCENT or CurrentTheme.OFF
+    SwitchBg.Parent = Container
+    Instance.new("UICorner", SwitchBg).CornerRadius = UDim.new(1, 0)
+    table.insert(UI_Elements, {btn = SwitchBg, type = "switch", state = STATE[stateKey]})
+
+    local Knob = Instance.new("Frame")
+    Knob.Size = UDim2.new(0, 18, 0, 18)
+    Knob.Position = STATE[stateKey] and UDim2.new(1, -20, 0.5, -9) or UDim2.new(0, 2, 0.5, -9)
+    Knob.BackgroundColor3 = Color3.fromRGB(255, 255, 255); Knob.Parent = SwitchBg
+    Instance.new("UICorner", Knob).CornerRadius = UDim.new(1, 0)
+
+    local Hitbox = Instance.new("TextButton")
+    Hitbox.Size = UDim2.new(1, 0, 1, 0); Hitbox.BackgroundTransparency = 1
+    Hitbox.Text = ""; Hitbox.Parent = Container
+
+    Hitbox.MouseButton1Click:Connect(function()
+        PlayClick()
+        STATE[stateKey] = not STATE[stateKey]
+        SwitchBg.BackgroundColor3 = STATE[stateKey] and CurrentTheme.ACCENT or CurrentTheme.OFF
+        local targetPos = STATE[stateKey] and UDim2.new(1, -20, 0.5, -9) or UDim2.new(0, 2, 0.5, -9)
+        TweenService:Create(Knob, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {Position = targetPos}):Play()
+        if callback then callback(STATE[stateKey]) end
     end)
 end
 
--- BALL / TARGET
-local function GB()
-    local bf=W:FindFirstChild("Balls"); if not bf then return nil end
-    local ch=LP.Character; local h=ch and ch:FindFirstChild("HumanoidRootPart"); if not h then return nil end
-    local cl,cd=nil,math.huge
-    for _,o in ipairs(bf:GetChildren()) do if o:IsA("BasePart") then local d=(o.Position-h.Position).Magnitude; if d<cd then cl,cd=o,d end end end
-    S.Ball=cl; return cl
-end
-local function ITM(b)
-    if not b then return false end
-    for _,a in ipairs({"target","Target","targetPlayer","TargetPlayer"}) do local v=b:GetAttribute(a); if v then if v==LP or v==LP.Name or v==LP.UserId or v==LP.Character or tostring(v)==LP.Name then return true else return false end end end
-    return LP.Character and LP.Character:FindFirstChild("Highlight")~=nil
+local function CreateButton(parent, yPos, text, callback, color)
+    local Btn = Instance.new("TextButton")
+    Btn.Size = UDim2.new(1, 0, 0, 35); Btn.Position = UDim2.new(0, 0, 0, yPos)
+    Btn.BackgroundColor3 = color or CurrentTheme.OFF; Btn.BackgroundTransparency = 0.3
+    Btn.Text = text; Btn.TextColor3 = CurrentTheme.TEXT
+    Btn.Font = Enum.Font.GothamBold; Btn.TextSize = 12; Btn.Parent = parent
+    Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 6)
+    table.insert(UI_Elements, {btn = Btn, type = "button"})
+    Btn.MouseButton1Click:Connect(function()
+        PlayClick()
+        Btn.BackgroundTransparency = 0; task.wait(0.1); Btn.BackgroundTransparency = 0.3
+        callback()
+    end)
 end
 
--- MAIN LOOP
-local PTm=0
-R.RenderStepped:Connect(function() if S.CameraLock and S.Ball and S.Ball.Parent then CAM.CameraType=Enum.CameraType.Scriptable; CAM.CFrame=CFrame.lookAt(CAM.CFrame.Position,S.Ball.Position) end end)
-R.Heartbeat:Connect(function(dt)
-    pcall(function()
-        S.Frames+=1; local rd=true; if S.AntiLag and S.Frames%3~=0 then rd=false end
-        local ch=LP.Character; local h=ch and ch:FindFirstChild("HumanoidRootPart")
-        if not h or (ch:FindFirstChild("Humanoid") and ch.Humanoid.Health<=0) then OS.Transparency=1; SS.Transparency=1; return end
-        local b=GB(); local dist,speed,tti=0,0,999; local tc=S.OuterColor; local st="Safe"
-        if b then
-            local bp=b.Position; dist=(h.Position-bp).Magnitude
-            if S.Ball~=b then S.Ball=b; S.PrevBallPos=bp; S.IsArmed=true end; if dist>80 then S.IsArmed=true end
-            local bv=b.AssemblyLinearVelocity
-            if bv.Magnitude>1 then speed=bv.Magnitude; local dm=(h.Position-bp).Unit; local ap=bv:Dot(dm); if ap>1 then tti=dist/ap end
-            elseif S.PrevBallPos and dt>0 then local mv=bp-S.PrevBallPos; speed=mv.Magnitude/dt; if speed>1 then local dm=(h.Position-bp).Unit; local ap=mv.Unit:Dot(dm)*speed; if ap>1 then tti=dist/ap end end end
-            if ITM(b) then
-                local ph=false; if speed>1 then local pp=bp+bv*PT(); if (h.Position-pp).Magnitude<=C.CLOSE_DIST then ph=true end end
-                if dist<=C.CLOSE_DIST or tti<=C.PING_SAFE or ph then tc=Color3.fromRGB(255,50,50); st="DANGER!"; if S.Enabled then TP(b); S.IsArmed=false end
-                else tc=Color3.fromRGB(255,200,0); st="Incoming" end
-            else tc=Color3.fromRGB(0,255,100); st="Other Target" end
-            S.PrevBallPos=bp
-        else S.IsArmed=true; S.PrevBallPos=nil end
-        -- SWORD
-        local sw=GS()
-        if sw and sw.Parent then
-            local sp2=sw.Position+sw.CFrame.LookVector*C.SWORD_TIP_OFFSET
-            SS.CFrame=CFrame.new(sp2); SS.Transparency=S.ShowVisuals and 0.4 or 1
-            local oR=OS.Size.X/2; local cR=C.PARRY_ZONE_RADIUS; local sR=C.SWORD_SPHERE_SIZE/2; local d2c=(SS.Position-OS.Position).Magnitude
-            local to=d2c<=(sR+oR); local tk=d2c<=(sR+cR); local btm=b and ITM(b)
-            if not S.SwordShrink then if to and btm then S.SwordShrink=true end else if not btm or d2c>(sR+oR)*0.85 then S.SwordShrink=false end end
-            if tk and btm and S.Enabled and tick()-S.LastSwordParry>0.2 then S.LastSwordParry=tick(); TP(b,0) end
-        else SS.Transparency=1; S.SwordShrink=false end
-        -- VISUALS
-        if rd and S.ShowVisuals then
-            PTm+=dt*2.5
-            local ts= S.SwordShrink and C.SPHERE_MIN or cl(math.max(dist*1.5,C.SPHERE_MIN),C.SPHERE_MIN,C.SPHERE_MAX)
-            local cur=OS.Size.X; local ns=cur+(ts-cur)*math.exp(-10*dt); local fs=S.StaticSphere and ns or ns*(1+math.sin(PTm)*0.02)
-            OS.Size=Vector3.new(fs,fs,fs); OS.CFrame=CFrame.new(h.Position+Vector3.new(0,-0.5,0))
-            if fs<=C.SPHERE_MIN*1.5 or S.HideInner then IS.Transparency=1 else IS.Transparency=S.NightModeSphere and 0.2 or 0.7 end
-            if S.NightModeSphere then OS.Material=Enum.Material.Neon; OS.Transparency=0.5; if tc~=Color3.fromRGB(255,50,50) then tc=Color3.fromRGB(20,0,30) end else OS.Material=Enum.Material.ForceField; OS.Transparency=0.65 end
-            OS.Color=OS.Color:Lerp(tc,cl(10*dt,0,1))
-            if tc==Color3.fromRGB(255,50,50) then IS.Color=IS.Color:Lerp(Color3.fromRGB(255,50,50),cl(10*dt,0,1)) else local fi=S.NightModeSphere and Color3.fromRGB(255,0,255) or S.InnerColor; IS.Color=IS.Color:Lerp(fi,cl(10*dt,0,1)) end
-            IS.CFrame=OS.CFrame*CFrame.Angles(PTm,PTm,0); IS.Size=Vector3.new(fs*C.CORE_RATIO,fs*C.CORE_RATIO,fs*C.CORE_RATIO)
+local MainPage = CreateTab("MAIN", "🎯")
+CreateToggle(MainPage, 0, "Auto Parry (Master)", "Enabled")
+CreateToggle(MainPage, 40, "3D Sphere Visual", "ShowVisuals", function(v)
+    OuterSphere.Transparency = v and 0.65 or 1
+    InnerSphere.Transparency = v and 0.7 or 1
+end)
+CreateToggle(MainPage, 80, "Camera Lock (Ball)", "CameraLock", function(v)
+    if not v then Camera.CameraType = Enum.CameraType.Custom end
+end)
+CreateButton(MainPage, 130, "Apply Visuals", function()
+    print(">>> [BB] Visuals applied.")
+end, Color3.fromRGB(60, 180, 100))
+
+local VisPage = CreateTab("VISUAL", "🎨")
+CreateToggle(VisPage, 0, "Anti-Lag (FPS)", "AntiLag")
+CreateToggle(VisPage, 40, "Night Mode (Sphere)", "NightModeSphere")
+CreateToggle(VisPage, 80, "Night Map (Env)", "NightMap", function(v)
+    STATE.NightMap = v; SetNightMap(v)
+end)
+CreateToggle(VisPage, 120, "Static Sphere", "StaticSphere")
+
+local ThemeLabel = Instance.new("TextLabel")
+ThemeLabel.Size = UDim2.new(1, 0, 0, 20); ThemeLabel.Position = UDim2.new(0, 0, 0, 160)
+ThemeLabel.BackgroundTransparency = 1; ThemeLabel.Text = "Выберите тему (6 Dark / 6 Light):"
+ThemeLabel.TextColor3 = CurrentTheme.TEXT; ThemeLabel.Font = Enum.Font.GothamBold
+ThemeLabel.TextSize = 12; ThemeLabel.TextXAlignment = Enum.TextXAlignment.Left
+ThemeLabel.Parent = VisPage
+table.insert(UI_Elements, {btn = ThemeLabel, type = "label"})
+
+local ThemeScroll = Instance.new("ScrollingFrame")
+ThemeScroll.Size = UDim2.new(1, 0, 0, 180); ThemeScroll.Position = UDim2.new(0, 0, 0, 185)
+ThemeScroll.BackgroundColor3 = CurrentTheme.OFF; ThemeScroll.BackgroundTransparency = 0.7
+ThemeScroll.BorderSizePixel = 0; ThemeScroll.ScrollBarThickness = 2
+ThemeScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+ThemeScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y; ThemeScroll.Parent = VisPage
+Instance.new("UICorner", ThemeScroll).CornerRadius = UDim.new(0, 6)
+table.insert(UI_Elements, {btn = ThemeScroll, type = "listframe"})
+
+local ThemeLayout = Instance.new("UIListLayout")
+ThemeLayout.Padding = UDim.new(0, 4); ThemeLayout.SortOrder = Enum.SortOrder.Name
+ThemeLayout.Parent = ThemeScroll
+
+for name, data in pairs(THEMES) do
+    local Btn = Instance.new("TextButton")
+    Btn.Size = UDim2.new(0.95, 0, 0, 28); Btn.BackgroundColor3 = data.BG
+    Btn.BackgroundTransparency = 0.3; Btn.Text = ""; Btn.Parent = ThemeScroll
+    Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 4)
+
+    local Preview = Instance.new("Frame")
+    Preview.Size = UDim2.new(0, 18, 0, 18); Preview.Position = UDim2.new(0, 5, 0.5, -9)
+    Preview.BackgroundColor3 = data.ACCENT; Preview.Parent = Btn
+    Instance.new("UICorner", Preview).CornerRadius = UDim.new(0, 3)
+
+    local Label = Instance.new("TextLabel")
+    Label.Size = UDim2.new(1, -30, 1, 0); Label.Position = UDim2.new(0, 28, 0, 0)
+    Label.BackgroundTransparency = 1; Label.Text = name
+    Label.TextColor3 = data.TEXT; Label.Font = Enum.Font.GothamBold
+    Label.TextSize = 11; Label.TextXAlignment = Enum.TextXAlignment.Left; Label.Parent = Btn
+
+    Btn.MouseButton1Click:Connect(function()
+        PlayClick()
+        CurrentThemeName = name; CurrentTheme = data
+        if ApplyTheme then ApplyTheme() end
+    end)
+end
+
+-- ============================================================
+-- [ 13. ПРОФИЛИ ]
+-- ============================================================
+local OtherPage = CreateTab("OTHER", "⚙️")
+local PROFILE_FOLDER = "BB_Profiles"
+pcall(function() if makefolder and not isfolder(PROFILE_FOLDER) then makefolder(PROFILE_FOLDER) end end)
+
+local ProfileTextBox = Instance.new("TextBox")
+ProfileTextBox.Size = UDim2.new(1, 0, 0, 35); ProfileTextBox.BackgroundColor3 = CurrentTheme.OFF
+ProfileTextBox.BackgroundTransparency = 0.3; ProfileTextBox.PlaceholderText = "Profile Name..."
+ProfileTextBox.Text = ""; ProfileTextBox.TextColor3 = CurrentTheme.TEXT
+ProfileTextBox.Font = Enum.Font.GothamMedium; ProfileTextBox.TextSize = 12
+ProfileTextBox.Parent = OtherPage
+Instance.new("UICorner", ProfileTextBox).CornerRadius = UDim.new(0, 6)
+table.insert(UI_Elements, {btn = ProfileTextBox, type = "textbox"})
+
+local function SaveProfile()
+    local pName = ProfileTextBox.Text ~= "" and ProfileTextBox.Text or "Default"
+    local data = {
+        Theme = CurrentThemeName, Enabled = STATE.Enabled, ShowVisuals = STATE.ShowVisuals,
+        AntiLag = STATE.AntiLag, HideInner = STATE.HideInner, StaticSphere = STATE.StaticSphere,
+        NightModeSphere = STATE.NightModeSphere, NightMap = STATE.NightMap,
+        OuterColor = tostring(STATE.OuterColor), InnerColor = tostring(STATE.InnerColor),
+        CameraLock = STATE.CameraLock
+    }
+    local success = pcall(function() writefile(PROFILE_FOLDER .. "/" .. pName .. ".json", HttpService:JSONEncode(data)) end)
+    if success then print(">>> [BB] Profile saved: "..pName) end
+    if _G.BB_RefreshProfiles then _G.BB_RefreshProfiles() end
+end
+
+local function LoadProfile(pName)
+    local success, data = pcall(function()
+        if isfile and isfile(PROFILE_FOLDER .. "/" .. pName .. ".json") then
+            return HttpService:JSONDecode(readfile(PROFILE_FOLDER .. "/" .. pName .. ".json"))
         end
-        -- DEBUG
-        if DL then
-            if DL.Status then DL.Status.Text=st; DL.Status.TextColor3=st=="DANGER!" and Color3.fromRGB(255,60,60) or (st=="Incoming" and Color3.fromRGB(255,200,0) or Color3.fromRGB(0,255,100)) end
-            if DL.Speed then DL.Speed.Text=string.format("%.0f",speed) end
-            if DL.Time then DL.Time.Text=tti>900 and "N/A" or string.format("%.2fs",tti) end
-            if DL.Distance then DL.Distance.Text=string.format("%.1f",dist) end
-            if DL.Armed then DL.Armed.Text=tostring(S.IsArmed); DL.Armed.TextColor3=S.IsArmed and Color3.fromRGB(0,255,100) or Color3.fromRGB(255,150,150) end
-            if DL.Parry then DL.Parry.Text=S.ParryMethod or "N/A" end
-            if DL.Delay then DL.Delay.Text=string.format("%.0fms",S.LastDelay*1000); DL.Delay.TextColor3=S.LastMiss and Color3.fromRGB(255,100,100) or Color3.fromRGB(240,240,240) end
-            if DL.Skips then DL.Skips.Text=tostring(S.SpamSkips); DL.Skips.TextColor3=Color3.fromRGB(255,200,100) end
-            if DL.Sword then
-                if S.SwordShrink then DL.Sword.Text="SHRINK"; DL.Sword.TextColor3=Color3.fromRGB(255,200,100)
-                elseif SS.Transparency<1 then DL.Sword.Text="Tracking"; DL.Sword.TextColor3=Color3.fromRGB(200,200,255)
-                else DL.Sword.Text="—"; DL.Sword.TextColor3=Color3.fromRGB(140,140,150) end
+    end)
+    if success and data then
+        CurrentThemeName = data.Theme or "Premium Dark"
+        CurrentTheme = THEMES[CurrentThemeName] or THEMES["Premium Dark"]
+        STATE.Enabled = data.Enabled ~= false
+        STATE.ShowVisuals = data.ShowVisuals ~= false
+        STATE.AntiLag = data.AntiLag == true
+        STATE.HideInner = data.HideInner == true
+        STATE.StaticSphere = data.StaticSphere == true
+        STATE.NightModeSphere = data.NightModeSphere == true
+        STATE.NightMap = data.NightMap == true
+        STATE.CameraLock = data.CameraLock == true
+        if ApplyTheme then ApplyTheme() end
+        print(">>> [BB] Profile loaded: "..pName)
+    end
+end
+
+CreateButton(OtherPage, 40, "Save / Overwrite Profile", SaveProfile, Color3.fromRGB(60, 180, 100))
+
+local ProfileListFrame = Instance.new("ScrollingFrame")
+ProfileListFrame.Size = UDim2.new(1, 0, 0, 160); ProfileListFrame.Position = UDim2.new(0, 0, 0, 80)
+ProfileListFrame.BackgroundColor3 = CurrentTheme.OFF; ProfileListFrame.BackgroundTransparency = 0.7
+ProfileListFrame.BorderSizePixel = 0; ProfileListFrame.ScrollBarThickness = 2
+ProfileListFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+ProfileListFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y; ProfileListFrame.Parent = OtherPage
+Instance.new("UICorner", ProfileListFrame).CornerRadius = UDim.new(0, 6)
+table.insert(UI_Elements, {btn = ProfileListFrame, type = "listframe"})
+
+local ListLayout = Instance.new("UIListLayout")
+ListLayout.Padding = UDim.new(0, 4); ListLayout.Parent = ProfileListFrame
+
+_G.BB_RefreshProfiles = function()
+    for _, child in ipairs(ProfileListFrame:GetChildren()) do
+        if child:IsA("Frame") then child:Destroy() end
+    end
+    local autoName = ""
+    pcall(function() if isfile and isfile("BB_AutoLoad.txt") then autoName = readfile("BB_AutoLoad.txt") end end)
+
+    local files = {}
+    pcall(function()
+        if listfiles then
+            for _, f in ipairs(listfiles(PROFILE_FOLDER)) do
+                local match = f:match("(.+)%.json")
+                if match then table.insert(files, match) end
+            end
+        end
+    end)
+
+    if #files == 0 then
+        local empty = Instance.new("TextLabel")
+        empty.Size = UDim2.new(1, 0, 0, 25); empty.BackgroundTransparency = 1
+        empty.Text = "No profiles saved"; empty.TextColor3 = CurrentTheme.TEXT
+        empty.Font = Enum.Font.Gotham; empty.TextSize = 11; empty.Parent = ProfileListFrame
+        return
+    end
+
+    table.sort(files)
+    if autoName ~= "" then
+        for i, v in ipairs(files) do
+            if v == autoName then table.remove(files, i); table.insert(files, 1, v); break end
+        end
+    end
+
+    for _, name in ipairs(files) do
+        local isAuto = (name == autoName)
+        local row = Instance.new("Frame")
+        row.Size = UDim2.new(1, 0, 0, 25); row.BackgroundTransparency = 1; row.Parent = ProfileListFrame
+
+        local loadBtn = Instance.new("TextButton")
+        loadBtn.Size = UDim2.new(0.6, -2, 1, 0)
+        loadBtn.BackgroundColor3 = isAuto and CurrentTheme.ACCENT or CurrentTheme.OFF
+        loadBtn.Text = (isAuto and "★ " or "") .. name
+        loadBtn.TextColor3 = isAuto and CurrentTheme.BG or CurrentTheme.TEXT
+        loadBtn.Font = Enum.Font.GothamBold; loadBtn.TextSize = 10; loadBtn.Parent = row
+        Instance.new("UICorner", loadBtn).CornerRadius = UDim.new(0, 4)
+        loadBtn.MouseButton1Click:Connect(function() PlayClick(); LoadProfile(name) end)
+
+        local autoBtn = Instance.new("TextButton")
+        autoBtn.Size = UDim2.new(0.4, -2, 1, 0); autoBtn.Position = UDim2.new(0.6, 2, 0, 0)
+        autoBtn.BackgroundColor3 = isAuto and Color3.fromRGB(60, 180, 100) or CurrentTheme.OFF
+        autoBtn.Text = isAuto and "✓ AUTO" or "SET AUTO"
+        autoBtn.TextColor3 = isAuto and Color3.new(0,0,0) or CurrentTheme.TEXT
+        autoBtn.Font = Enum.Font.GothamBold; autoBtn.TextSize = 9; autoBtn.Parent = row
+        Instance.new("UICorner", autoBtn).CornerRadius = UDim.new(0, 4)
+        autoBtn.MouseButton1Click:Connect(function()
+            PlayClick()
+            if isAuto then pcall(function() delfile("BB_AutoLoad.txt") end)
+            else pcall(function() writefile("BB_AutoLoad.txt", name) end) end
+            _G.BB_RefreshProfiles()
+        end)
+    end
+end
+
+task.spawn(function() task.wait(1); _G.BB_RefreshProfiles() end)
+task.spawn(function()
+    task.wait(1.5)
+    pcall(function()
+        if isfile and isfile("BB_AutoLoad.txt") then LoadProfile(readfile("BB_AutoLoad.txt")) end
+    end)
+end)
+
+-- ============================================================
+-- [ 14. DEBUG PANEL ]
+-- ============================================================
+local DebugGui = Instance.new("ScreenGui")
+DebugGui.Name = "BB_Debug"; DebugGui.ResetOnSpawn = false
+DebugGui.DisplayOrder = 1000; DebugGui.Parent = PlayerGui
+
+local DebugFrame = Instance.new("Frame")
+DebugFrame.Size = UDim2.new(0, 240, 0, 215); DebugFrame.Position = UDim2.new(0, 15, 0, 15)
+DebugFrame.BackgroundColor3 = CurrentTheme.BG; DebugFrame.BackgroundTransparency = 0.15
+DebugFrame.BorderSizePixel = 0; DebugFrame.Parent = DebugGui
+Instance.new("UICorner", DebugFrame).CornerRadius = UDim.new(0, 10)
+local DebugStroke = Instance.new("UIStroke", DebugFrame)
+DebugStroke.Color = CurrentTheme.ACCENT; DebugStroke.Thickness = 1.5; DebugStroke.Transparency = 0.3
+
+local debugHeader = Instance.new("TextLabel")
+debugHeader.Size = UDim2.new(1, -20, 0, 22); debugHeader.Position = UDim2.new(0, 12, 0, 5)
+debugHeader.BackgroundTransparency = 1; debugHeader.Text = "◈ PARRY STATS"
+debugHeader.TextColor3 = CurrentTheme.ACCENT; debugHeader.Font = Enum.Font.GothamBlack
+debugHeader.TextSize = 12; debugHeader.TextXAlignment = Enum.TextXAlignment.Left
+debugHeader.Parent = DebugFrame
+
+local accentLine = Instance.new("Frame")
+accentLine.Size = UDim2.new(1, -24, 0, 1); accentLine.Position = UDim2.new(0, 12, 0, 28)
+accentLine.BackgroundColor3 = CurrentTheme.ACCENT; accentLine.BorderSizePixel = 0
+accentLine.BackgroundTransparency = 0.5; accentLine.Parent = DebugFrame
+
+local debugLabels = {}
+local rowData = {
+    {"Status",   "Safe", 34},
+    {"Speed",    "0",    55},
+    {"Time",     "N/A",  76},
+    {"Distance", "0.0",  97},
+    {"Armed",    "true", 118},
+    {"Parry",    "N/A",  139},
+    {"Delay",    "0ms",  160},
+    {"Skips",    "0",    181},
+}
+
+for _, row in ipairs(rowData) do
+    local keyLabel = Instance.new("TextLabel")
+    keyLabel.Size = UDim2.new(0.45, 0, 0, 16); keyLabel.Position = UDim2.new(0, 14, 0, row[3])
+    keyLabel.BackgroundTransparency = 1; keyLabel.Text = row[1]
+    keyLabel.TextColor3 = Color3.fromRGB(140, 140, 150); keyLabel.Font = Enum.Font.GothamBold
+    keyLabel.TextSize = 11; keyLabel.TextXAlignment = Enum.TextXAlignment.Left
+    keyLabel.Parent = DebugFrame
+
+    local valLabel = Instance.new("TextLabel")
+    valLabel.Size = UDim2.new(0.55, -14, 0, 16); valLabel.Position = UDim2.new(0.45, 0, 0, row[3])
+    valLabel.BackgroundTransparency = 1; valLabel.Text = row[2]
+    valLabel.TextColor3 = Color3.fromRGB(240, 240, 240); valLabel.Font = Enum.Font.Code
+    valLabel.TextSize = 11; valLabel.TextXAlignment = Enum.TextXAlignment.Right
+    valLabel.Parent = DebugFrame
+
+    debugLabels[row[1]] = valLabel
+end
+
+-- ============================================================
+-- [ 15. APPLY THEME ]
+-- ============================================================
+ApplyTheme = function()
+    Window.BackgroundColor3 = CurrentTheme.BG
+    Header.BackgroundColor3 = CurrentTheme.HEADER
+    WinStroke.Color = CurrentTheme.ACCENT
+    Title.TextColor3 = CurrentTheme.ACCENT
+    BtnStroke.Color = CurrentTheme.ACCENT
+    ToggleBtn.TextColor3 = CurrentTheme.ACCENT
+    DebugFrame.BackgroundColor3 = CurrentTheme.BG
+    DebugStroke.Color = CurrentTheme.ACCENT
+    debugHeader.TextColor3 = CurrentTheme.ACCENT
+    accentLine.BackgroundColor3 = CurrentTheme.ACCENT
+    for _, t in ipairs(TabsList) do
+        if t.Page.Visible then
+            t.Btn.BackgroundColor3 = CurrentTheme.ACCENT; t.Btn.TextColor3 = CurrentTheme.BG
+        else
+            t.Btn.BackgroundColor3 = CurrentTheme.OFF; t.Btn.TextColor3 = CurrentTheme.TEXT
+        end
+    end
+    for _, el in ipairs(UI_Elements) do
+        if el.type == "label" then el.btn.TextColor3 = CurrentTheme.TEXT
+        elseif el.type == "button" then el.btn.BackgroundColor3 = CurrentTheme.OFF; el.btn.TextColor3 = CurrentTheme.TEXT
+        elseif el.type == "switch" then el.btn.BackgroundColor3 = el.state and CurrentTheme.ACCENT or CurrentTheme.OFF
+        elseif el.type == "textbox" then el.btn.BackgroundColor3 = CurrentTheme.OFF; el.btn.TextColor3 = CurrentTheme.TEXT
+        elseif el.type == "listframe" then el.btn.BackgroundColor3 = CurrentTheme.OFF
+        end
+    end
+end
+
+TabsList[1].Page.Visible = true
+TabsList[1].Btn.BackgroundColor3 = CurrentTheme.ACCENT
+TabsList[1].Btn.TextColor3 = CurrentTheme.BG
+
+-- ============================================================
+-- [ 16. DRAG + TOGGLE ]
+-- ============================================================
+local dragging, dragStart, startPos = false, nil, nil
+Header.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true; dragStart = input.Position; startPos = Window.Position
+    end
+end)
+UserInputService.InputChanged:Connect(function(input)
+    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        local delta = input.Position - dragStart
+        Window.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = false
+    end
+end)
+
+local function OpenToggle()
+    PlayClick()
+    Window.Visible = not Window.Visible
+    if Window.Visible then
+        Window.Size = UDim2.new(0, 320, 0, 0)
+        TweenService:Create(Window, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Size = UDim2.new(0, 320, 0, 500)}):Play()
+    end
+end
+ToggleBtn.MouseButton1Click:Connect(OpenToggle)
+CloseBtn.MouseButton1Click:Connect(function() PlayClick(); Window.Visible = false end)
+UserInputService.InputBegan:Connect(function(input, gpe)
+    if gpe then return end
+    if input.KeyCode == Enum.KeyCode.RightControl then OpenToggle() end
+end)
+
+-- ============================================================
+-- [ 17. ПАРИРОВАНИЕ: ОБЫЧНОЕ + МГНОВЕННОЕ ]
+-- ============================================================
+local function TriggerParryInstant(ball)
+    local now = tick()
+    if now - STATE.LastParry < CONFIG.COOLDOWN then return end
+    if now - STATE.LastParry < CONFIG.MIN_PARRY_INTERVAL then return end
+    if ball and wasRecentlyParried(ball) then return end
+
+    STATE.LastParry = now
+    if ball then STATE.ParryHistory[ball] = now end
+    STATE.TotalParries += 1
+    cleanParryHistory()
+
+    task.spawn(function()
+        task.wait(math.random(20, 50) / 1000)
+        if not STATE.BlockButton or not STATE.BlockButton.Parent then
+            STATE.BlockButton = FindBlockButton()
+        end
+        if STATE.BlockButton and getconnections then
+            local ok = pcall(function()
+                for _, c in ipairs(getconnections(STATE.BlockButton.Activated)) do
+                    if c.Fire then c:Fire() end
+                end
+            end)
+            if ok then STATE.ParryMethod = "Core"; return end
+        end
+        if STATE.Remote then
+            pcall(function() STATE.Remote:FireServer() end)
+            STATE.ParryMethod = "Core-Remote"; return
+        end
+        pcall(function()
+            VirtualInputManager:SendKeyEvent(true,  Enum.KeyCode.F, false, game)
+            task.wait(0.02)
+            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.F, false, game)
+        end)
+        STATE.ParryMethod = "Core-VIM"
+    end)
+end
+
+local function TriggerParry(ball)
+    local now = tick()
+    local cooldown = CONFIG.COOLDOWN + math.random() * CONFIG.PARRY_COOLDOWN_JITTER
+    if now - STATE.LastParry < cooldown then return end
+    if now - STATE.LastParry < CONFIG.MIN_PARRY_INTERVAL then return end
+
+    if ball then
+        local char = LocalPlayer.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            local myDist = (ball.Position - hrp.Position).Magnitude
+            if shouldSkipParry(ball, myDist) then return end
+        end
+    end
+
+    STATE.LastParry = now
+    if ball then STATE.ParryHistory[ball] = now end
+    STATE.TotalParries += 1
+    cleanParryHistory()
+
+    task.spawn(function()
+        local delay
+        if math.random() < CONFIG.SLOW_REACTION_CHANCE then
+            delay = CONFIG.HUMAN_DELAY_MAX * (1.1 + math.random() * 0.4)
+        else
+            delay = humanDelay()
+        end
+        STATE.LastDelay = delay
+        task.wait(delay)
+
+        if math.random() < CONFIG.MISS_CHANCE then
+            STATE.LastMiss = true
+            STATE.ParryMethod = "Miss"
+            return
+        end
+        STATE.LastMiss = false
+
+        if not STATE.BlockButton or not STATE.BlockButton.Parent then
+            STATE.BlockButton = FindBlockButton()
+        end
+        if STATE.BlockButton and getconnections then
+            local success = pcall(function()
+                for _, c in ipairs(getconnections(STATE.BlockButton.Activated)) do
+                    if c.Fire then c:Fire() end
+                end
+            end)
+            if success then STATE.ParryMethod = "Button"; return end
+        end
+        if STATE.Remote then
+            pcall(function() STATE.Remote:FireServer() end)
+            STATE.ParryMethod = "Remote"; return
+        end
+        pcall(function()
+            VirtualInputManager:SendKeyEvent(true,  Enum.KeyCode.F, false, game)
+            task.wait(0.02)
+            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.F, false, game)
+        end)
+        STATE.ParryMethod = "VIM"
+    end)
+end
+
+-- ============================================================
+-- [ 18. BALL + TARGETING ]
+-- ============================================================
+local function GetBall()
+    local bf = Workspace:FindFirstChild("Balls")
+    if not bf then return nil end
+    local char = LocalPlayer.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return nil end
+
+    local closest, closestDist = nil, math.huge
+    for _, o in ipairs(bf:GetChildren()) do
+        if o:IsA("BasePart") then
+            local d = (o.Position - hrp.Position).Magnitude
+            if d < closestDist then closest, closestDist = o, d end
+        end
+    end
+    STATE.Ball = closest
+    return closest
+end
+
+local function IsTargetingMe(ball)
+    if not ball then return false end
+    local attrs = {"target", "Target", "targetPlayer", "TargetPlayer"}
+    for _, a in ipairs(attrs) do
+        local v = ball:GetAttribute(a)
+        if v then
+            if v == LocalPlayer or v == LocalPlayer.Name or v == LocalPlayer.UserId
+               or v == LocalPlayer.Character or tostring(v) == LocalPlayer.Name then
+                return true
+            else
+                return false
+            end
+        end
+    end
+    return LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Highlight") ~= nil
+end
+
+-- ============================================================
+-- [ 19. КАМЕРА + ГЛАВНЫЙ ЦИКЛ ]
+-- ============================================================
+local PulseTime = 0
+
+RunService.RenderStepped:Connect(function()
+    if STATE.CameraLock and STATE.Ball and STATE.Ball.Parent then
+        Camera.CameraType = Enum.CameraType.Scriptable
+        Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, STATE.Ball.Position)
+    end
+end)
+
+RunService.Heartbeat:Connect(function(dt)
+    pcall(function()
+        STATE.Frames = STATE.Frames + 1
+        local render = true
+        if STATE.AntiLag and (STATE.Frames % 3 ~= 0) then render = false end
+
+        local char = LocalPlayer.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        if not hrp or (char:FindFirstChild("Humanoid") and char.Humanoid.Health <= 0) then
+            if OuterSphere then OuterSphere.Transparency = 1 end
+            return
+        end
+
+        local ball = GetBall()
+        local dist, speed, timeToImpact = 0, 0, 999
+        local targetColor = STATE.OuterColor
+        local status = "Safe"
+        local targetingMe = false
+
+        if ball then
+            local bp = ball.Position
+            dist = (hrp.Position - bp).Magnitude
+
+            if STATE.Ball ~= ball then
+                STATE.Ball = ball
+                STATE.PrevBallPos = bp
+                STATE.IsArmed = true
+            end
+            if dist > 80 then STATE.IsArmed = true end
+
+            targetingMe = IsTargetingMe(ball)
+            setSwordSphereHidden(targetingMe)
+
+            -- SWEPT HIT TEST
+            if targetingMe and STATE.Enabled then
+                local ballR  = ball.Size.Magnitude * 0.5
+                local outerR = OuterSphere.Size.X * 0.5
+                local innerVisualR = InnerSphere.Size.X * 0.5
+                local innerHitR = math.max(innerVisualR, 1.5)
+
+                local prevPos = STATE.PrevBallPos or bp
+                local currPos = bp
+
+                local hitOuter = sweptHitSphere(prevPos, currPos, OuterSphere.Position, outerR + ballR)
+                local hitInner = sweptHitSphere(prevPos, currPos, InnerSphere.Position, innerHitR + ballR)
+
+                if hitInner then
+                    STATE.ShrinkUntil  = tick() + 0.25
+                    STATE.ShrinkFactor = 0.15
+                    TriggerParryInstant(ball)
+                    STATE.IsArmed = false
+                elseif hitOuter then
+                    STATE.ShrinkUntil  = tick() + 0.20
+                    STATE.ShrinkFactor = 0.30
+                end
+            end
+
+            local bv = ball.AssemblyLinearVelocity
+            if bv.Magnitude > 1 then
+                speed = bv.Magnitude
+                local dirToMe = (hrp.Position - bp).Unit
+                local approachSpeed = bv:Dot(dirToMe)
+                if approachSpeed > 1 then timeToImpact = dist / approachSpeed end
+            elseif STATE.PrevBallPos and dt > 0 then
+                local moveVec = bp - STATE.PrevBallPos
+                speed = moveVec.Magnitude / dt
+                if speed > 1 then
+                    local dirToMe = (hrp.Position - bp).Unit
+                    local approachSpeed = moveVec.Unit:Dot(dirToMe) * speed
+                    if approachSpeed > 1 then timeToImpact = dist / approachSpeed end
+                end
+            end
+
+            if targetingMe then
+                local predictedHit = false
+                if speed > 1 then
+                    local predictedPos = bp + bv * getPredictTime()
+                    if (hrp.Position - predictedPos).Magnitude <= CONFIG.CLOSE_DIST then
+                        predictedHit = true
+                    end
+                end
+
+                if dist <= CONFIG.CLOSE_DIST or timeToImpact <= CONFIG.PING_SAFE or predictedHit then
+                    targetColor = Color3.fromRGB(255, 50, 50)
+                    status = "DANGER!"
+                    if STATE.Enabled then
+                        TriggerParry(ball)
+                        STATE.IsArmed = false
+                    end
+                else
+                    targetColor = Color3.fromRGB(255, 200, 0)
+                    status = "Incoming"
+                end
+            else
+                targetColor = Color3.fromRGB(0, 255, 100)
+                status = "Other Target"
+            end
+            STATE.PrevBallPos = bp
+        else
+            STATE.IsArmed = true
+            STATE.PrevBallPos = nil
+            setSwordSphereHidden(false)
+        end
+
+        -- ВИЗУАЛ СФЕРЫ
+        if render and STATE.ShowVisuals and OuterSphere and InnerSphere then
+            PulseTime = PulseTime + (dt * 2.5)
+
+            -- Восстановление после сжатия
+            if tick() < STATE.ShrinkUntil then
+                STATE.ShrinkFactor = math.max(0.15, STATE.ShrinkFactor - dt * 5)
+            else
+                STATE.ShrinkFactor = math.min(1.0, STATE.ShrinkFactor + dt * 1.5)
+            end
+
+            local targetSize = clamp(math.max(dist * 1.5, CONFIG.SPHERE_MIN), CONFIG.SPHERE_MIN, CONFIG.SPHERE_MAX)
+            local currentSize = OuterSphere.Size.X
+            local newSize = currentSize + (targetSize - currentSize) * math.exp(-10 * dt)
+            local finalSize = newSize * STATE.ShrinkFactor
+                             * (STATE.StaticSphere and 1 or (1 + math.sin(PulseTime) * 0.02))
+
+            OuterSphere.Size = Vector3.new(finalSize, finalSize, finalSize)
+            OuterSphere.CFrame = CFrame.new(hrp.Position + Vector3.new(0, -0.5, 0))
+
+            if STATE.NightModeSphere then
+                OuterSphere.Material = Enum.Material.Neon
+                OuterSphere.Transparency = 0.5
+                InnerSphere.Transparency = 0.2
+                if targetColor ~= Color3.fromRGB(255, 50, 50) then
+                    targetColor = Color3.fromRGB(20, 0, 30)
+                end
+            else
+                OuterSphere.Material = Enum.Material.ForceField
+                OuterSphere.Transparency = 0.65
+                InnerSphere.Transparency = STATE.HideInner and 1 or 0.7
+            end
+
+            OuterSphere.Color = OuterSphere.Color:Lerp(targetColor, clamp(10 * dt, 0, 1))
+            if targetColor == Color3.fromRGB(255, 50, 50) then
+                InnerSphere.Color = InnerSphere.Color:Lerp(Color3.fromRGB(255, 50, 50), clamp(10 * dt, 0, 1))
+            else
+                local finalInner = STATE.NightModeSphere and Color3.fromRGB(255, 0, 255) or STATE.InnerColor
+                InnerSphere.Color = InnerSphere.Color:Lerp(finalInner, clamp(10 * dt, 0, 1))
+            end
+
+            InnerSphere.CFrame = OuterSphere.CFrame * CFrame.Angles(PulseTime, PulseTime, 0)
+            InnerSphere.Size = Vector3.new(finalSize * CONFIG.CORE_RATIO, finalSize * CONFIG.CORE_RATIO, finalSize * CONFIG.CORE_RATIO)
+        end
+
+        -- ДЕБАГ
+        if debugLabels then
+            if debugLabels["Status"] then
+                debugLabels["Status"].Text = status
+                if status == "DANGER!" then debugLabels["Status"].TextColor3 = Color3.fromRGB(255, 60, 60)
+                elseif status == "Incoming" then debugLabels["Status"].TextColor3 = Color3.fromRGB(255, 200, 0)
+                else debugLabels["Status"].TextColor3 = Color3.fromRGB(0, 255, 100) end
+            end
+            if debugLabels["Speed"]    then debugLabels["Speed"].Text    = string.format("%.0f", speed) end
+            if debugLabels["Time"]     then debugLabels["Time"].Text     = (timeToImpact > 900 and "N/A" or string.format("%.2fs", timeToImpact)) end
+            if debugLabels["Distance"] then debugLabels["Distance"].Text = string.format("%.1f", dist) end
+            if debugLabels["Armed"]    then
+                debugLabels["Armed"].Text = tostring(STATE.IsArmed)
+                debugLabels["Armed"].TextColor3 = STATE.IsArmed and Color3.fromRGB(0, 255, 100) or Color3.fromRGB(255, 150, 150)
+            end
+            if debugLabels["Parry"]    then debugLabels["Parry"].Text = STATE.ParryMethod or "N/A" end
+            if debugLabels["Delay"]    then
+                debugLabels["Delay"].Text = string.format("%.0fms", STATE.LastDelay * 1000)
+                debugLabels["Delay"].TextColor3 = STATE.LastMiss and Color3.fromRGB(255, 100, 100) or Color3.fromRGB(240, 240, 240)
+            end
+            if debugLabels["Skips"]    then
+                debugLabels["Skips"].Text = tostring(STATE.SpamSkips)
+                debugLabels["Skips"].TextColor3 = Color3.fromRGB(255, 200, 100)
             end
         end
     end)
 end)
 
-LP.CharacterAdded:Connect(function() S.IsArmed=true; S.PrevBallPos=nil; S.Ball=nil; S.CameraLock=false; S.SwordShrink=false; if CAM.CameraType==Enum.CameraType.Scriptable then CAM.CameraType=Enum.CameraType.Custom end end)
+-- ============================================================
+-- [ 20. РЕСПАВН ]
+-- ============================================================
+LocalPlayer.CharacterAdded:Connect(function()
+    STATE.IsArmed = true
+    STATE.PrevBallPos = nil
+    STATE.Ball = nil
+    STATE.CameraLock = false
+    STATE.ShrinkFactor = 1.0
+    STATE.ShrinkUntil = 0
+    STATE.SwordSphereHidden = false
+    STATE._hiddenSwordParts = {}
+    if Camera.CameraType == Enum.CameraType.Scriptable then
+        Camera.CameraType = Enum.CameraType.Custom
+    end
+    task.delay(0.5, function()
+        local ball = STATE.Ball
+        if ball and ball.Parent and IsTargetingMe(ball) then
+            setSwordSphereHidden(true)
+        end
+    end)
+end)
 
-print(">>> [BB] v15.3 LOADED | React: "..string.format("%.0f-%.0fms",C.HUMAN_DELAY_MIN*1000,C.HUMAN_DELAY_MAX*1000).." | Anti-spam: ON")
+print(">>> [BB] CANDY EDITION v15.2 HUMANIZED LOADED!")
+print(string.format(">>> [BB] Reaction: %.0f-%.0fms | Anti-spam: ON | SweptHit: ON",
+    CONFIG.HUMAN_DELAY_MIN * 1000, CONFIG.HUMAN_DELAY_MAX * 1000))
