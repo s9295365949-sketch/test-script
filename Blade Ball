@@ -8,7 +8,7 @@
     ║   ██║     ██║  ██║██║  ██║██║  ██║   ██║       ██║     ╚██████╔╝          ║
     ║   ╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝       ╚═╝      ╚═════╝           ║
     ║                                                                           ║
-    ║   [ CANDY EDITION | v15.5 | ULTRA-FAST PARRY ]                            ║
+    ║   [ CANDY EDITION | v15.7 | ULTRA-FAST PARRY ]                            ║
     ║   • 12 Premium Themes (6 Dark / 6 Light)                                  ║
     ║   • Human Delay: 0.10 - 0.15s (x1.5 Faster)                               ║
     ║   • Anti-Close Spam & Predictive Hit                                      ║
@@ -22,7 +22,7 @@
     ║   • VirtualInputManager — БЕЗ ИЗМЕНЕНИЙ                                   ║
     ╚═══════════════════════════════════════════════════════════════════════════╝
     ╔═══════════════════════════════════════════════════════════════════════════╗
-    ║   CANDY EDITION | v15.5 | HUMANIZED + ANTI-SPAM + SWEPT HIT               ║
+    ║   CANDY EDITION | v15.7 | HUMANIZED + ANTI-SPAM + SWEPT HIT               ║
     ║   • Human Delay: 0.19-0.32s (normal distribution)                         ║
     ║   • Anti-spam (другие игроки вблизи) + трекинг мячей                       ║
     ║   • Сфера/ядро: минимум вблизи                                            ║
@@ -36,7 +36,7 @@ local LP,PG,CAM = P.LocalPlayer, P.LocalPlayer:WaitForChild("PlayerGui",10), W.C
 for _,v in ipairs(PG:GetChildren()) do if v.Name:match("^BB_") then v:Destroy() end end
 local oldAura=W:FindFirstChild("AuraVisual"); if oldAura then oldAura:Destroy() end
 
-local C={CLOSE_DIST=45,COOLDOWN=0.12,PING_SAFE=0.50,PREDICT_TIME_BASE=0.15,PREDICT_TIME_JITTER=0.08,HUMAN_DELAY_MIN=0.19,HUMAN_DELAY_MAX=0.32,SLOW_REACTION_CHANCE=0.12,REST_CHANCE=0.03,MIN_PARRY_INTERVAL=0.25,PARRY_COOLDOWN_JITTER=0.10,BALL_TRACK_TIME=0.6,CLOSE_SPAM_DIST=22,CLOSE_SPAM_SKIP_CHANCE=0.20,NEAREST_PLAYER_FACTOR=0.7,SPHERE_MIN=2.7,SPHERE_MAX=79,CORE_RATIO=0.11,OUTER_R=0,OUTER_G=255,OUTER_B=50,INNER_R=0,INNER_G=255,INNER_B=200}
+local C={CLOSE_DIST=45,COOLDOWN=0.12,PING_SAFE=0.50,PREDICT_TIME_BASE=0.15,PREDICT_TIME_JITTER=0.08,HUMAN_DELAY_MIN=0.19,HUMAN_DELAY_MAX=0.32,SLOW_REACTION_CHANCE=0.12,REST_CHANCE=0.03,MIN_PARRY_INTERVAL=0.25,PARRY_COOLDOWN_JITTER=0.10,BALL_TRACK_TIME=0.6,CLOSE_SPAM_DIST=22,CLOSE_SPAM_SKIP_CHANCE=0.20,NEAREST_PLAYER_FACTOR=0.7,SPHERE_MIN=2.9,SPHERE_MAX=79,CORE_RATIO=0.118,OUTER_R=0,OUTER_G=255,OUTER_B=50,INNER_R=0,INNER_G=255,INNER_B=200}
 local DC={} for k,v in pairs(C) do DC[k]=v end
 local SAFE={HUMAN_DELAY_MIN=0.12,HUMAN_DELAY_MAX_GAP=0.02,REST_CHANCE=0.01,CLOSE_SPAM_DIST=10,PING_SAFE=0.20,COOLDOWN=0.10}
 local S={Enabled=true,ShowVisuals=true,ShowDebug=true,AntiLag=false,HideInner=false,StaticSphere=false,NightModeSphere=false,NightMap=false,CameraLock=false,OuterColor=Color3.fromRGB(0,255,50),InnerColor=Color3.fromRGB(0,255,200),IsArmed=true,LastParry=0,Ball=nil,PrevBallPos=nil,Frames=0,Remote=nil,ParryMethod="N/A",BlockButton=nil,ParryHistory={},LastDelay=0,LastMiss=false,SpamSkips=0,TotalParries=0}
@@ -92,7 +92,6 @@ local TL=Instance.new("UIListLayout");TL.FillDirection=Enum.FillDirection.Horizo
 local Pg=Instance.new("Frame");Pg.Size=UDim2.new(1,-20,1,-120);Pg.Position=UDim2.new(0,10,0,110);Pg.BackgroundTransparency=1;Pg.Parent=Win
 local PL,Tabs={},{}
 
--- Candy watermark (top-right of window, rotated 40°)
 local Candy=Instance.new("Frame");Candy.Name="CandyMark";Candy.Size=UDim2.new(0,64,0,64);Candy.Position=UDim2.new(1,-78,0,68);Candy.BackgroundTransparency=1;Candy.Rotation=40;Candy.ZIndex=10;Candy.Parent=Win
 local function MKC(sz,pos,rot,corner,col,tp)
     local f=Instance.new("Frame");f.Size=sz;f.Position=pos;f.Rotation=rot;f.BackgroundColor3=col or Color3.fromRGB(180,180,180);f.BackgroundTransparency=tp or 0.55;f.BorderSizePixel=0;f.ZIndex=10;f.Parent=Candy
@@ -186,7 +185,7 @@ local function SaveP()
 end
 local function LoadP(pN)
     local ok,d=pcall(function() if isfile and isfile(PF.."/"..pN..".json") then return HS:JSONDecode(readfile(PF.."/"..pN..".json")) end end)
-    if ok and d then CTN=d.Theme or "Premium Dark";CT=TH[CTN] or TH["Premium Dark"];S.Enabled=d.Enabled~=false;S.ShowVisuals=d.ShowVisuals~=false;S.ShowDebug=d.ShowDebug~=false;S.AntiLag=d.AntiLag==true;S.HideInner=d.HideInner==true;S.StaticSphere=d.StaticSphere==true;S.NightModeSphere=d.NightModeSphere==true;S.NightMap=d.NightMap==true;S.CameraLock=d.CameraLock==true;if d.Config then for k,v in pairs(d.Config) do if C[k]~=nil then C[k]=v;if SR[k] then SR[k].set(v) end end end end;if AT then AT() end end
+    if ok and d then CTN=d.Theme or "Premium Dark";CT=TH[CTN] or TH["Premium Dark"];S.Enabled=d.Enabled~=false;S.ShowVisuals=d.ShowVisuals~=false;S.ShowDebug=d.ShowDebug~=false;S.AntiLag=d.AntiLag==true;S.HideInner=d.HideInner==true;S.StaticSphere=d.StaticSphere==true;S.NightModeSphere=d.NightModeSphere==true;S.NightMap=d.NightMap==true;S.CameraLock=d.CameraLock==true;if d.Config then for k,v in pairs(d.Config) do if C[k]~=nil and k~="SPHERE_MIN" and k~="CORE_RATIO" then C[k]=v;if SR[k] then SR[k].set(v) end end end end;if AT then AT() end end
 end
 CBtn(OP,40,"Save Profile",SaveP,Color3.fromRGB(60,180,100))
 local PLF=Instance.new("ScrollingFrame");PLF.Size=UDim2.new(1,0,0,160);PLF.Position=UDim2.new(0,0,0,80);PLF.BackgroundColor3=CT.OFF;PLF.BackgroundTransparency=0.7;PLF.BorderSizePixel=0;PLF.ScrollBarThickness=2;PLF.CanvasSize=UDim2.new(0,0,0,0);PLF.AutomaticCanvasSize=Enum.AutomaticSize.Y;PLF.Parent=OP;Instance.new("UICorner",PLF).CornerRadius=UDim.new(0,6);table.insert(UE,{btn=PLF,type="listframe"})
@@ -230,9 +229,9 @@ CSlider(SSc,"Ping Safe",0.10,1.0,"PING_SAFE",false,function(v) return string.for
 CSlider(SSc,"Predict Base",0.05,0.5,"PREDICT_TIME_BASE",false,function(v) return string.format("%.0fms",v*1000) end)
 CSlider(SSc,"Predict Jitter",0,0.3,"PREDICT_TIME_JITTER",false,function(v) return string.format("%.0fms",v*1000) end)
 CSec(SSc,"VISUALS")
-CSlider(SSc,"Sphere Min",1,50,"SPHERE_MIN",true,function(v) return string.format("%.1f",v) end)
+CSlider(SSc,"Sphere Min",1,50,"SPHERE_MIN",false,function(v) return string.format("%.1f",v) end)
 CSlider(SSc,"Sphere Max",20,200,"SPHERE_MAX",true,function(v) return string.format("%.0f",v) end)
-CSlider(SSc,"Core Ratio",0.05,0.5,"CORE_RATIO",false,function(v) return string.format("%.2f",v) end)
+CSlider(SSc,"Core Ratio",0.05,0.5,"CORE_RATIO",false,function(v) return string.format("%.3f",v) end)
 CSec(SSc,"COLORS")
 SLCb["OUTER_R"]=SyncO;SLCb["OUTER_G"]=SyncO;SLCb["OUTER_B"]=SyncO;SLCb["INNER_R"]=SyncI;SLCb["INNER_G"]=SyncI;SLCb["INNER_B"]=SyncI
 CSlider(SSc,"Outer R",0,255,"OUTER_R",true,function(v) return string.format("%.0f",v) end)
@@ -377,4 +376,4 @@ end)
 
 LP.CharacterAdded:Connect(function() S.IsArmed=true;S.PrevBallPos=nil;S.Ball=nil;S.CameraLock=false;if CAM.CameraType==Enum.CameraType.Scriptable then CAM.CameraType=Enum.CameraType.Custom end end)
 
-print(">>> [BB] v15.5 LOADED | React: "..string.format("%.0f-%.0fms",C.HUMAN_DELAY_MIN*1000,C.HUMAN_DELAY_MAX*1000).." | No miss | No spam-skip | Candy mark")
+print(">>> [BB] v15.6 LOADED | Sphere Min: "..C.SPHERE_MIN.." | Core: "..C.CORE_RATIO.." | Candy mark")
