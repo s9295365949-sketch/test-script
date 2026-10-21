@@ -1,0 +1,15 @@
+getgenv().Nixus = {
+    autoskip = true,
+    SellAllTower = false,
+    AtWave = 40,
+    Modifiers = {},
+    AutoAbilities = true,
+    AutoRewards = true,
+    macroURL = "https://raw.githubusercontent.com/s9295365949-sketch/test-script/refs/heads/main/Juggernaut%20mastery%20farm%20and%20g%20scout",
+    Webhook = "",
+    replay = true,
+    Gamemode = "Special",
+    Map = "Pizza Party",
+    Difficulty = "Pizza Party",
+    Loadout = {"Trapper", "G.Scout", "Commander", "DJ Booth", "Juggernaut"}
+}
