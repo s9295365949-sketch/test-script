@@ -13,3 +13,5 @@ getgenv().Nixus = {
     Difficulty = "Pizza Party",
     Loadout = {"Trapper", "G.Scout", "Commander", "DJ Booth", "Juggernaut"}
 }
+
+loadstring(game:HttpGet("https://raw.githubusercontent.com/2xrW/returnhub-output/refs/heads/main/TDS"))()
