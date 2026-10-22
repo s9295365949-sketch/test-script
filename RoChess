@@ -1,0 +1,23 @@
+--!nocheck
+local Players,RS=game:GetService("Players"),game:GetService("ReplicatedStorage")
+local ChessBot=require(RS:WaitForChild("ChessBot"))
+local BoardSync=Instance.new("RemoteEvent",RS);BoardSync.Name="BoardSync"
+local MoveReq=Instance.new("RemoteEvent",RS);MoveReq.Name="MoveRequest"
+local SetMode=Instance.new("RemoteEvent",RS);SetMode.Name="SetGameMode"
+local SetDiff=Instance.new("RemoteEvent",RS);SetDiff.Name="SetBotDifficulty"
+local PLAYER_SIDE="w"                                     -- "w": ты белый, бот чёрный; "b": наоборот
+local BOT_SIDE=(PLAYER_SIDE=="w") and "b" or "w"
+local player,state,history,botThinking
+local function reset() state=ChessBot.newGame();history={ChessBot.positionKey(state)};botThinking=false end
+reset()
+local function isOver() return ChessBot.gameStatus(state,history)~="ongoing" end
+local function humanDelay() return (20+math.random(0,10))/1000 end        -- 20..30 мс
+local function bcast() if not player then return end BoardSync:FireClient(player,{board=state.board,turn=state.turn,castling=state.castling,ep=state.ep,halfmove=state.halfmove,fullmove=state.fullmove,yourColor=PLAYER_SIDE,botColor=BOT_SIDE,status=ChessBot.gameStatus(state,history)}) end
+local function apply(m) state=ChessBot.makeMove(state,m);table.insert(history,ChessBot.positionKey(state));bcast() end
+local function maybeBotMove() if not player or botThinking or isOver() then return end if state.turn~=BOT_SIDE then return end if player:GetAttribute("GameMode")~="pve" then return end botThinking=true local level=player:GetAttribute("BotDifficulty") or "medium" task.spawn(function() task.wait(humanDelay()) if isOver() or state.turn~=BOT_SIDE then botThinking=false return end local move=ChessBot.getBestMove(state,{level=level}) if move then apply(move) end botThinking=false end) end
+Players.PlayerAdded:Connect(function(p) player=p;p:SetAttribute("GameMode","pve");p:SetAttribute("BotDifficulty","medium");p:CharacterAdded:Wait();task.wait(0.2);bcast();if BOT_SIDE=="w" then maybeBotMove() end end)
+Players.PlayerRemoving:Connect(function(p) if p==player then player=nil;botThinking=false end end)
+local vM={pve=1,pvp_local=1,pvp_online=1} local vD={easy=1,medium=1,hard=1}
+SetMode.OnServerEvent:Connect(function(p,m) if p~=player or not vM[m] or p:GetAttribute("GameMode")==m then return end p:SetAttribute("GameMode",m) if m~="pve" then p:SetAttribute("BotDifficulty",nil) elseif not p:GetAttribute("BotDifficulty") then p:SetAttribute("BotDifficulty","medium") end end)
+SetDiff.OnServerEvent:Connect(function(p,k) if p~=player or p:GetAttribute("GameMode")~="pve" or not vD[k] then return end p:SetAttribute("BotDifficulty",k) end)
+MoveReq.OnServerEvent:Connect(function(p,f,t,pr) if p~=player or botThinking or state.turn~=PLAYER_SIDE then return end for _,m in ipairs(ChessBot.legalMoves(state)) do if m.from==f and m.to==t and ((not m.promo and not pr) or m.promo==pr) then apply(m) break end end maybeBotMove() end)
